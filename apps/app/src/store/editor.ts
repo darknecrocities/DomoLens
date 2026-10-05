@@ -448,7 +448,7 @@ export const useEditor = create<EditorState>((set, get) => ({
       state.durationMs,
       {
         continuousGlide: true,
-        maxGlideGapMs: 1800,
+        maxGlideGapMs: 3500,
         leadInMs: 500,
         holdDurationMs: 1000,
         scale: 1.85,

@@ -512,7 +512,7 @@ export function calculateCameraAtTime(
         let finalX = baseTargetX;
         let finalY = baseTargetY;
 
-        // When zoomed in, smoothly follow the cursor frame-by-frame with spring deadzone damping
+        // When zoomed in or transitioning, smoothly follow the cursor frame-by-frame with spring damping
         if (scale > 1.05 && effectiveTrajectory && effectiveTrajectory.length > 0) {
           const tracked = isAutoTrack
             ? clampCameraToBounds(cursor.x, cursor.y, scale)
@@ -520,10 +520,22 @@ export function calculateCameraAtTime(
                 { x: baseTargetX, y: baseTargetY },
                 cursor,
                 scale,
-                0.30,
+                0.20,
               );
-          finalX = tracked.x;
-          finalY = tracked.y;
+
+          if (k1.scale <= 1.05) {
+            // Zooming in from full frame: smoothly glide from 0.5 center to target cursor position
+            finalX = 0.5 + (tracked.x - 0.5) * progress;
+            finalY = 0.5 + (tracked.y - 0.5) * progress;
+          } else if (k2.scale <= 1.05) {
+            // Zooming out to full frame: smoothly glide from target cursor position to 0.5 center
+            finalX = tracked.x + (0.5 - tracked.x) * progress;
+            finalY = tracked.y + (0.5 - tracked.y) * progress;
+          } else {
+            // Actively zoomed in: responsive cursor tracking with spatial glide between keyframe points
+            finalX = tracked.x;
+            finalY = tracked.y;
+          }
         } else if (scale > 1.0) {
           const clamped = clampCameraToBounds(baseTargetX, baseTargetY, scale);
           finalX = clamped.x;
@@ -752,8 +764,8 @@ export function plotInteractionsToKeyframesAndZoomBlocks(
   const leadInMs = options.leadInMs ?? 500;
   const leadOutMs = options.leadOutMs ?? 400;
   const minDuration = options.minBlockDurationMs ?? 1000;
-  // Actions within 1.2s remain in continuous zoom; if no activity for 1s, camera shifts back to full frame
-  const clusterGapMs = options.inactivityResetMs ?? 1200;
+  // Actions within 1.5s remain in continuous zoom; if no activity for 1s, camera shifts back to full frame
+  const clusterGapMs = options.inactivityResetMs ?? 1500;
 
   const sorted = [...validInteractions].sort((a, b) => a.timestampMs - b.timestampMs);
 
@@ -766,7 +778,8 @@ export function plotInteractionsToKeyframesAndZoomBlocks(
       currentCluster.push(event);
     } else {
       const prev = currentCluster[currentCluster.length - 1]!;
-      if (event.timestampMs - prev.timestampMs <= clusterGapMs) {
+      const prevEffectiveEnd = prev.timestampMs + (prev.durationMs ?? 0);
+      if (event.timestampMs - prevEffectiveEnd <= clusterGapMs) {
         currentCluster.push(event);
       } else {
         clusters.push(currentCluster);
@@ -799,7 +812,12 @@ export function plotInteractionsToKeyframesAndZoomBlocks(
     const rawStart = Math.max(0, firstEvt.timestampMs - leadInMs);
     let startMs = Math.max(lastBlockEndTime, rawStart);
 
-    const rawEnd = lastEvt.timestampMs + clusterHoldMs + leadOutMs;
+    const clusterEndTime = Math.max(
+      lastEvt.timestampMs,
+      ...cluster.map((e) => e.timestampMs + (e.durationMs ?? 0)),
+    );
+
+    const rawEnd = clusterEndTime + clusterHoldMs + leadOutMs;
     let endMs = Math.min(videoDurationMs, rawEnd);
 
     // If block is too short near video end, attempt to extend start backward to sustain the zoom
@@ -823,8 +841,8 @@ export function plotInteractionsToKeyframesAndZoomBlocks(
     const canGlideToNext = Boolean(
       options.continuousGlide &&
         nextCluster &&
-        nextCluster[0]!.timestampMs - lastEvt.timestampMs <= maxGlideGap &&
-        nextCluster[0]!.timestampMs > lastEvt.timestampMs,
+        nextCluster[0]!.timestampMs - clusterEndTime <= maxGlideGap &&
+        nextCluster[0]!.timestampMs > clusterEndTime,
     );
 
     const blockEnd = canGlideToNext
@@ -876,6 +894,29 @@ export function plotInteractionsToKeyframesAndZoomBlocks(
       });
     }
 
+    // If first interaction is a continuous typing session with durationMs > 600ms,
+    // add intermediate tracking keyframes across the typing duration with typing sound effects
+    if (firstEvt.type === "typing" && (firstEvt.durationMs ?? 0) > 600) {
+      const typeDuration = firstEvt.durationMs!;
+      const step = Math.max(300, Math.min(600, Math.round(typeDuration / 3)));
+      for (let tOffset = step; tOffset <= typeDuration; tOffset += step) {
+        const typingTime = firstEvt.timestampMs + tOffset;
+        if (typingTime < endMs - effLeadOut - 100) {
+          keyframes.push({
+            id: `kf-type-${firstEvt.id}-${tOffset}`,
+            timeMs: typingTime,
+            scale: clusterScale,
+            targetX: clampedFirst.x,
+            targetY: clampedFirst.y,
+            easing: "cubic",
+            sound: "typing",
+            soundPreset: "mechanical",
+            soundVolume: 0.60,
+          });
+        }
+      }
+    }
+
     // Intermediate tracking keyframes for multiple actions in cluster
     for (let j = 1; j < cluster.length; j++) {
       const midEvt = cluster[j]!;
@@ -898,7 +939,7 @@ export function plotInteractionsToKeyframesAndZoomBlocks(
     }
 
     // Keyframe 3: End of hold before lead-out or glide
-    const idealHoldEnd = lastEvt.timestampMs + clusterHoldMs;
+    const idealHoldEnd = clusterEndTime + clusterHoldMs;
     const minHold = firstEvt.timestampMs + 100;
     const maxHold = Math.max(minHold, endMs - effLeadOut);
     const holdTime = Math.max(minHold, Math.min(maxHold, idealHoldEnd));

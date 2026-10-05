@@ -452,6 +452,48 @@ describe("zoom algorithms", () => {
     expect(unzoomed.scale).toBe(1.0);
     expect(unzoomed.isZoomed).toBe(false);
   });
+
+  it("maintains zoom across continuous typing session and generates typing sounds", () => {
+    const interactions: import("./project").InteractionEvent[] = [
+      {
+        id: "type-long",
+        type: "typing",
+        timestampMs: 2000,
+        x: 0.35,
+        y: 0.45,
+        snippet: "long text typing session",
+        durationMs: 3000,
+      },
+    ];
+
+    const result = plotInteractionsToKeyframesAndZoomBlocks(interactions, 12000, {
+      leadInMs: 500,
+      holdDurationMs: 1000,
+    });
+
+    // ZoomBlock must cover at least 2000 + 3000 = 5000ms plus hold duration
+    expect(result.zoomBlocks.length).toBe(1);
+    expect(result.zoomBlocks[0]?.startTimeMs).toBeLessThanOrEqual(1500);
+    expect(result.zoomBlocks[0]?.endTimeMs).toBeGreaterThanOrEqual(6000);
+
+    // Intermediate typing sound keyframes must be generated
+    const typeKeyframes = result.keyframes.filter((kf) => kf.sound === "typing");
+    expect(typeKeyframes.length).toBeGreaterThanOrEqual(3);
+
+    // During active typing (at t = 3500ms), camera must be zoomed in
+    const activeCamera = calculateCameraAtTime(3500, result.zoomBlocks, 350, 400, undefined, result.keyframes);
+    expect(activeCamera.isZoomed).toBe(true);
+    expect(activeCamera.scale).toBeGreaterThanOrEqual(1.4);
+
+    // 1 second after typing finishes (at t = 5000 + 800 = 5800ms), camera holds zoom
+    const holdingCamera = calculateCameraAtTime(5800, result.zoomBlocks, 350, 400, undefined, result.keyframes);
+    expect(holdingCamera.isZoomed).toBe(true);
+
+    // After inactivity threshold (at t = 7500ms), camera returns to full frame
+    const inactiveCamera = calculateCameraAtTime(7500, result.zoomBlocks, 350, 400, undefined, result.keyframes);
+    expect(inactiveCamera.scale).toBe(1.0);
+    expect(inactiveCamera.isZoomed).toBe(false);
+  });
 });
 
 describe("timeline operations", () => {

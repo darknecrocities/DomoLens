@@ -28,9 +28,30 @@ interface TimelineProps {
   project: ProjectData;
 }
 
+function TimelineTimeDisplay({ durationMs }: { durationMs: number }) {
+  const currentTimeMs = useEditor((s) => s.currentTimeMs);
+  return (
+    <span className="ml-1 sm:ml-2 font-mono text-xs font-semibold text-fg tabular">
+      {formatDuration(currentTimeMs)} / {formatDuration(durationMs)}
+    </span>
+  );
+}
+
+function TimelinePlayhead({ durationMs }: { durationMs: number }) {
+  const currentTimeMs = useEditor((s) => s.currentTimeMs);
+  const percent = durationMs > 0 ? Math.min(100, Math.max(0, (currentTimeMs / durationMs) * 100)) : 0;
+  return (
+    <div
+      className="pointer-events-none absolute inset-y-0 w-0.5 bg-white z-30 shadow-sm will-change-transform"
+      style={{ left: `${percent}%` }}
+    >
+      <div className="absolute -top-1.5 left-1/2 -translate-x-1/2 size-3.5 rotate-45 rounded-sm bg-white border border-neutral-900" />
+    </div>
+  );
+}
+
 export function Timeline({ project }: TimelineProps) {
   const {
-    currentTimeMs,
     durationMs,
     isPlaying,
     selectedBlockId,
@@ -128,9 +149,7 @@ export function Timeline({ project }: TimelineProps) {
             onClick={togglePlay}
           />
 
-          <span className="ml-1 sm:ml-2 font-mono text-xs font-semibold text-fg tabular">
-            {formatDuration(currentTimeMs)} / {formatDuration(durationMs)}
-          </span>
+          <TimelineTimeDisplay durationMs={durationMs} />
         </div>
 
         {/* Multi-Track Editing Actions: Auto-Plot, Keyframe, Split, Text, Music, Undo/Redo */}
@@ -758,12 +777,7 @@ export function Timeline({ project }: TimelineProps) {
           </div>
 
           {/* Draggable Playhead Scrubber */}
-          <div
-            className="pointer-events-none absolute inset-y-0 w-0.5 bg-white z-30 shadow-sm"
-            style={{ left: `${getPositionPercent(currentTimeMs)}%` }}
-          >
-            <div className="absolute -top-1.5 left-1/2 -translate-x-1/2 size-3.5 rotate-45 rounded-sm bg-white border border-neutral-900" />
-          </div>
+          <TimelinePlayhead durationMs={durationMs} />
         </div>
       </div>
     </div>

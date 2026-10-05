@@ -13,10 +13,12 @@ import { useEditor } from "../../store/editor";
 
 interface VideoCanvasProps {
   project: ProjectData;
-  currentTimeMs: number;
+  currentTimeMs?: number;
 }
 
-export function VideoCanvas({ project, currentTimeMs }: VideoCanvasProps) {
+export function VideoCanvas({ project, currentTimeMs: propTimeMs }: VideoCanvasProps) {
+  const storeTimeMs = useEditor((s) => s.currentTimeMs);
+  const currentTimeMs = propTimeMs ?? storeTimeMs;
   const { summary, zoomBlocks, looks, clicks, keyframes, effects } = project;
   const isPlaying = useEditor((s) => s.isPlaying);
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -311,7 +313,7 @@ export function VideoCanvas({ project, currentTimeMs }: VideoCanvasProps) {
 
   return (
     <div
-      className="relative flex size-full items-center justify-center overflow-hidden transition-all duration-300"
+      className="relative flex size-full items-center justify-center overflow-hidden"
       style={{
         background: looks.backgroundValue,
         padding: `${looks.padding}px`,
@@ -321,18 +323,18 @@ export function VideoCanvas({ project, currentTimeMs }: VideoCanvasProps) {
       <div
         ref={viewportRef}
         onClick={handleCanvasClick}
-        className="relative aspect-video max-h-full max-w-full overflow-hidden bg-ink-950 transition-all duration-200 cursor-crosshair group select-none"
+        className="relative aspect-video max-h-full max-w-full overflow-hidden bg-ink-950 cursor-crosshair group select-none"
         style={{
           borderRadius: `${looks.borderRadius}px`,
           boxShadow: shadowStyles[looks.shadow] || shadowStyles.lift,
         }}
         title="Click anywhere to shift camera focal center"
       >
-        {/* Dynamic Zooming Video Container: zero latency with smooth cubic easing tracking mouse */}
+        {/* Dynamic Zooming Video Container: zero latency with hardware accelerated 3D transform */}
         <div
           className="relative size-full origin-center will-change-transform"
           style={{
-            transform: `scale(${camera.scale}) translate(${(0.5 - camera.x) * 100}%, ${(0.5 - camera.y) * 100}%)`,
+            transform: `scale(${camera.scale}) translate3d(${(0.5 - camera.x) * 100}%, ${(0.5 - camera.y) * 100}%, 0)`,
           }}
         >
           {mediaSrc ? (
@@ -343,14 +345,14 @@ export function VideoCanvas({ project, currentTimeMs }: VideoCanvasProps) {
               muted
               preload="auto"
               style={{ filter: effectsState.filterStyle || undefined }}
-              className="size-full object-contain pointer-events-none transition-[filter] duration-150"
+              className="size-full object-contain pointer-events-none"
             />
           ) : thumbnailSrc ? (
             <img
               src={thumbnailSrc}
               alt=""
               style={{ filter: effectsState.filterStyle || undefined }}
-              className="size-full object-contain pointer-events-none transition-[filter] duration-150"
+              className="size-full object-contain pointer-events-none"
             />
           ) : (
             <div className="flex size-full flex-col items-center justify-center bg-ink-900 text-fg-muted">
@@ -389,11 +391,11 @@ export function VideoCanvas({ project, currentTimeMs }: VideoCanvasProps) {
 
           {/* Real-Time Tracked Mouse Cursor Pointer: zero latency */}
           <div
-            className="pointer-events-none absolute will-change-transform z-30 transition-transform duration-75"
+            className="pointer-events-none absolute will-change-transform z-30"
             style={{
               left: `${camera.cursorX * 100}%`,
               top: `${camera.cursorY * 100}%`,
-              transform: `translate(-50%, -50%) scale(${looks.cursorSize || 1.4})`,
+              transform: `translate3d(-50%, -50%, 0) scale(${looks.cursorSize || 1.4})`,
             }}
           >
             {looks.cursorStyle === "dot" ? (

@@ -23,10 +23,23 @@ import {
 import { formatDuration, type ProjectLooks } from "@domolens/core";
 import { useEditor, type ToolTab } from "../../store/editor";
 
+function AddKeyframeButton({ zoomScale }: { zoomScale: number }) {
+  const currentTimeMs = useEditor((s) => s.currentTimeMs);
+  const addKeyframeAtCurrentTime = useEditor((s) => s.addKeyframeAtCurrentTime);
+  return (
+    <button
+      type="button"
+      onClick={() => addKeyframeAtCurrentTime(zoomScale)}
+      className="flex items-center gap-1 text-[11px] font-medium text-white hover:text-neutral-300"
+    >
+      <Plus className="size-3" /> Add at {formatDuration(currentTimeMs)}
+    </button>
+  );
+}
+
 export function ToolsSidebar() {
   const {
     project,
-    currentTimeMs,
     isRightSidebarOpen,
     toggleRightSidebar,
     activeToolTab,
@@ -39,7 +52,6 @@ export function ToolsSidebar() {
     updateZoomBlock,
     deleteZoomBlock,
     clearZoomBlocks,
-    addKeyframeAtCurrentTime,
     updateKeyframe,
     deleteKeyframe,
     clearKeyframes,
@@ -236,13 +248,7 @@ export function ToolsSidebar() {
                       Clear All
                     </button>
                   )}
-                  <button
-                    type="button"
-                    onClick={() => addKeyframeAtCurrentTime(zoomScale)}
-                    className="flex items-center gap-1 text-[11px] font-medium text-white hover:text-neutral-300"
-                  >
-                    <Plus className="size-3" /> Add at {formatDuration(currentTimeMs)}
-                  </button>
+                  <AddKeyframeButton zoomScale={zoomScale} />
                 </div>
               </div>
 

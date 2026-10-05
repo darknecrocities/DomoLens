@@ -27,7 +27,6 @@ export function EditorScreen({ id }: EditorScreenProps) {
   const { back } = useNav();
   const {
     project,
-    currentTimeMs,
     isPlaying,
     isLeftSidebarOpen,
     isRightSidebarOpen,
@@ -226,7 +225,7 @@ export function EditorScreen({ id }: EditorScreenProps) {
           <div className="flex flex-1 flex-col overflow-hidden min-w-0">
             {/* Canvas Player Area with live mouse tracking */}
             <div className="relative flex flex-1 items-center justify-center overflow-hidden p-3 lg:p-6 min-h-[180px]">
-              <VideoCanvas project={project} currentTimeMs={currentTimeMs} />
+              <VideoCanvas project={project} />
             </div>
 
             {/* Bottom Multi-Track Keyframe Timeline */}
@@ -242,7 +241,7 @@ export function EditorScreen({ id }: EditorScreenProps) {
           {mobileTab === "canvas" && (
             <div className="flex flex-1 flex-col overflow-hidden">
               <div className="relative flex flex-1 items-center justify-center overflow-hidden p-2 min-h-[160px]">
-                <VideoCanvas project={project} currentTimeMs={currentTimeMs} />
+                <VideoCanvas project={project} />
               </div>
               <Timeline project={project} />
             </div>

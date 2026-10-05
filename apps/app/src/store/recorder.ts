@@ -10,6 +10,7 @@ import {
 import { toast } from "./toast";
 import { useProjects } from "./projects";
 import { useNav } from "./nav";
+import { createLiveStreamMotionTracker, scanVideoElementForActivity } from "../lib/video-activity-detector";
 
 let cursorTrajectoryBuffer: import("@domolens/core").CursorTrajectoryPoint[] = [];
 
@@ -121,9 +122,14 @@ export const useRecorder = create<RecorderStore>((set, get) => ({
       const idx = get().interactions.findIndex((i) => i.id === existingId);
       if (idx !== -1) {
         const updated = [...get().interactions];
+        const prev = updated[idx]!;
+        const durationMs = Math.max(0, timestampMs - prev.timestampMs);
         updated[idx] = {
-          ...updated[idx]!,
-          snippet: snippet ?? updated[idx]!.snippet,
+          ...prev,
+          x: clampedX,
+          y: clampedY,
+          snippet: snippet ?? prev.snippet,
+          durationMs,
         };
         set((s) => ({
           interactions: updated,
@@ -141,6 +147,7 @@ export const useRecorder = create<RecorderStore>((set, get) => ({
       x: clampedX,
       y: clampedY,
       snippet,
+      durationMs: 0,
     };
 
     set((s) => ({
@@ -245,6 +252,31 @@ export const useRecorder = create<RecorderStore>((set, get) => ({
     let lastTypingTime = 0;
     let lastCursorSampleTime = 0;
 
+    // Attach live optical stream tracker to capture real cursor movement & clicks on ANY shared screen
+    let stopMotionTracker: (() => void) | null = null;
+    if (activeStream) {
+      try {
+        stopMotionTracker = createLiveStreamMotionTracker(activeStream, {
+          onPoint: (pt) => {
+            if (get().state !== "recording") return;
+            get().recordCursorPoint(pt.x, pt.y);
+            lastX = pt.x;
+            lastY = pt.y;
+          },
+          onInteraction: (inter) => {
+            if (get().state !== "recording") return;
+            if (inter.type === "click") {
+              get().recordClick(inter.x, inter.y, inter.button || "left");
+            } else {
+              get().recordTyping(inter.x, inter.y, inter.snippet || "Type");
+            }
+          },
+        });
+      } catch (err) {
+        console.warn("Motion tracker start error:", err);
+      }
+    }
+
     const handlePointerMove = (e: MouseEvent | TouchEvent) => {
       if (get().state !== "recording") return;
       if ("clientX" in e) {
@@ -306,6 +338,10 @@ export const useRecorder = create<RecorderStore>((set, get) => ({
       window.removeEventListener("mousemove", handlePointerMove);
       window.removeEventListener("mousedown", handleClick);
       window.removeEventListener("keydown", handleKeyDown);
+      if (stopMotionTracker) {
+        stopMotionTracker();
+        stopMotionTracker = null;
+      }
     };
 
     // Store cleanup for stop / cancel
@@ -370,6 +406,34 @@ export const useRecorder = create<RecorderStore>((set, get) => ({
     // provide smart fallback focal zooms so the editor has clean auto-zooms ready to use
     let finalClicks = rawClicks;
     let finalInteractions = rawInteractions;
+    let finalTrajectory = get().cursorTrajectory;
+
+    // If no clicks occurred via DOM listeners (e.g. desktop recording of other windows/screens),
+    // perform optical scan on recorded video frames to detect real user activity on any screen
+    if (finalClicks.length === 0 && finalInteractions.length === 0 && recordedChunks.length > 0 && typeof document !== "undefined") {
+      try {
+        const videoBlob = new Blob(recordedChunks, { type: "video/webm" });
+        const videoUrl = URL.createObjectURL(videoBlob);
+        const tempVideo = document.createElement("video");
+        tempVideo.src = videoUrl;
+        tempVideo.muted = true;
+        await new Promise<void>((resolve) => {
+          tempVideo.onloadedmetadata = () => resolve();
+          tempVideo.onerror = () => resolve();
+          setTimeout(resolve, 500);
+        });
+        const detected = await scanVideoElementForActivity(tempVideo);
+        if (detected.clicks.length > 0 || detected.interactions.length > 0) {
+          finalClicks = detected.clicks;
+          finalInteractions = detected.interactions;
+          finalTrajectory = detected.cursorTrajectory;
+        }
+        URL.revokeObjectURL(videoUrl);
+      } catch (err) {
+        console.warn("Video optical scan error:", err);
+      }
+    }
+
     if (finalClicks.length === 0 && duration >= 3000) {
       finalClicks = [
         { id: "c-auto-1", timestampMs: Math.round(duration * 0.22), x: 0.38, y: 0.42, button: "left" },
@@ -408,7 +472,7 @@ export const useRecorder = create<RecorderStore>((set, get) => ({
         leadInMs: 500,
         fallbackIfEmpty: true,
         continuousGlide: true,
-        maxGlideGapMs: 1800,
+        maxGlideGapMs: 3500,
       },
     );
 
@@ -459,8 +523,10 @@ export const useRecorder = create<RecorderStore>((set, get) => ({
       media: mediaUrl,
     };
 
-    const finalTrajectory =
-      cursorTrajectoryBuffer.length > 0
+    const trajectoryToSave =
+      finalTrajectory.length > 0
+        ? finalTrajectory
+        : cursorTrajectoryBuffer.length > 0
         ? [...cursorTrajectoryBuffer]
         : [...get().cursorTrajectory];
     cursorTrajectoryBuffer = [];
@@ -470,7 +536,7 @@ export const useRecorder = create<RecorderStore>((set, get) => ({
       summary,
       clicks: finalClicks,
       interactions: finalInteractions,
-      cursorTrajectory: finalTrajectory,
+      cursorTrajectory: trajectoryToSave,
       zoomBlocks,
       keyframes,
       textOverlays,

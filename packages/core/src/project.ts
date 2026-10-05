@@ -57,6 +57,7 @@ export interface InteractionEvent {
   y: number;
   snippet?: string;
   button?: "left" | "right" | "middle";
+  durationMs?: number;
 }
 
 /** A single cursor/mouse coordinate sample recorded over time. */
