@@ -13,6 +13,8 @@ import {
   Sliders,
   Volume2,
   VolumeX,
+  Diamond,
+  Play,
 } from "lucide-react";
 import { formatDuration, type ProjectLooks } from "@domolens/core";
 import { useEditor, type ToolTab } from "../../store/editor";
@@ -188,7 +190,7 @@ export function ToolsSidebar() {
                 className="w-full rounded-lg bg-white py-2 text-center text-xs font-bold text-black hover:bg-neutral-200 transition-colors shadow-sm flex items-center justify-center gap-1.5"
               >
                 <Sparkles className="size-3.5 fill-black" />
-                ⚡ Auto-Plot Clicks & Typing
+                Auto-Plot Clicks & Typing
               </button>
             </div>
 
@@ -255,7 +257,10 @@ export function ToolsSidebar() {
               {selectedKeyframe && (
                 <div className="rounded-xl border border-neutral-700 bg-neutral-900 p-2.5 space-y-2">
                   <div className="flex items-center justify-between">
-                    <span className="font-semibold text-fg">Selected Keyframe (◆)</span>
+                    <span className="font-semibold text-fg flex items-center gap-1.5">
+                      <Diamond className="size-3 text-white fill-white" />
+                      Selected Keyframe
+                    </span>
                     <button
                       type="button"
                       onClick={() => deleteKeyframe(selectedKeyframe.id)}
@@ -331,7 +336,7 @@ export function ToolsSidebar() {
                       }`}
                     >
                       <div className="flex items-center gap-1.5">
-                        <span className="text-white">◆</span>
+                        <Diamond className="size-2.5 text-white fill-white shrink-0" />
                         <span>Node #{i + 1} ({kf.scale.toFixed(1)}x)</span>
                       </div>
                       <span className="font-mono text-[10px] text-fg-faint">
@@ -522,9 +527,10 @@ export function ToolsSidebar() {
                   <button
                     type="button"
                     onClick={() => playClickSoundPreview()}
-                    className="w-full mt-1 rounded-lg border border-ink-700 bg-ink-800/60 py-1 text-[11px] font-medium text-fg-muted hover:text-white hover:bg-ink-700 transition-colors"
+                    className="w-full mt-1 rounded-lg border border-ink-700 bg-ink-800/60 py-1 text-[11px] font-medium text-fg-muted hover:text-white hover:bg-ink-700 transition-colors flex items-center justify-center gap-1.5"
                   >
-                    ▶ Test Click Bop
+                    <Play className="size-3 fill-current" />
+                    <span>Test Click Bop</span>
                   </button>
                 </div>
               )}
@@ -593,9 +599,10 @@ export function ToolsSidebar() {
                   <button
                     type="button"
                     onClick={() => playTypingSoundPreview()}
-                    className="w-full mt-1 rounded-lg border border-ink-700 bg-ink-800/60 py-1 text-[11px] font-medium text-fg-muted hover:text-white hover:bg-ink-700 transition-colors"
+                    className="w-full mt-1 rounded-lg border border-ink-700 bg-ink-800/60 py-1 text-[11px] font-medium text-fg-muted hover:text-white hover:bg-ink-700 transition-colors flex items-center justify-center gap-1.5"
                   >
-                    ▶ Test Typing Burst
+                    <Play className="size-3 fill-current" />
+                    <span>Test Typing Burst</span>
                   </button>
                 </div>
               )}

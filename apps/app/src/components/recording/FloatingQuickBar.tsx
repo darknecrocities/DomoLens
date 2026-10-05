@@ -9,6 +9,7 @@ import {
   Sliders,
   Smartphone,
   Volume2,
+  Zap,
 } from "lucide-react";
 
 interface FloatingQuickBarProps {
@@ -62,7 +63,10 @@ export function FloatingQuickBar({
       <div className="mb-3 flex items-center justify-between px-2">
         <div className="flex items-center gap-2 font-mono text-[11px] uppercase tracking-wider text-neutral-300">
           <span className="size-2 rounded-full bg-white animate-pulse" />
-          <span className="font-bold text-white tracking-widest">⚡ QUICK ACTION HUD</span>
+          <span className="font-bold text-white tracking-widest flex items-center gap-1">
+            <Zap className="size-3 text-white" />
+            QUICK ACTION HUD
+          </span>
           <span className="text-neutral-600">•</span>
           <span className="text-neutral-400">Desktop & Mobile</span>
         </div>

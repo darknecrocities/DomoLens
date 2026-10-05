@@ -137,10 +137,10 @@ const INITIAL_LLM_MESSAGES: LlmMessage[] = [
     content: "Hi! I'm your DomoLens AI Director. I can automatically detect button clicks & typing to plot seamless 2-3s zooms, suggest titles, add music beats, or refine keyframes.",
     timestamp: Date.now(),
     actions: [
-      { label: "⚡ Auto-Plot Zooms", actionKey: "plot_zooms" },
-      { label: "✨ Suggest Title & Chapters", actionKey: "suggest_chapters" },
-      { label: "💬 Add Subtitle at Playhead", actionKey: "add_subtitle" },
-      { label: "🎵 Add Lo-Fi Music", actionKey: "add_lofi_music" },
+      { label: "Auto-Plot Zooms", actionKey: "plot_zooms" },
+      { label: "Suggest Title & Chapters", actionKey: "suggest_chapters" },
+      { label: "Add Subtitle at Playhead", actionKey: "add_subtitle" },
+      { label: "Add Lo-Fi Music", actionKey: "add_lofi_music" },
     ],
   },
 ];
@@ -775,22 +775,22 @@ export const useEditor = create<EditorState>((set, get) => ({
     if (lower.includes("zoom") || lower.includes("plot") || lower.includes("click") || lower.includes("type")) {
       reply =
         "I can automatically plot camera zooms for every button click and typing action. Each zoom tracks the mouse/target, holds for 2.4 seconds, and smoothly glides back to full screen.";
-      actions = [{ label: "⚡ Run Auto-Plot Zooms", actionKey: "plot_zooms" }];
+      actions = [{ label: "Run Auto-Plot Zooms", actionKey: "plot_zooms" }];
     } else if (lower.includes("title") || lower.includes("chapter") || lower.includes("summary")) {
       reply =
         "Here are suggested chapters for your video based on recorded interactions:\n• 00:00 - Introduction & Workspace\n• 00:02 - Button Interaction\n• 00:06 - Key Input & Focus\n• 00:10 - Overview & Outro";
-      actions = [{ label: "✨ Apply Chapters & Title", actionKey: "suggest_chapters" }];
+      actions = [{ label: "Apply Chapters & Title", actionKey: "suggest_chapters" }];
     } else if (lower.includes("text") || lower.includes("caption") || lower.includes("subtitle")) {
       reply = `I can add an elegant subtitle at the current playhead position (${(get().currentTimeMs / 1000).toFixed(1)}s).`;
-      actions = [{ label: "💬 Insert Subtitle", actionKey: "add_subtitle" }];
+      actions = [{ label: "Insert Subtitle", actionKey: "add_subtitle" }];
     } else if (lower.includes("music") || lower.includes("audio") || lower.includes("sound")) {
       reply = "Adding a soft Lo-Fi background track gives your tutorial video a polished, engaging studio feel.";
-      actions = [{ label: "🎵 Add Lo-Fi Beat", actionKey: "add_lofi_music" }];
+      actions = [{ label: "Add Lo-Fi Beat", actionKey: "add_lofi_music" }];
     } else {
       reply = `Got it! I can help you adjust zooms, keyframes, captions, or styling for "${state.project?.summary.name || "your video"}". What would you like to tweak next?`;
       actions = [
-        { label: "⚡ Auto-Plot Zooms", actionKey: "plot_zooms" },
-        { label: "💬 Add Subtitle", actionKey: "add_subtitle" },
+        { label: "Auto-Plot Zooms", actionKey: "plot_zooms" },
+        { label: "Add Subtitle", actionKey: "add_subtitle" },
       ];
     }
 

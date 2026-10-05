@@ -14,6 +14,7 @@ import {
   Undo2,
   Volume2,
   VolumeX,
+  Diamond,
 } from "lucide-react";
 import { formatDuration, type ProjectData } from "@domolens/core";
 import { copy } from "../../copy/en";
@@ -132,7 +133,7 @@ export function Timeline({ project }: TimelineProps) {
             title="Auto-plot 2-3s camera zooms on all clicks and typing"
           >
             <Sparkles className="size-3.5 text-white" />
-            <span className="hidden sm:inline">⚡ Auto-Plot</span>
+            <span className="hidden sm:inline">Auto-Plot</span>
           </button>
 
           <div className="mx-0.5 h-4 w-px bg-ink-800" />
@@ -152,10 +153,10 @@ export function Timeline({ project }: TimelineProps) {
           <button
             type="button"
             onClick={() => addKeyframeAtCurrentTime()}
-            className="flex items-center gap-1 rounded-lg border border-ink-700 bg-ink-800 px-2 py-1 text-xs font-medium text-fg hover:border-white hover:text-white transition-colors"
+            className="flex items-center gap-1.5 rounded-lg border border-ink-700 bg-ink-800 px-2 py-1 text-xs font-medium text-fg hover:border-white hover:text-white transition-colors"
             title="Add keyframe diamond at current playhead"
           >
-            <span className="text-white font-bold">◆</span>
+            <Diamond className="size-3 text-white fill-white shrink-0" />
             <span className="hidden md:inline">+ Keyframe</span>
           </button>
 
@@ -257,7 +258,7 @@ export function Timeline({ project }: TimelineProps) {
           onPointerUp={handlePointerUp}
           className="relative flex flex-col gap-1.5 rounded-xl bg-ink-950 p-2 cursor-pointer shadow-inner touch-none"
         >
-          {/* TRACK 1: KEYFRAMES TRACK (◆ Nodes) */}
+          {/* TRACK 1: KEYFRAMES TRACK (Diamond Nodes) */}
           <div className="relative h-6 rounded-md bg-ink-900/90 border border-ink-800/80 overflow-hidden flex items-center">
             <span className="absolute left-2 text-[9px] font-semibold uppercase tracking-wider text-fg-faint pointer-events-none z-10">
               Keyframes

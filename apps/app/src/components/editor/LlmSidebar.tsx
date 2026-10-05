@@ -9,6 +9,9 @@ import {
   Zap,
   HelpCircle,
   Wand2,
+  Bookmark,
+  MessageSquare,
+  Music,
 } from "lucide-react";
 import { useEditor } from "../../store/editor";
 
@@ -57,10 +60,26 @@ export function LlmSidebar() {
   }
 
   const quickChips = [
-    { label: "⚡ Auto-Plot Zooms", prompt: "Auto-plot camera zooms on all clicks and typing with 2.4s hold" },
-    { label: "✨ Suggest Chapters", prompt: "Suggest video chapters and title based on recording interactions" },
-    { label: "💬 Add Subtitle", prompt: "Add a stylish subtitle overlay at current playhead" },
-    { label: "🎵 Add Lo-Fi Music", prompt: "Add ambient Lo-Fi background music track" },
+    {
+      label: "Auto-Plot Zooms",
+      prompt: "Auto-plot camera zooms on all clicks and typing with 2.4s hold",
+      icon: <Sparkles className="size-3 text-white shrink-0" />,
+    },
+    {
+      label: "Suggest Chapters",
+      prompt: "Suggest video chapters and title based on recording interactions",
+      icon: <Bookmark className="size-3 text-white shrink-0" />,
+    },
+    {
+      label: "Add Subtitle",
+      prompt: "Add a stylish subtitle overlay at current playhead",
+      icon: <MessageSquare className="size-3 text-white shrink-0" />,
+    },
+    {
+      label: "Add Lo-Fi Music",
+      prompt: "Add ambient Lo-Fi background music track",
+      icon: <Music className="size-3 text-white shrink-0" />,
+    },
   ];
 
   return (
@@ -101,9 +120,10 @@ export function LlmSidebar() {
               type="button"
               disabled={isLlmThinking}
               onClick={() => void sendLlmMessage(chip.prompt)}
-              className="rounded-md border border-ink-700/80 bg-ink-800/90 px-2 py-1 text-[11px] font-medium text-fg-muted hover:border-white hover:bg-neutral-800 hover:text-white transition-all text-left"
+              className="flex items-center gap-1.5 rounded-md border border-ink-700/80 bg-ink-800/90 px-2 py-1 text-[11px] font-medium text-fg-muted hover:border-white hover:bg-neutral-800 hover:text-white transition-all text-left"
             >
-              {chip.label}
+              {chip.icon}
+              <span>{chip.label}</span>
             </button>
           ))}
         </div>
