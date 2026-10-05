@@ -5,26 +5,26 @@ export function HowItWorksSection() {
   const steps = [
     {
       num: "01",
-      title: "Pop the Floating QuickBar",
-      desc: "Press Option+Space on laptop or tap the floating overlay on Android. Choose entire display, active window, or browser tab.",
+      title: "One-Click Record",
+      desc: "Hit Option+Space on desktop or tap the floating overlay on Android. Select any window, browser tab, or full display.",
       icon: Laptop,
     },
     {
       num: "02",
-      title: "Record Screen Naturally",
-      desc: "Navigate your app, click buttons, and type text. DomoLens automatically tracks your mouse movements and captures every action.",
+      title: "Demo Naturally",
+      desc: "Click buttons, fill forms, and type code. DomoLens records 60 FPS video while automatically tracking your focal points.",
       icon: Video,
     },
     {
       num: "03",
-      title: "Automatic Zoom & AI Polish",
-      desc: "The studio editor opens with automatic zoom moments already added to your timeline. Fine-tune your clips with ease.",
+      title: "Automatic Studio Polish",
+      desc: "Opens instantly in the editor with zooms, tactile bubble bops, typing audio, and window framing already applied.",
       icon: Sliders,
     },
     {
       num: "04",
-      title: "Save in 60 FPS Video",
-      desc: "Export crisp 4K, 1080p, or GIF files straight to your computer with zero waiting and zero cloud queues.",
+      title: "Export & Ship",
+      desc: "Export crisp 60 FPS 4K or 1080p video or lightweight GIF straight to your device in seconds with zero cloud queues.",
       icon: Film,
     },
   ];

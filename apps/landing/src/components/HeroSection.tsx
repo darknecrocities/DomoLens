@@ -1,14 +1,14 @@
 import { useEffect, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { ArrowDown, Download, Sparkles } from "lucide-react";
+import { ArrowDown, Check, Download, Sparkles } from "lucide-react";
 
 const FLIP_WORDS = [
-  "AUTOMATICALLY ZOOMED.",
-  "BEAUTIFULLY FRAMED.",
-  "100% OFFLINE & PRIVATE.",
-  "EFFORTLESSLY RECORDED.",
-  "PERFECTLY HIGHLIGHTED.",
-  "STUDIO QUALITY.",
+  "NO MANUAL KEYFRAMES.",
+  "AUTO-ZOOMS ON CLICKS.",
+  "STUDIO-GRADE FRAMING.",
+  "TACTILE CLICK SOUNDS.",
+  "READY IN 30 SECONDS.",
+  "100% OFFLINE & FREE.",
 ];
 
 export function HeroSection() {
@@ -191,10 +191,17 @@ export function HeroSection() {
           }}
           className="relative z-30 mx-auto flex max-w-5xl flex-col items-center justify-center px-4 sm:px-6 text-center will-change-transform"
         >
-          {/* Master Two-Tone Headline with 3D Word Flip */}
+          {/* Direct Problem / Need Callout Badge */}
+          <div className="inline-flex items-center gap-2 rounded-full border border-neutral-800 bg-neutral-900/90 px-4 py-1.5 text-xs font-mono text-neutral-300 uppercase tracking-widest mb-6 backdrop-blur-md shadow-lg">
+            <Sparkles className="size-3.5 text-white" />
+            <span>Showcase Your Product Without The Video Editing</span>
+          </div>
+
+          {/* Master Headline with 3D Word Flip */}
           <h1 className="text-4xl font-black uppercase tracking-tight sm:text-6xl lg:text-7xl leading-none drop-shadow-2xl">
-            <span className="block text-white">Studio Screen Recordings.</span>
-            <span className="relative mt-2 block h-[1.18em] overflow-hidden [perspective:1000px]">
+            <span className="block text-white">Demo Your Product.</span>
+            <span className="block text-neutral-200 mt-1">Skip The Video Editing.</span>
+            <span className="relative mt-3 block h-[1.18em] overflow-hidden [perspective:1000px]">
               <AnimatePresence mode="popLayout" initial={false}>
                 <motion.span
                   key={flipIndex}
@@ -211,11 +218,21 @@ export function HeroSection() {
             </span>
           </h1>
 
-          {/* Subtitle - User-friendly, highlighting 100% offline & private */}
+          {/* Practical, Need-Driven Subtitle */}
           <p className="mx-auto mt-6 max-w-2xl text-base text-neutral-300 sm:text-lg leading-relaxed drop-shadow-md">
-            The easy screen recorder that follows your clicks, highlights your actions,
-            and creates stunning product videos — working 100% offline right on your computer.
+            You built an awesome product. Showing it off shouldn't take 3 hours in a video editor.
+            DomoLens records your screen, automatically zooms into your clicks and typing,
+            adds tactile sound effects, and frames your app in studio quality — ready to export in seconds.
           </p>
+
+          {/* Quick Proof Points */}
+          <div className="mt-4 flex flex-wrap items-center justify-center gap-x-4 gap-y-1 text-xs font-mono text-neutral-400">
+            <span className="flex items-center gap-1.5"><Check className="size-3 text-white" /> Zero editing skills needed</span>
+            <span className="hidden sm:inline text-neutral-700">•</span>
+            <span className="flex items-center gap-1.5"><Check className="size-3 text-white" /> No subscriptions or cloud queues</span>
+            <span className="hidden sm:inline text-neutral-700">•</span>
+            <span className="flex items-center gap-1.5"><Check className="size-3 text-white" /> 100% private on your device</span>
+          </div>
 
           {/* Action Buttons */}
           <div className="mt-8 flex flex-wrap items-center justify-center gap-3">

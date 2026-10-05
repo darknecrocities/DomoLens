@@ -1,7 +1,10 @@
 import { Download } from "lucide-react";
 import { HeroSection } from "./components/HeroSection";
-import { FeaturesCarousel } from "./components/FeaturesCarousel";
+import { PainVsGainSection } from "./components/PainVsGainSection";
+import { ShowcaseSimulatorSection } from "./components/ShowcaseSimulatorSection";
 import { TypingFocusSection } from "./components/TypingFocusSection";
+import { FeaturesCarousel } from "./components/FeaturesCarousel";
+import { UseCasesSection } from "./components/UseCasesSection";
 import { HowItWorksSection } from "./components/HowItWorksSection";
 import { BeforeAfterSlider } from "./components/BeforeAfterSlider";
 import { WorksEverywhere } from "./components/WorksEverywhere";
@@ -57,20 +60,29 @@ export function App() {
         {/* Section 1: Hero & Native Architecture Showcase with Scroll Fade Out / Video Fade In */}
         <HeroSection />
 
-        {/* Section 2: Continuous Feature Cards Carousel (Non-stop) */}
-        <FeaturesCarousel />
+        {/* Section 2: Pain vs Solution (Why Spend 3 Hours Keyframing?) */}
+        <PainVsGainSection />
 
-        {/* Section 3: Live Typing & Keystroke Caret Focus Tracking */}
+        {/* Section 3: Interactive Showcase Simulator (Pick How You Want To Show It) */}
+        <ShowcaseSimulatorSection />
+
+        {/* Section 4: Live Product Showcase Engine */}
         <TypingFocusSection />
 
-        {/* Section 4: Four-Step Workflow & Before/After Comparison */}
+        {/* Section 5: Continuous Feature Cards Carousel (Non-stop) */}
+        <FeaturesCarousel />
+
+        {/* Section 6: Real-World Use Cases (Built For Anyone Who Ships Products) */}
+        <UseCasesSection />
+
+        {/* Section 7: Four-Step Workflow & Before/After Comparison */}
         <HowItWorksSection />
         <BeforeAfterSlider />
 
-        {/* Section 5: Brand Belt (Logo + Text only) & Architectural Matrix */}
+        {/* Section 8: Brand Belt (Logo + Text only) & Architectural Matrix */}
         <WorksEverywhere />
 
-        {/* Section 6: Direct Multi-Platform Downloads & Deployment */}
+        {/* Section 9: Direct Multi-Platform Downloads & Deployment */}
         <FinalCtaFooter />
       </main>
     </div>

@@ -6,44 +6,44 @@ import {
   Shield,
   Sliders,
   SlidersHorizontal,
-  Sparkles,
+  Volume2,
 } from "lucide-react";
 
 export function FeaturesCarousel() {
   const features = [
     {
-      title: "Follows Your Mouse Smoothly",
-      desc: "The camera smoothly follows your mouse wherever you move. When you click, it zooms in effortlessly and glides with your motion.",
+      title: "Follows Clicks & Typing",
+      desc: "Camera glides with your cursor, holds focus tight on button clicks, and pans smoothly along code or text typing without manual keyframing.",
       icon: MousePointer2,
-      tag: "SMOOTH MOTION",
+      tag: "AUTO MOTION",
     },
     {
-      title: "Floating QuickBar HUD",
-      desc: "Convenient glassmorphism toolbar for laptop and Android. Start, pause, resume, transcribe, and jump to editor with a single tap.",
-      icon: Sliders,
-      tag: "ZERO CLUTTER",
+      title: "Tactile Sound Effects",
+      desc: "Subtle bubble bops on button clicks and mechanical keystroke sounds automatically synced to your actions to keep viewers engaged.",
+      icon: Volume2,
+      tag: "AUDIO DESIGN",
     },
     {
-      title: "Bring Your Own AI Director",
-      desc: "Connect Gemini, Claude, or OpenAI. Cut awkward silences, generate chapter titles, and re-frame key moments on command.",
-      icon: Sparkles,
-      tag: "BYO-AI",
-    },
-    {
-      title: "Studio Composition & Framing",
-      desc: "Apply 16:9, 9:16, or 1:1 ratios, soft blurred backdrops, adjustable window padding, curved corners, and deep shadows.",
+      title: "Studio Window Framing",
+      desc: "Make any desktop app look like an Apple keynote: rounded corners, frosted glass backdrops, custom padding, and soft drop shadows.",
       icon: Layers,
       tag: "COMPOSITION",
     },
     {
+      title: "One-Click QuickBar HUD",
+      desc: "Floating shortcut toolbar for laptop and phone. Hit Option+Space to record, pause, transcribe, and open the studio with zero clutter.",
+      icon: Sliders,
+      tag: "ONE TAP",
+    },
+    {
       title: "Visual Multi-Track Timeline",
-      desc: "Split clips, trim footage, add text and background music, and inspect automatic zoom keyframes directly on the visual timeline.",
+      desc: "NLE-grade timeline with dedicated track headers for Keyframes, Zoom, Video, Captions, and Audio. Trim with T, split with S, zero overlap.",
       icon: SlidersHorizontal,
       tag: "TIMELINE",
     },
     {
       title: "100% Private On Your Device",
-      desc: "Everything stays strictly on your computer or phone. Your recordings and microphone audio are never uploaded to any cloud server.",
+      desc: "Everything runs locally on your computer. Zero cloud rendering queues, no subscriptions, no accounts, and zero watermarks.",
       icon: Shield,
       tag: "LOCAL-FIRST",
     },
