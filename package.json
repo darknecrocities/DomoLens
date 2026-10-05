@@ -1,0 +1,36 @@
+{
+  "name": "domolens",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Record your screen. DomoLens zooms in on every click for you.",
+  "homepage": "https://github.com/darknecrocities/DomoLens",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/darknecrocities/DomoLens.git"
+  },
+  "bugs": {
+    "url": "https://github.com/darknecrocities/DomoLens/issues"
+  },
+  "license": "MIT",
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "scripts": {
+    "dev": "npm run dev -w @domolens/app",
+    "app": "npm run tauri -w @domolens/app -- dev",
+    "build": "npm run build -w @domolens/app",
+    "build:all": "npm run build && npm run landing:build",
+    "package": "npm run tauri -w @domolens/app -- build",
+    "test": "npm run test --workspaces --if-present",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "check:all": "npm run typecheck && npm run test && npm run engine:test",
+    "engine": "uv run --project engine python -m domolens_engine",
+    "engine:test": "uv run --project engine pytest engine/tests -q",
+    "landing": "npm run dev -w @domolens/landing",
+    "landing:build": "npm run build -w @domolens/landing"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

@@ -1,0 +1,57 @@
+/*
+ * DomoLens theme — Tailwind v4 tokens.
+ *
+ * Import after Tailwind:
+ *   @import "tailwindcss";
+ *   @import "@domolens/theme/theme.css";
+ *
+ * Keep values in sync with src/tokens.ts (used by canvas drawing code).
+ */
+
+@theme {
+  /* Charcoal surfaces, darkest to lightest */
+  --color-ink-950: #0f1012;
+  --color-ink-900: #16171a; /* app background */
+  --color-ink-800: #1e2024; /* cards, panels */
+  --color-ink-700: #2a2d33; /* raised controls */
+  --color-ink-600: #363940; /* borders, hover */
+  --color-ink-500: #4a4e57; /* strong borders */
+
+  /* Text */
+  --color-fg: #f2f2f3;
+  --color-fg-muted: #a0a3ab;
+  --color-fg-faint: #6b6f78;
+
+  /* Orange accent (replaces Tailwind's default orange) */
+  --color-orange-200: #ffd3b0;
+  --color-orange-300: #ffb27a;
+  --color-orange-400: #ff8f3d;
+  --color-orange-500: #ff7a1a; /* main accent */
+  --color-orange-600: #e5660a;
+  --color-orange-700: #b84f06;
+
+  /* Feedback */
+  --color-success: #5bd38a;
+  --color-danger: #ff6b6b;
+
+  /* Type */
+  --font-sans: "Inter Variable", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, monospace;
+
+  /* Corners */
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
+  --radius-xl: 18px;
+  --radius-2xl: 24px;
+  --radius-3xl: 32px;
+
+  /* Depth */
+  --shadow-soft: 0 12px 32px -16px rgb(0 0 0 / 0.7);
+  --shadow-lift: 0 24px 60px -24px rgb(0 0 0 / 0.8);
+  --shadow-glow: 0 8px 30px -8px rgb(255 255 255 / 0.15);
+
+  /* Motion */
+  --ease-soft: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-in-out-soft: cubic-bezier(0.65, 0, 0.35, 1);
+}

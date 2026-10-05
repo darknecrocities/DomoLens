@@ -1,0 +1,17 @@
+{
+  "name": "@domolens/theme",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "DomoLens colors, fonts, spacing and motion. Shared by the app and the landing page.",
+  "exports": {
+    "./theme.css": {
+      "style": "./theme.css",
+      "default": "./theme.css"
+    },
+    "./tokens": {
+      "types": "./src/tokens.ts",
+      "default": "./src/tokens.ts"
+    }
+  }
+}

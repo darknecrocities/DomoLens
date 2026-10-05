@@ -1,0 +1,68 @@
+# OS files
+.DS_Store
+.AppleDouble
+.LSOverride
+Thumbs.db
+ehthumbs.db
+
+# Dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# Production and build outputs
+dist/
+build/
+out/
+.next/
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Rust / Tauri
+apps/app/src-tauri/target/
+apps/app/src-tauri/gen/schemas/
+target/
+
+# Ensure icons are tracked
+!apps/app/src-tauri/icons/
+!apps/app/src-tauri/icons/**
+
+# Python
+engine/.venv/
+.venv/
+env/
+venv/
+ENV/
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.pytest_cache/
+.coverage
+.mypy_cache/
+.ruff_cache/
+
+# Test outputs
+test-results/
+playwright-report/
+coverage/
+
+# Environment variables & local secrets
+.env
+.env.local
+.env.*.local
+*.local
+
+# IDEs and Editors
+.vscode/*
+!.vscode/settings.json
+!.vscode/extensions.json
+.idea/
+*.swp
+*.swo
+*~

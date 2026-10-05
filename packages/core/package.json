@@ -1,0 +1,21 @@
+{
+  "name": "@domolens/core",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "The DomoLens brain: project format, timeline and auto zoom. Plain TypeScript that runs on every platform.",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "default": "./src/index.ts"
+    }
+  },
+  "scripts": {
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "typescript": "^7.0.2",
+    "vitest": "^5.0.3"
+  }
+}
