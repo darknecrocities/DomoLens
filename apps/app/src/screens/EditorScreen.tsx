@@ -53,9 +53,11 @@ export function EditorScreen({ id }: EditorScreenProps) {
     void loadProject(id);
   }, [id, loadProject]);
 
-  // Ultra-smooth zero-delay 60fps playback timer loop
+  // Playback timer loop: if no video is mounted, this rAF timer advances playback smoothly;
+  // when an HTML5 video is loaded, VideoCanvas's hardware presentation clock drives currentTimeMs with zero latency.
   useEffect(() => {
     if (!isPlaying) return;
+    if (project?.summary?.media) return;
 
     let lastTime = performance.now();
     let animId: number;
@@ -78,7 +80,7 @@ export function EditorScreen({ id }: EditorScreenProps) {
 
     animId = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(animId);
-  }, [isPlaying, setCurrentTime, setPlaying]);
+  }, [isPlaying, project?.summary?.media, setCurrentTime, setPlaying]);
 
   // Global editor keyboard shortcuts
   useEffect(() => {

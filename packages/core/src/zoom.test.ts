@@ -300,6 +300,40 @@ describe("zoom algorithms", () => {
     expect(cameraBefore.scale).toBe(1.0);
     expect(cameraBefore.isZoomed).toBe(false);
   });
+
+  it("smoothly tracks cursor frame-by-frame during keyframe zoom hold", () => {
+    const keyframes = [
+      { id: "kf1", timeMs: 2000, scale: 2.0, targetX: 0.5, targetY: 0.5, easing: "cubic" as const },
+      { id: "kf2", timeMs: 6000, scale: 2.0, targetX: 0.5, targetY: 0.5, easing: "cubic" as const },
+    ];
+    // Mouse trajectory moving towards top-right
+    const trajectory = [
+      { timestampMs: 2000, x: 0.5, y: 0.5 },
+      { timestampMs: 4000, x: 0.72, y: 0.3 },
+      { timestampMs: 6000, x: 0.72, y: 0.3 },
+    ];
+
+    // At t = 4000ms: cursor is at (0.72, 0.3), which is outside the deadzone for scale 2.0
+    const cameraAt4s = calculateCameraAtTime(4000, [], 350, 400, trajectory, keyframes);
+    expect(cameraAt4s.scale).toBe(2.0);
+    expect(cameraAt4s.isZoomed).toBe(true);
+    // Camera center must have shifted towards cursor (x > 0.5 and y < 0.5)
+    expect(cameraAt4s.x).toBeGreaterThan(0.5);
+    expect(cameraAt4s.y).toBeLessThan(0.5);
+    expect(cameraAt4s.cursorX).toBeCloseTo(0.72, 2);
+    expect(cameraAt4s.cursorY).toBeCloseTo(0.3, 2);
+  });
+
+  it("auto-plots typing activity with adaptive 2.1x scale and text field offset", () => {
+    const typingInteractions = [
+      { id: "type-1", type: "typing" as const, timestampMs: 4000, x: 0.45, y: 0.5, snippet: "searching..." },
+    ];
+    const result = plotInteractionsToKeyframesAndZoomBlocks(typingInteractions, 12000);
+    expect(result.zoomBlocks).toHaveLength(1);
+    const block = result.zoomBlocks[0]!;
+    expect(block.scale).toBe(2.1); // Typing intent scale
+    expect(block.targetY).toBeLessThan(0.5); // Slight negative offset for typing
+  });
 });
 
 describe("timeline operations", () => {

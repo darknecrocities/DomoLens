@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useRef } from "react";
-import { motion } from "framer-motion";
 import { Film, Sparkles } from "lucide-react";
 import { calculateCameraAtTime, type ProjectData } from "@domolens/core";
 import { sfx } from "../../lib/sound-effects";
@@ -15,8 +14,8 @@ export function VideoCanvas({ project, currentTimeMs }: VideoCanvasProps) {
   const { summary, zoomBlocks, looks, clicks, keyframes } = project;
   const isPlaying = useEditor((s) => s.isPlaying);
   const videoRef = useRef<HTMLVideoElement>(null);
-  const lastTriggeredClickId = useRef<string | null>(null);
-  const lastTriggeredTypingId = useRef<string | null>(null);
+  const prevTimeRef = useRef(currentTimeMs);
+  const triggeredEventsRef = useRef<Set<string>>(new Set());
 
   // Calculate live camera frame with real-time mouse cursor tracking and keyframes
   const camera = useMemo(() => {
@@ -30,33 +29,105 @@ export function VideoCanvas({ project, currentTimeMs }: VideoCanvasProps) {
     );
   }, [currentTimeMs, zoomBlocks, project.cursorTrajectory, keyframes]);
 
-  // Sync HTML5 video play/pause
+  // Master hardware-locked video clock synchronization:
+  // When video is playing, video presentation frames drive currentTimeMs with ZERO latency!
   useEffect(() => {
     const video = videoRef.current;
     if (!video) return;
-    if (isPlaying) {
-      video.play().catch(() => {});
-    } else {
+
+    if (!isPlaying) {
       video.pause();
+      const targetSec = currentTimeMs / 1000;
+      if (Math.abs(video.currentTime - targetSec) > 0.02) {
+        video.currentTime = targetSec;
+      }
+      return;
     }
+
+    const targetSec = currentTimeMs / 1000;
+    if (Math.abs(video.currentTime - targetSec) > 0.05) {
+      video.currentTime = targetSec;
+    }
+
+    let active = true;
+    let rVfcId: number | null = null;
+    let rafId: number | null = null;
+
+    const onFrame = () => {
+      if (!active) return;
+      if (video.ended) {
+        useEditor.getState().setCurrentTime(0);
+        useEditor.getState().setPlaying(false);
+        return;
+      }
+
+      const frameMs = Math.round(video.currentTime * 1000);
+      const durationMs = useEditor.getState().durationMs;
+
+      if (frameMs >= durationMs) {
+        useEditor.getState().setCurrentTime(0);
+        useEditor.getState().setPlaying(false);
+        return;
+      }
+
+      useEditor.getState().setCurrentTime(frameMs);
+
+      if ("requestVideoFrameCallback" in video) {
+        rVfcId = (video as unknown as { requestVideoFrameCallback: (cb: () => void) => number }).requestVideoFrameCallback(onFrame);
+      } else {
+        rafId = requestAnimationFrame(onFrame);
+      }
+    };
+
+    video.play().then(() => {
+      if (!active) return;
+      if ("requestVideoFrameCallback" in video) {
+        rVfcId = (video as unknown as { requestVideoFrameCallback: (cb: () => void) => number }).requestVideoFrameCallback(onFrame);
+      } else {
+        rafId = requestAnimationFrame(onFrame);
+      }
+    }).catch(() => {});
+
+    return () => {
+      active = false;
+      if (rVfcId !== null && "cancelVideoFrameCallback" in video) {
+        (video as unknown as { cancelVideoFrameCallback: (id: number) => void }).cancelVideoFrameCallback(rVfcId);
+      }
+      if (rafId !== null) {
+        cancelAnimationFrame(rafId);
+      }
+    };
   }, [isPlaying]);
 
-  // Sync HTML5 video playback currentTime
+  // Handle manual scrub / seek during playback or pause
   useEffect(() => {
     const video = videoRef.current;
     if (!video) return;
     const targetSec = currentTimeMs / 1000;
-    // Only seek when drift exceeds 75ms to avoid audio/video stutter during smooth playback
-    if (Math.abs(video.currentTime - targetSec) > 0.075) {
-      video.currentTime = targetSec;
+    if (!isPlaying) {
+      if (Math.abs(video.currentTime - targetSec) > 0.02) {
+        video.currentTime = targetSec;
+      }
+    } else {
+      if (Math.abs(video.currentTime - targetSec) > 0.25) {
+        video.currentTime = targetSec;
+      }
     }
-  }, [currentTimeMs]);
+  }, [currentTimeMs, isPlaying]);
 
-  // Synchronize audio sound effects (Bop on click, typing sounds, and audio ducking)
+  // Synchronize audio sound effects (Bop on click, typing sounds, and audio ducking) with zero latency
   useEffect(() => {
     if (!isPlaying) {
-      lastTriggeredClickId.current = null;
-      lastTriggeredTypingId.current = null;
+      prevTimeRef.current = currentTimeMs;
+      return;
+    }
+
+    const prev = prevTimeRef.current;
+    prevTimeRef.current = currentTimeMs;
+
+    // Reset triggered set when looping or seeking backward
+    if (currentTimeMs < prev) {
+      triggeredEventsRef.current.clear();
       return;
     }
 
@@ -64,30 +135,38 @@ export function VideoCanvas({ project, currentTimeMs }: VideoCanvasProps) {
     const clickSoundEnabled = audioSettings?.clickSoundEnabled !== false;
     const typingSoundEnabled = audioSettings?.typingSoundEnabled !== false;
 
-    // Trigger procedural click bop sound
+    // Zero-latency edge-triggered procedural click bop sound
     if (clickSoundEnabled) {
-      const activeClick = clicks.find(
-        (c) => Math.abs(currentTimeMs - c.timestampMs) <= 65 && c.id !== lastTriggeredClickId.current,
-      );
-      if (activeClick) {
-        lastTriggeredClickId.current = activeClick.id;
-        sfx.playClickBop(audioSettings?.clickSoundPreset || "bop", audioSettings?.clickSoundVolume || 0.7);
-        if (audioSettings?.musicDuckingEnabled) {
-          sfx.duckMusic(400, audioSettings.duckingAmount);
+      for (const click of clicks) {
+        if (
+          !triggeredEventsRef.current.has(click.id) &&
+          click.timestampMs >= prev &&
+          click.timestampMs <= currentTimeMs + 35
+        ) {
+          triggeredEventsRef.current.add(click.id);
+          sfx.playClickBop(audioSettings?.clickSoundPreset || "bop", audioSettings?.clickSoundVolume || 0.7);
+          if (audioSettings?.musicDuckingEnabled) {
+            sfx.duckMusic(400, audioSettings.duckingAmount);
+          }
         }
       }
     }
 
-    // Trigger typing bursts
+    // Zero-latency edge-triggered typing sound bursts
     if (typingSoundEnabled && project.interactions) {
-      const activeTyping = project.interactions.find(
-        (i) => i.type === "typing" && Math.abs(currentTimeMs - i.timestampMs) <= 85 && i.id !== lastTriggeredTypingId.current,
-      );
-      if (activeTyping) {
-        lastTriggeredTypingId.current = activeTyping.id;
-        sfx.playTypingBurst(4, 90, audioSettings?.typingSoundPreset || "mechanical", audioSettings?.typingSoundVolume || 0.6);
-        if (audioSettings?.musicDuckingEnabled) {
-          sfx.duckMusic(550, audioSettings.duckingAmount);
+      for (const interaction of project.interactions) {
+        if (
+          interaction.type === "typing" &&
+          !triggeredEventsRef.current.has(interaction.id) &&
+          interaction.timestampMs >= prev &&
+          interaction.timestampMs <= currentTimeMs + 45
+        ) {
+          triggeredEventsRef.current.add(interaction.id);
+          const keystrokesCount = Math.min(8, Math.max(3, interaction.snippet ? interaction.snippet.length : 4));
+          sfx.playTypingBurst(keystrokesCount, 85, audioSettings?.typingSoundPreset || "mechanical", audioSettings?.typingSoundVolume || 0.6);
+          if (audioSettings?.musicDuckingEnabled) {
+            sfx.duckMusic(550, audioSettings.duckingAmount);
+          }
         }
       }
     }
@@ -106,12 +185,11 @@ export function VideoCanvas({ project, currentTimeMs }: VideoCanvasProps) {
     };
   }, [isPlaying, project.audioTracks]);
 
-
-  // Check if a click ripple should trigger right now (within 350ms of a click)
+  // Check if a click ripple should trigger right now (within 320ms after click)
   const activeRipple = useMemo(() => {
     if (!looks.showClickRipples) return null;
     return clicks.find(
-      (c) => Math.abs(currentTimeMs - c.timestampMs) <= 350,
+      (c) => currentTimeMs >= c.timestampMs && currentTimeMs <= c.timestampMs + 320,
     );
   }, [currentTimeMs, clicks, looks.showClickRipples]);
 
@@ -175,24 +253,37 @@ export function VideoCanvas({ project, currentTimeMs }: VideoCanvasProps) {
             </div>
           )}
 
-          {/* Click Ripple Indicator */}
+          {/* Frame-accurate Zero-latency Click Ripple Indicator */}
           {activeRipple && (
-            <motion.div
+            <div
               key={activeRipple.id}
-              initial={{ scale: 0.2, opacity: 0.9 }}
-              animate={{ scale: 1.8, opacity: 0 }}
-              transition={{ duration: 0.45, ease: "easeOut" }}
-              className="pointer-events-none absolute size-12 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white bg-white/20 shadow-sm z-20"
+              className="pointer-events-none absolute -translate-x-1/2 -translate-y-1/2 z-20 will-change-transform"
               style={{
                 left: `${activeRipple.x * 100}%`,
                 top: `${activeRipple.y * 100}%`,
               }}
-            />
+            >
+              {(() => {
+                const elapsed = currentTimeMs - activeRipple.timestampMs;
+                const progress = Math.min(1, Math.max(0, elapsed / 320));
+                const scale = 0.3 + progress * 1.5;
+                const opacity = 1 - progress;
+                return (
+                  <div
+                    className="size-10 rounded-full border-2 border-white bg-white/30 shadow-sm"
+                    style={{
+                      transform: `scale(${scale})`,
+                      opacity,
+                    }}
+                  />
+                );
+              })()}
+            </div>
           )}
 
-          {/* Real-Time Tracked Mouse Cursor Pointer */}
+          {/* Real-Time Tracked Mouse Cursor Pointer: zero latency */}
           <div
-            className="pointer-events-none absolute -translate-x-1/2 -translate-y-1/2 transition-transform duration-75 z-30"
+            className="pointer-events-none absolute -translate-x-1/2 -translate-y-1/2 will-change-transform z-30"
             style={{
               left: `${camera.cursorX * 100}%`,
               top: `${camera.cursorY * 100}%`,

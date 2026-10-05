@@ -16,6 +16,7 @@ import {
 import { formatDuration } from "@domolens/core";
 import { copy } from "../copy/en";
 import { Button } from "../components/ui/Button";
+import { FloatingQuickBar } from "../components/recording/FloatingQuickBar";
 import { useNav } from "../store/nav";
 import { useRecorder, type RecordingSource } from "../store/recorder";
 
@@ -118,82 +119,89 @@ export function RecordScreen() {
           </motion.div>
         )}
 
-        {/* 2. Active Recording Mode */}
+        {/* 2. Active Recording Mode with Floating QuickBar */}
         {(state === "recording" || state === "paused") && (
-          <motion.div
-            key="recording"
-            initial={{ opacity: 0, y: 15 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -15 }}
-            data-recorder-ui="true"
-            className="flex w-full max-w-lg flex-col items-center rounded-3xl border border-ink-700 bg-ink-800/90 p-8 text-center shadow-lift backdrop-blur-md"
-          >
-            {/* Status Header */}
-            <div className="flex items-center gap-2 rounded-full border border-ink-600 bg-ink-900/80 px-4 py-1.5 text-xs font-semibold">
-              <span
-                className={`size-2.5 rounded-full ${
-                  state === "recording" ? "bg-white animate-pulse" : "bg-neutral-400"
-                }`}
-              />
-              <span className="text-fg">
-                {state === "recording" ? copy.record.recordingIndicator : copy.record.pausedIndicator}
-              </span>
-            </div>
+          <div className="flex flex-col items-center w-full">
+            <motion.div
+              key="recording"
+              initial={{ opacity: 0, y: 15 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -15 }}
+              data-recorder-ui="true"
+              className="flex w-full max-w-lg flex-col items-center rounded-3xl border border-ink-700 bg-ink-800/90 p-8 text-center shadow-lift backdrop-blur-md mb-24"
+            >
+              {/* Status Header */}
+              <div className="flex items-center gap-2 rounded-full border border-ink-600 bg-ink-900/80 px-4 py-1.5 text-xs font-semibold">
+                <span
+                  className={`size-2.5 rounded-full ${
+                    state === "recording" ? "bg-white animate-pulse" : "bg-neutral-400"
+                  }`}
+                />
+                <span className="text-fg">
+                  {state === "recording" ? copy.record.recordingIndicator : copy.record.pausedIndicator}
+                </span>
+              </div>
 
-            {/* Time Display */}
-            <div className="mt-6 text-5xl font-mono font-bold tracking-tight text-fg tabular">
-              {formatDuration(elapsedMs)}
-            </div>
+              {/* Time Display */}
+              <div className="mt-6 text-5xl font-mono font-bold tracking-tight text-fg tabular">
+                {formatDuration(elapsedMs)}
+              </div>
 
-            <p className="mt-2 text-sm text-fg-muted">
-              {clicks.length === 1 ? "1 click logged" : `${clicks.length} clicks logged`}
-            </p>
+              <p className="mt-2 text-sm text-fg-muted font-mono">
+                {clicks.length === 1 ? "1 click logged" : `${clicks.length} clicks logged`}
+              </p>
 
-            {/* Live Tip */}
-            <div className="mt-6 rounded-xl border border-ink-700 bg-ink-900/60 p-3 text-xs leading-relaxed text-fg-faint">
-              {copy.record.clickHint}
-            </div>
+              {/* Live Tip */}
+              <div className="mt-6 rounded-xl border border-ink-700 bg-ink-900/60 p-3 text-xs leading-relaxed text-fg-faint">
+                {copy.record.clickHint}
+              </div>
 
-            {/* Action Bar */}
-            <div className="mt-8 flex w-full flex-wrap items-center justify-center gap-3">
-              {state === "recording" ? (
+              {/* Action Bar */}
+              <div className="mt-8 flex w-full flex-wrap items-center justify-center gap-3">
+                {state === "recording" ? (
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    icon={<Pause className="size-4" />}
+                    onClick={pauseRecording}
+                  >
+                    {copy.record.pauseBtn}
+                  </Button>
+                ) : (
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    icon={<Play className="size-4" />}
+                    onClick={resumeRecording}
+                  >
+                    {copy.record.resumeBtn}
+                  </Button>
+                )}
+
                 <Button
-                  variant="secondary"
-                  size="md"
-                  icon={<Pause className="size-4" />}
-                  onClick={pauseRecording}
+                  variant="primary"
+                  size="sm"
+                  icon={<CheckCircle2 className="size-4 text-ink-950" />}
+                  onClick={() => void stopRecording()}
                 >
-                  {copy.record.pauseBtn}
+                  {copy.record.finishBtn}
                 </Button>
-              ) : (
+
                 <Button
-                  variant="secondary"
-                  size="md"
-                  icon={<Play className="size-4" />}
-                  onClick={resumeRecording}
+                  variant="ghost"
+                  size="sm"
+                  onClick={cancelRecording}
                 >
-                  {copy.record.resumeBtn}
+                  {copy.record.discardBtn}
                 </Button>
-              )}
+              </div>
+            </motion.div>
 
-              <Button
-                variant="primary"
-                size="md"
-                icon={<CheckCircle2 className="size-4 text-ink-950" />}
-                onClick={() => void stopRecording()}
-              >
-                {copy.record.finishBtn}
-              </Button>
-
-              <Button
-                variant="ghost"
-                size="md"
-                onClick={cancelRecording}
-              >
-                {copy.record.discardBtn}
-              </Button>
+            {/* Floating QuickBar Overlay */}
+            <div className="fixed bottom-6 inset-x-0 mx-auto w-full max-w-4xl px-4 z-50 pointer-events-auto">
+              <FloatingQuickBar />
             </div>
-          </motion.div>
+          </div>
         )}
 
         {/* 3. Idle / Configuration Mode */}

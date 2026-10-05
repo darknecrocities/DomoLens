@@ -1,16 +1,19 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import {
+  CheckCircle2,
   Crosshair,
   Laptop,
   Mic,
   MicOff,
   Pause,
   Play,
-  Sliders,
   Smartphone,
   Volume2,
+  X,
   Zap,
 } from "lucide-react";
+import { formatDuration } from "@domolens/core";
+import { useRecorder } from "../../store/recorder";
 
 interface FloatingQuickBarProps {
   onOpenEditor?: () => void;
@@ -24,54 +27,59 @@ export function FloatingQuickBar({
   defaultMode = "laptop",
 }: FloatingQuickBarProps) {
   const [deviceMode, setDeviceMode] = useState<"laptop" | "android">(defaultMode);
-  const [recordingState, setRecordingState] = useState<"idle" | "recording" | "paused">("recording");
-  const [seconds, setSeconds] = useState(14);
-  const [zoomCount, setZoomCount] = useState(6);
   const [isTranscribing, setIsTranscribing] = useState(true);
-  const [micActive, setMicActive] = useState(true);
 
-  // Simulated live elapsed timer
-  useEffect(() => {
-    if (recordingState !== "recording") return;
-    const interval = setInterval(() => {
-      setSeconds((s) => s + 1);
-    }, 1000);
-    return () => clearInterval(interval);
-  }, [recordingState]);
-
-  const formatTime = (totalSec: number) => {
-    const mins = Math.floor(totalSec / 60);
-    const secs = totalSec % 60;
-    return `${String(mins).padStart(2, "0")}:${String(secs).padStart(2, "0")}`;
-  };
+  const {
+    state,
+    elapsedMs,
+    clicks,
+    micEnabled,
+    toggleMic,
+    pauseRecording,
+    resumeRecording,
+    stopRecording,
+    cancelRecording,
+    recordClick,
+  } = useRecorder();
 
   const handleTogglePlay = () => {
-    if (recordingState === "recording") {
-      setRecordingState("paused");
+    if (state === "recording") {
+      pauseRecording();
     } else {
-      setRecordingState("recording");
+      resumeRecording();
     }
   };
 
   const handleAddZoom = () => {
-    setZoomCount((z) => z + 1);
+    recordClick(0.5, 0.5, "left");
+  };
+
+  const handleFinish = () => {
+    if (onOpenEditor) {
+      onOpenEditor();
+    } else {
+      void stopRecording();
+    }
   };
 
   return (
-    <div className={`w-full max-w-4xl mx-auto ${className}`}>
+    <div
+      data-recorder-ui="true"
+      className={`w-full max-w-4xl mx-auto select-none ${className}`}
+    >
       {/* Quick Action Device Mode Switcher */}
-      <div className="mb-3 flex items-center justify-between px-2">
+      <div className="mb-2 flex items-center justify-between px-2">
         <div className="flex items-center gap-2 font-mono text-[11px] uppercase tracking-wider text-neutral-300">
           <span className="size-2 rounded-full bg-white animate-pulse" />
           <span className="font-bold text-white tracking-widest flex items-center gap-1">
             <Zap className="size-3 text-white" />
-            QUICK ACTION HUD
+            RECORDING QUICKBAR
           </span>
           <span className="text-neutral-600">•</span>
-          <span className="text-neutral-400">Desktop & Mobile</span>
+          <span className="text-neutral-400">Desktop & Mobile HUD</span>
         </div>
 
-        <div className="flex items-center rounded-lg border border-neutral-800 bg-neutral-900 p-0.5">
+        <div className="flex items-center rounded-lg border border-neutral-800 bg-neutral-900/90 p-0.5 backdrop-blur-md">
           <button
             type="button"
             onClick={() => setDeviceMode("laptop")}
@@ -100,7 +108,7 @@ export function FloatingQuickBar({
       </div>
 
       {/* Floating Glassmorphism QuickBar Pill */}
-      <div className="relative overflow-hidden rounded-2xl border border-neutral-700/80 bg-neutral-900/90 p-3 sm:p-4 backdrop-blur-2xl shadow-2xl">
+      <div className="relative overflow-hidden rounded-2xl border border-neutral-700/80 bg-neutral-900/95 p-3 sm:p-4 backdrop-blur-2xl shadow-2xl">
         <div className="flex flex-wrap items-center justify-between gap-3">
           {/* Brand + Status Indicator */}
           <div className="flex items-center gap-3">
@@ -115,17 +123,17 @@ export function FloatingQuickBar({
                   DomoLens
                 </span>
                 <span
-                  className={`rounded px-1.5 py-0.2 font-mono text-[9px] font-bold uppercase tracking-wider ${
-                    recordingState === "recording"
+                  className={`rounded px-1.5 py-0.5 font-mono text-[9px] font-bold uppercase tracking-wider ${
+                    state === "recording"
                       ? "bg-white text-black"
-                      : recordingState === "paused"
+                      : state === "paused"
                       ? "bg-neutral-700 text-white"
                       : "bg-neutral-800 text-neutral-400"
                   }`}
                 >
-                  {recordingState === "recording"
+                  {state === "recording"
                     ? "Recording"
-                    : recordingState === "paused"
+                    : state === "paused"
                     ? "Paused"
                     : "Idle"}
                 </span>
@@ -140,7 +148,7 @@ export function FloatingQuickBar({
           <div className="flex items-center gap-4 border-x border-neutral-800 px-4">
             <div className="text-center">
               <span className="font-mono text-lg font-black text-white tabular">
-                {formatTime(seconds)}
+                {formatDuration(elapsedMs)}
               </span>
               <span className="block font-mono text-[9px] text-neutral-400 uppercase">
                 Duration
@@ -150,12 +158,12 @@ export function FloatingQuickBar({
             <button
               type="button"
               onClick={handleAddZoom}
-              title="Click to simulate auto-zoom trigger"
+              title="Click to log focus zoom at mouse coordinates"
               className="group flex flex-col items-center rounded-lg border border-neutral-800 bg-neutral-950/80 px-2.5 py-1 hover:border-neutral-600 transition-colors"
             >
               <div className="flex items-center gap-1 font-mono text-xs font-bold text-white">
                 <Crosshair className="size-3 text-neutral-300 group-hover:rotate-45 transition-transform" />
-                <span>{zoomCount} zooms</span>
+                <span>{clicks.length} zooms</span>
               </div>
               <span className="font-mono text-[9px] text-neutral-500 uppercase">
                 + Click To Log
@@ -163,20 +171,20 @@ export function FloatingQuickBar({
             </button>
           </div>
 
-          {/* Controls: Play/Pause, Stop, Transcribe, Open Editor */}
+          {/* Controls: Mic, Play/Pause, Transcribe, Finish */}
           <div className="flex flex-wrap items-center gap-2">
             {/* Mic toggle */}
             <button
               type="button"
-              onClick={() => setMicActive(!micActive)}
+              onClick={toggleMic}
               className={`flex size-8 items-center justify-center rounded-lg border transition-all ${
-                micActive
+                micEnabled
                   ? "border-neutral-600 bg-neutral-800 text-white"
                   : "border-neutral-800 bg-neutral-950 text-neutral-500"
               }`}
-              title="Toggle Microphone"
+              title={micEnabled ? "Microphone active" : "Microphone muted"}
             >
-              {micActive ? <Mic className="size-3.5" /> : <MicOff className="size-3.5" />}
+              {micEnabled ? <Mic className="size-3.5" /> : <MicOff className="size-3.5" />}
             </button>
 
             {/* Pause / Resume */}
@@ -185,7 +193,7 @@ export function FloatingQuickBar({
               onClick={handleTogglePlay}
               className="flex items-center gap-1.5 rounded-lg border border-neutral-700 bg-neutral-800 px-3 py-1.5 font-mono text-xs font-semibold text-white hover:bg-neutral-700 transition-all"
             >
-              {recordingState === "recording" ? (
+              {state === "recording" ? (
                 <>
                   <Pause className="size-3.5 text-neutral-300" />
                   <span>Pause</span>
@@ -215,14 +223,24 @@ export function FloatingQuickBar({
               )}
             </button>
 
-            {/* Open Editor */}
+            {/* Finish & Open Editor */}
             <button
               type="button"
-              onClick={onOpenEditor}
-              className="flex items-center gap-1.5 rounded-lg border border-neutral-700 bg-neutral-950 px-3 py-1.5 font-mono text-xs font-bold text-white hover:border-white hover:bg-neutral-900 transition-all"
+              onClick={handleFinish}
+              className="flex items-center gap-1.5 rounded-lg border border-white bg-white px-3 py-1.5 font-mono text-xs font-bold text-black hover:bg-neutral-200 transition-all shadow-sm"
             >
-              <Sliders className="size-3.5 text-white" />
-              <span>Open Editor</span>
+              <CheckCircle2 className="size-3.5 text-black" />
+              <span>Finish & Edit</span>
+            </button>
+
+            {/* Discard */}
+            <button
+              type="button"
+              onClick={cancelRecording}
+              title="Discard recording"
+              className="flex size-8 items-center justify-center rounded-lg border border-neutral-800 bg-neutral-950 text-neutral-400 hover:border-neutral-700 hover:text-white transition-all"
+            >
+              <X className="size-3.5" />
             </button>
           </div>
         </div>
@@ -232,7 +250,7 @@ export function FloatingQuickBar({
           <div className="mt-3 flex items-center justify-between border-t border-neutral-800/80 pt-2.5 font-mono text-[10px] text-neutral-400">
             <div className="flex items-center gap-2">
               <span className="size-1.5 rounded-full bg-white animate-pulse" />
-              <span>Whisper AI Speech Engine: Listening & Generating Word-by-Word Timestamps...</span>
+              <span>Whisper AI Speech Engine: Listening and logging keystrokes, clicks, and speech...</span>
             </div>
             <div className="flex items-center gap-1">
               <span className="h-2 w-0.5 bg-neutral-400 animate-pulse" />

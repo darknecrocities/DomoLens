@@ -38,7 +38,7 @@ interface RecorderStore {
   stopRecording: () => Promise<ProjectSummary | null>;
   cancelRecording: () => void;
   recordClick: (x: number, y: number, button?: "left" | "right" | "middle") => void;
-  recordTyping: (x: number, y: number, snippet?: string) => void;
+  recordTyping: (x: number, y: number, snippet?: string, existingId?: string) => void;
   recordCursorPoint: (x: number, y: number) => void;
 }
 
@@ -111,14 +111,31 @@ export const useRecorder = create<RecorderStore>((set, get) => ({
     sfx.playClickBop("bop", 0.65);
   },
 
-  recordTyping: (x, y, snippet) => {
+  recordTyping: (x, y, snippet, existingId) => {
     if (get().state !== "recording") return;
     const now = Date.now();
     const timestampMs = Math.max(0, now - recordingStartTimestamp);
-    const typingId = `type-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
     const clampedX = Math.min(1, Math.max(0, x));
     const clampedY = Math.min(1, Math.max(0, y));
 
+    if (existingId) {
+      const idx = get().interactions.findIndex((i) => i.id === existingId);
+      if (idx !== -1) {
+        const updated = [...get().interactions];
+        updated[idx] = {
+          ...updated[idx]!,
+          snippet: snippet ?? updated[idx]!.snippet,
+        };
+        set((s) => ({
+          interactions: updated,
+          cursorTrajectory: [...s.cursorTrajectory, { timestampMs, x: clampedX, y: clampedY }],
+        }));
+        sfx.playKeystroke("mechanical", 0.55);
+        return;
+      }
+    }
+
+    const typingId = existingId || `type-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
     const newInteraction: InteractionEvent = {
       id: typingId,
       type: "typing",
@@ -264,15 +281,28 @@ export const useRecorder = create<RecorderStore>((set, get) => ({
       }
     };
 
+    let typingBuffer = "";
+    let activeTypingId: string | null = null;
+
     const handleKeyDown = (e: KeyboardEvent) => {
       if (get().state !== "recording") return;
       // Filter out modifier keys
-      if (["Shift", "Control", "Alt", "Meta"].includes(e.key)) return;
+      if (["Shift", "Control", "Alt", "Meta", "CapsLock", "Tab"].includes(e.key)) return;
+
       const now = Date.now();
-      // Debounce typing events within 1.5s so consecutive keystrokes form one continuous zoom
-      if (now - lastTypingTime > 1500) {
-        lastTypingTime = now;
-        get().recordTyping(lastX, lastY, e.key);
+      const isNewSession = now - lastTypingTime > 1600 || !activeTypingId;
+      lastTypingTime = now;
+
+      const char = e.key.length === 1 ? e.key : e.key === "Enter" ? " " : "";
+      if (isNewSession) {
+        typingBuffer = char || e.key;
+        activeTypingId = `type-${now}-${Math.random().toString(36).slice(2, 7)}`;
+        get().recordTyping(lastX, lastY, typingBuffer, activeTypingId);
+      } else {
+        if (char) {
+          typingBuffer += char;
+        }
+        get().recordTyping(lastX, lastY, typingBuffer, activeTypingId ?? undefined);
       }
     };
 
@@ -364,7 +394,7 @@ export const useRecorder = create<RecorderStore>((set, get) => ({
       mediaUrl = "/domolens_smooth_autozoom_demo.mp4";
     }
 
-    // Auto-plot all click and typing interactions into 2-3s zoom loops with keyframes
+    // Auto-plot all click and typing interactions into smooth zooms with keyframes
     const { keyframes, zoomBlocks } = plotInteractionsToKeyframesAndZoomBlocks(
       finalInteractions.length > 0
         ? finalInteractions
@@ -377,8 +407,37 @@ export const useRecorder = create<RecorderStore>((set, get) => ({
             button: c.button,
           })),
       duration,
-      { holdDurationMs: 2400, scale: 1.85, fallbackIfEmpty: true },
+      { holdDurationMs: 2400, fallbackIfEmpty: true },
     );
+
+    // Auto-plot text callouts from typing interactions
+    const textOverlays: import("@domolens/core").TextOverlay[] = finalInteractions
+      .filter((i) => i.type === "typing" && i.snippet && i.snippet.trim().length > 0)
+      .map((i, idx) => ({
+        id: `text-auto-${idx + 1}`,
+        text: i.snippet!.length > 32 ? `${i.snippet!.slice(0, 30)}...` : i.snippet!,
+        startTimeMs: i.timestampMs,
+        durationMs: 2500,
+        x: i.x,
+        y: Math.max(0.12, i.y - 0.08),
+        fontSize: 16,
+        color: "#ffffff",
+        bgColor: "rgba(15, 17, 23, 0.88)",
+      }));
+
+    // Auto-plot chapters for the AI director / video outline
+    const chapters = zoomBlocks.map((b, idx) => {
+      const match = finalInteractions.find(
+        (i) => Math.abs(i.timestampMs - b.startTimeMs) <= 1200,
+      );
+      const isTyping = match?.type === "typing";
+      return {
+        timeMs: b.startTimeMs,
+        title: isTyping
+          ? `Typing: ${match?.snippet ? match.snippet.slice(0, 20) : "Text"}`
+          : `Step ${idx + 1}: Action Focus`,
+      };
+    });
 
     // Create the project in the projects store
     const id = `rec-${Date.now()}`;
@@ -398,7 +457,7 @@ export const useRecorder = create<RecorderStore>((set, get) => ({
       media: mediaUrl,
     };
 
-    // Save full project data in memory store
+    // Save full project data in memory store with all plotted interactions
     const projectData = {
       summary,
       clicks: finalClicks,
@@ -406,7 +465,7 @@ export const useRecorder = create<RecorderStore>((set, get) => ({
       cursorTrajectory: [...get().cursorTrajectory],
       zoomBlocks,
       keyframes,
-      textOverlays: [],
+      textOverlays,
       audioTracks: [],
       clips: [
         {
@@ -421,7 +480,16 @@ export const useRecorder = create<RecorderStore>((set, get) => ({
         },
       ],
       looks: DEFAULT_LOOKS,
-      audioSettings: DEFAULT_AUDIO_SETTINGS,
+      audioSettings: {
+        ...DEFAULT_AUDIO_SETTINGS,
+        clickSoundEnabled: true,
+        typingSoundEnabled: true,
+        musicDuckingEnabled: true,
+      },
+      aiData: {
+        chapters,
+        summary: `Screen capture with ${finalClicks.length} clicks and ${finalInteractions.filter((i) => i.type === "typing").length} typing actions auto-plotted.`,
+      },
     };
 
     // Register project

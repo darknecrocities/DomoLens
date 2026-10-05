@@ -331,9 +331,21 @@ export function calculateCameraAtTime(
           cursorY: defaultCursor.y,
         };
       }
+      let finalX = firstKf.targetX;
+      let finalY = firstKf.targetY;
+      if (firstKf.scale > 1.05 && cursorTrajectory && cursorTrajectory.length > 0) {
+        const tracked = calculateDeadzoneCamera(
+          { x: firstKf.targetX, y: firstKf.targetY },
+          defaultCursor,
+          firstKf.scale,
+          0.30,
+        );
+        finalX = tracked.x;
+        finalY = tracked.y;
+      }
       return {
-        x: firstKf.targetX,
-        y: firstKf.targetY,
+        x: finalX,
+        y: finalY,
         scale: firstKf.scale,
         isZoomed: firstKf.scale > 1.05,
         cursorX: defaultCursor.x,
@@ -342,9 +354,21 @@ export function calculateCameraAtTime(
     }
 
     if (timeMs >= lastKf.timeMs) {
+      let finalX = lastKf.targetX;
+      let finalY = lastKf.targetY;
+      if (lastKf.scale > 1.05 && cursorTrajectory && cursorTrajectory.length > 0) {
+        const tracked = calculateDeadzoneCamera(
+          { x: lastKf.targetX, y: lastKf.targetY },
+          defaultCursor,
+          lastKf.scale,
+          0.30,
+        );
+        finalX = tracked.x;
+        finalY = tracked.y;
+      }
       return {
-        x: lastKf.targetX,
-        y: lastKf.targetY,
+        x: finalX,
+        y: finalY,
         scale: lastKf.scale,
         isZoomed: lastKf.scale > 1.05,
         cursorX: defaultCursor.x,
@@ -359,12 +383,35 @@ export function calculateCameraAtTime(
         const span = k2.timeMs - k1.timeMs;
         const progress = span > 0 ? easeInOutCubic((timeMs - k1.timeMs) / span) : 1;
         const scale = k1.scale + (k2.scale - k1.scale) * progress;
-        const targetX = k1.targetX + (k2.targetX - k1.targetX) * progress;
-        const targetY = k1.targetY + (k2.targetY - k1.targetY) * progress;
-        const cursor = interpolateCursorAtTime(timeMs, cursorTrajectory, targetX, targetY);
+        const baseTargetX = k1.targetX + (k2.targetX - k1.targetX) * progress;
+        const baseTargetY = k1.targetY + (k2.targetY - k1.targetY) * progress;
+        const cursor = interpolateCursorAtTime(timeMs, cursorTrajectory, baseTargetX, baseTargetY);
+
+        let finalX = baseTargetX;
+        let finalY = baseTargetY;
+
+        // When zoomed in, smoothly follow the cursor frame-by-frame with spring deadzone damping
+        if (scale > 1.05 && cursorTrajectory && cursorTrajectory.length > 0) {
+          const tracked = calculateDeadzoneCamera(
+            { x: baseTargetX, y: baseTargetY },
+            cursor,
+            scale,
+            0.30,
+          );
+          finalX = tracked.x;
+          finalY = tracked.y;
+        } else if (scale > 1.0) {
+          const clamped = clampCameraToBounds(baseTargetX, baseTargetY, scale);
+          finalX = clamped.x;
+          finalY = clamped.y;
+        } else {
+          finalX = 0.5;
+          finalY = 0.5;
+        }
+
         return {
-          x: targetX,
-          y: targetY,
+          x: finalX,
+          y: finalY,
           scale,
           isZoomed: scale > 1.05,
           cursorX: cursor.x,
@@ -420,7 +467,7 @@ export function calculateCameraAtTime(
         { x: block.targetX, y: block.targetY },
         currentCursor,
         block.scale,
-        0.35,
+        0.30,
       );
       return {
         x: deadzoneTarget.x,
@@ -583,7 +630,10 @@ export function plotInteractionsToKeyframesAndZoomBlocks(
     const firstEvt = cluster[0]!;
     const lastEvt = cluster[cluster.length - 1]!;
 
-    const intent = calculateIntentZoom(firstEvt);
+    const hasTyping = cluster.some((e) => "type" in e && e.type === "typing");
+    const intent = hasTyping
+      ? calculateIntentZoom({ id: firstEvt.id, type: "typing", timestampMs: firstEvt.timestampMs, x: firstEvt.x, y: firstEvt.y })
+      : calculateIntentZoom(firstEvt);
     const clusterScale = options.scale ?? intent.scale;
     const clusterHoldMs = options.holdDurationMs ?? intent.holdMs;
 
