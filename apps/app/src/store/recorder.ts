@@ -7,11 +7,11 @@ import {
   type InteractionEvent,
   type ProjectSummary,
 } from "@domolens/core";
-import { sfx } from "../lib/sound-effects";
-import { createLiveStreamMotionTracker } from "../lib/video-activity-detector";
 import { toast } from "./toast";
 import { useProjects } from "./projects";
 import { useNav } from "./nav";
+
+let cursorTrajectoryBuffer: import("@domolens/core").CursorTrajectoryPoint[] = [];
 
 
 export type RecordingState = "idle" | "requesting_share" | "countdown" | "recording" | "paused";
@@ -69,12 +69,9 @@ export const useRecorder = create<RecorderStore>((set, get) => ({
   recordCursorPoint: (x, y) => {
     if (get().state !== "recording") return;
     const timestampMs = Math.max(0, Date.now() - recordingStartTimestamp);
-    set((s) => ({
-      cursorTrajectory: [
-        ...s.cursorTrajectory,
-        { timestampMs, x: Math.min(1, Math.max(0, x)), y: Math.min(1, Math.max(0, y)) },
-      ],
-    }));
+    const clampedX = Math.min(1, Math.max(0, x));
+    const clampedY = Math.min(1, Math.max(0, y));
+    cursorTrajectoryBuffer.push({ timestampMs, x: clampedX, y: clampedY });
   },
 
   recordClick: (x, y, button = "left") => {
@@ -84,6 +81,8 @@ export const useRecorder = create<RecorderStore>((set, get) => ({
     const clickId = `click-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
     const clampedX = Math.min(1, Math.max(0, x));
     const clampedY = Math.min(1, Math.max(0, y));
+    const point = { timestampMs, x: clampedX, y: clampedY };
+    cursorTrajectoryBuffer.push(point);
 
     const newClick: ClickEvent = {
       id: clickId,
@@ -105,11 +104,8 @@ export const useRecorder = create<RecorderStore>((set, get) => ({
     set((s) => ({
       clicks: [...s.clicks, newClick],
       interactions: [...s.interactions, newInteraction],
-      cursorTrajectory: [...s.cursorTrajectory, { timestampMs, x: clampedX, y: clampedY }],
+      cursorTrajectory: [...s.cursorTrajectory, point],
     }));
-
-    // Tactile click sound feedback
-    sfx.playClickBop("bop", 0.65);
   },
 
   recordTyping: (x, y, snippet, existingId) => {
@@ -118,6 +114,8 @@ export const useRecorder = create<RecorderStore>((set, get) => ({
     const timestampMs = Math.max(0, now - recordingStartTimestamp);
     const clampedX = Math.min(1, Math.max(0, x));
     const clampedY = Math.min(1, Math.max(0, y));
+    const point = { timestampMs, x: clampedX, y: clampedY };
+    cursorTrajectoryBuffer.push(point);
 
     if (existingId) {
       const idx = get().interactions.findIndex((i) => i.id === existingId);
@@ -129,9 +127,8 @@ export const useRecorder = create<RecorderStore>((set, get) => ({
         };
         set((s) => ({
           interactions: updated,
-          cursorTrajectory: [...s.cursorTrajectory, { timestampMs, x: clampedX, y: clampedY }],
+          cursorTrajectory: [...s.cursorTrajectory, point],
         }));
-        sfx.playKeystroke("mechanical", 0.55);
         return;
       }
     }
@@ -148,11 +145,8 @@ export const useRecorder = create<RecorderStore>((set, get) => ({
 
     set((s) => ({
       interactions: [...s.interactions, newInteraction],
-      cursorTrajectory: [...s.cursorTrajectory, { timestampMs, x: clampedX, y: clampedY }],
+      cursorTrajectory: [...s.cursorTrajectory, point],
     }));
-
-    // Mechanical keystroke sound feedback
-    sfx.playKeystroke("mechanical", 0.55);
   },
 
   startCountdown: async () => {
@@ -213,6 +207,7 @@ export const useRecorder = create<RecorderStore>((set, get) => ({
 
   startRecording: async () => {
     recordedChunks = [];
+    cursorTrajectoryBuffer = [];
     recordingStartTimestamp = Date.now();
     set({ state: "recording", elapsedMs: 0, clicks: [], interactions: [], cursorTrajectory: [] });
 
@@ -260,7 +255,7 @@ export const useRecorder = create<RecorderStore>((set, get) => ({
         lastY = e.touches[0].clientY / window.innerHeight;
       }
       const now = Date.now();
-      if (now - lastCursorSampleTime >= 40) {
+      if (now - lastCursorSampleTime >= 25) {
         lastCursorSampleTime = now;
         get().recordCursorPoint(lastX, lastY);
       }
@@ -307,35 +302,7 @@ export const useRecorder = create<RecorderStore>((set, get) => ({
       }
     };
 
-    let stopOpticalTracker: (() => void) | null = null;
-    if (activeStream) {
-      try {
-        stopOpticalTracker = createLiveStreamMotionTracker(activeStream, {
-          onPoint: (p) => {
-            lastX = p.x;
-            lastY = p.y;
-            get().recordCursorPoint(p.x, p.y);
-          },
-          onInteraction: (i) => {
-            lastX = i.x;
-            lastY = i.y;
-            if (i.type === "typing") {
-              get().recordTyping(i.x, i.y, i.snippet, i.id);
-            } else {
-              get().recordClick(i.x, i.y, "left");
-            }
-          },
-        });
-      } catch {
-        // Fall back gracefully if canvas context unavailable in testing
-      }
-    }
-
     const cleanupListeners = () => {
-      if (stopOpticalTracker) {
-        stopOpticalTracker();
-        stopOpticalTracker = null;
-      }
       window.removeEventListener("mousemove", handlePointerMove);
       window.removeEventListener("mousedown", handleClick);
       window.removeEventListener("keydown", handleKeyDown);
@@ -491,12 +458,18 @@ export const useRecorder = create<RecorderStore>((set, get) => ({
       media: mediaUrl,
     };
 
+    const finalTrajectory =
+      cursorTrajectoryBuffer.length > 0
+        ? [...cursorTrajectoryBuffer]
+        : [...get().cursorTrajectory];
+    cursorTrajectoryBuffer = [];
+
     // Save full project data in memory store with all plotted interactions
     const projectData = {
       summary,
       clicks: finalClicks,
       interactions: finalInteractions,
-      cursorTrajectory: [...get().cursorTrajectory],
+      cursorTrajectory: finalTrajectory,
       zoomBlocks,
       keyframes,
       textOverlays,
@@ -558,6 +531,7 @@ export const useRecorder = create<RecorderStore>((set, get) => ({
     }
     mediaRecorderInstance = null;
     recordedChunks = [];
+    cursorTrajectoryBuffer = [];
     set({ state: "idle", elapsedMs: 0, clicks: [], interactions: [], cursorTrajectory: [] });
     useNav.getState().go({ name: "home" });
   },

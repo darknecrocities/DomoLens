@@ -346,6 +346,70 @@ export function interpolateCursorAtTime(
   return { x: fallbackX, y: fallbackY };
 }
 
+export interface CameraOptions {
+  /** Whether the camera continuously follows cursor position (OpenScreen style). Default true. */
+  autoTrackCursor?: boolean;
+  /** Camera zoom scale when auto-tracking cursor in continuous mode. Default 1.6. */
+  autoTrackScale?: number;
+  /** Cursor trajectory smoothing filter. */
+  cursorSmoothing?: "none" | "smooth" | "cinematic";
+  /** Optional click events used to anchor cursor smoothing precisely to targets. */
+  clicks?: import("./project").ClickEvent[];
+}
+
+/**
+ * Smooths raw cursor trajectory points using exponential moving average (EMA)
+ * and anchors coordinates near click events to ensure clicks land precisely on target.
+ */
+export function smoothCursorTrajectory(
+  points: import("./project").CursorTrajectoryPoint[],
+  smoothing: "none" | "smooth" | "cinematic" = "smooth",
+  clicks?: import("./project").ClickEvent[],
+): import("./project").CursorTrajectoryPoint[] {
+  if (!points || points.length <= 2 || smoothing === "none") {
+    return points ? [...points] : [];
+  }
+
+  const alpha = smoothing === "cinematic" ? 0.20 : 0.40;
+  const clickToleranceMs = 150;
+
+  const smoothed: import("./project").CursorTrajectoryPoint[] = [
+    { ...points[0]! },
+  ];
+
+  for (let i = 1; i < points.length; i++) {
+    const pt = points[i]!;
+    const prev = smoothed[i - 1]!;
+
+    const nearClick = clicks?.find(
+      (c) => Math.abs(c.timestampMs - pt.timestampMs) <= clickToleranceMs,
+    );
+
+    if (nearClick) {
+      const blend = 0.85;
+      const targetX = pt.x * (1 - blend) + nearClick.x * blend;
+      const targetY = pt.y * (1 - blend) + nearClick.y * blend;
+      const stepX = prev.x + (targetX - prev.x) * 0.75;
+      const stepY = prev.y + (targetY - prev.y) * 0.75;
+      smoothed.push({
+        timestampMs: pt.timestampMs,
+        x: Math.min(1, Math.max(0, stepX)),
+        y: Math.min(1, Math.max(0, stepY)),
+      });
+    } else {
+      const smX = prev.x + (pt.x - prev.x) * alpha;
+      const smY = prev.y + (pt.y - prev.y) * alpha;
+      smoothed.push({
+        timestampMs: pt.timestampMs,
+        x: Math.min(1, Math.max(0, smX)),
+        y: Math.min(1, Math.max(0, smY)),
+      });
+    }
+  }
+
+  return smoothed;
+}
+
 /**
  * Calculates smooth camera position, scale, and live cursor position at any timestamp,
  * dynamically tracking the mouse during zoom-in and hold.
@@ -357,8 +421,14 @@ export function calculateCameraAtTime(
   leadOutMs = 400,
   cursorTrajectory?: import("./project").CursorTrajectoryPoint[],
   keyframes?: import("./project").KeyframeNode[],
+  options?: CameraOptions,
 ): CameraStateWithCursor {
-  const defaultCursor = interpolateCursorAtTime(timeMs, cursorTrajectory, 0.5, 0.5);
+  const isAutoTrack = options?.autoTrackCursor !== false;
+  const effectiveTrajectory =
+    options?.cursorSmoothing && options.cursorSmoothing !== "none" && cursorTrajectory
+      ? smoothCursorTrajectory(cursorTrajectory, options.cursorSmoothing, options.clicks)
+      : cursorTrajectory;
+  const defaultCursor = interpolateCursorAtTime(timeMs, effectiveTrajectory, 0.5, 0.5);
 
   // If discrete keyframe nodes are provided, use high-precision keyframe interpolation
   if (keyframes && keyframes.length >= 2) {
@@ -381,13 +451,15 @@ export function calculateCameraAtTime(
       }
       let finalX = firstKf.targetX;
       let finalY = firstKf.targetY;
-      if (firstKf.scale > 1.05 && cursorTrajectory && cursorTrajectory.length > 0) {
-        const tracked = calculateDeadzoneCamera(
-          { x: firstKf.targetX, y: firstKf.targetY },
-          defaultCursor,
-          firstKf.scale,
-          0.30,
-        );
+      if (firstKf.scale > 1.05 && effectiveTrajectory && effectiveTrajectory.length > 0) {
+        const tracked = isAutoTrack
+          ? clampCameraToBounds(defaultCursor.x, defaultCursor.y, firstKf.scale)
+          : calculateDeadzoneCamera(
+              { x: firstKf.targetX, y: firstKf.targetY },
+              defaultCursor,
+              firstKf.scale,
+              0.30,
+            );
         finalX = tracked.x;
         finalY = tracked.y;
       }
@@ -404,13 +476,15 @@ export function calculateCameraAtTime(
     if (timeMs >= lastKf.timeMs) {
       let finalX = lastKf.targetX;
       let finalY = lastKf.targetY;
-      if (lastKf.scale > 1.05 && cursorTrajectory && cursorTrajectory.length > 0) {
-        const tracked = calculateDeadzoneCamera(
-          { x: lastKf.targetX, y: lastKf.targetY },
-          defaultCursor,
-          lastKf.scale,
-          0.30,
-        );
+      if (lastKf.scale > 1.05 && effectiveTrajectory && effectiveTrajectory.length > 0) {
+        const tracked = isAutoTrack
+          ? clampCameraToBounds(defaultCursor.x, defaultCursor.y, lastKf.scale)
+          : calculateDeadzoneCamera(
+              { x: lastKf.targetX, y: lastKf.targetY },
+              defaultCursor,
+              lastKf.scale,
+              0.30,
+            );
         finalX = tracked.x;
         finalY = tracked.y;
       }
@@ -433,19 +507,21 @@ export function calculateCameraAtTime(
         const scale = k1.scale + (k2.scale - k1.scale) * progress;
         const baseTargetX = k1.targetX + (k2.targetX - k1.targetX) * progress;
         const baseTargetY = k1.targetY + (k2.targetY - k1.targetY) * progress;
-        const cursor = interpolateCursorAtTime(timeMs, cursorTrajectory, baseTargetX, baseTargetY);
+        const cursor = interpolateCursorAtTime(timeMs, effectiveTrajectory, baseTargetX, baseTargetY);
 
         let finalX = baseTargetX;
         let finalY = baseTargetY;
 
         // When zoomed in, smoothly follow the cursor frame-by-frame with spring deadzone damping
-        if (scale > 1.05 && cursorTrajectory && cursorTrajectory.length > 0) {
-          const tracked = calculateDeadzoneCamera(
-            { x: baseTargetX, y: baseTargetY },
-            cursor,
-            scale,
-            0.30,
-          );
+        if (scale > 1.05 && effectiveTrajectory && effectiveTrajectory.length > 0) {
+          const tracked = isAutoTrack
+            ? clampCameraToBounds(cursor.x, cursor.y, scale)
+            : calculateDeadzoneCamera(
+                { x: baseTargetX, y: baseTargetY },
+                cursor,
+                scale,
+                0.30,
+              );
           finalX = tracked.x;
           finalY = tracked.y;
         } else if (scale > 1.0) {
@@ -472,6 +548,18 @@ export function calculateCameraAtTime(
   const activeBlocks = zoomBlocks.filter((b) => b.enabled).sort((a, b) => a.startTimeMs - b.startTimeMs);
 
   if (activeBlocks.length === 0) {
+    if (isAutoTrack && effectiveTrajectory && effectiveTrajectory.length > 0) {
+      const autoScale = options?.autoTrackScale ?? 1.6;
+      const target = clampCameraToBounds(defaultCursor.x, defaultCursor.y, autoScale);
+      return {
+        x: target.x,
+        y: target.y,
+        scale: autoScale,
+        isZoomed: true,
+        cursorX: defaultCursor.x,
+        cursorY: defaultCursor.y,
+      };
+    }
     return {
       x: 0.5,
       y: 0.5,
@@ -492,7 +580,7 @@ export function calculateCameraAtTime(
     const transitionOutEnd = block.endTimeMs + leadOutMs;
 
     // Track moving cursor or block target
-    const currentCursor = interpolateCursorAtTime(timeMs, cursorTrajectory, block.targetX, block.targetY);
+    const currentCursor = interpolateCursorAtTime(timeMs, effectiveTrajectory, block.targetX, block.targetY);
 
     const maxGlideGapMs = 4500;
     const prevBlock = i > 0 ? activeBlocks[i - 1] : undefined;
@@ -518,17 +606,19 @@ export function calculateCameraAtTime(
       };
     }
 
-    // 2. Inside active zoom hold: apply 2D deadzone camera tracking
+    // 2. Inside active zoom hold: apply dynamic cursor tracking
     if (timeMs >= transitionInEnd && timeMs <= transitionOutStart) {
-      const deadzoneTarget = calculateDeadzoneCamera(
-        { x: block.targetX, y: block.targetY },
-        currentCursor,
-        block.scale,
-        0.30,
-      );
+      const target = isAutoTrack
+        ? clampCameraToBounds(currentCursor.x, currentCursor.y, block.scale)
+        : calculateDeadzoneCamera(
+            { x: block.targetX, y: block.targetY },
+            currentCursor,
+            block.scale,
+            0.30,
+          );
       return {
-        x: deadzoneTarget.x,
-        y: deadzoneTarget.y,
+        x: target.x,
+        y: target.y,
         scale: block.scale,
         isZoomed: true,
         cursorX: currentCursor.x,
@@ -546,7 +636,7 @@ export function calculateCameraAtTime(
         const span = nextBlock.startTimeMs - transitionOutStart;
         const progress = span > 0 ? easeInOutCubic((timeMs - transitionOutStart) / span) : 1;
         const target1 = clampCameraToBounds(block.targetX, block.targetY, block.scale);
-        const nextCursor = interpolateCursorAtTime(timeMs, cursorTrajectory, nextBlock.targetX, nextBlock.targetY);
+        const nextCursor = interpolateCursorAtTime(timeMs, effectiveTrajectory, nextBlock.targetX, nextBlock.targetY);
         const target2 = clampCameraToBounds(nextCursor.x, nextCursor.y, nextBlock.scale);
 
         // Spatial classification: Crane pull-back on wide cross-screen jumps

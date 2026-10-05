@@ -9,6 +9,7 @@ import {
   easeInOutCubic,
   plotInteractionsToKeyframesAndZoomBlocks,
   screenToVideoCoordinates,
+  smoothCursorTrajectory,
   videoToScreenCoordinates,
 } from "./zoom";
 import type { ClickEvent, TimelineClip } from "./project";
@@ -389,6 +390,63 @@ describe("zoom algorithms", () => {
     const after = calculateCameraAtTime(10000, result.zoomBlocks, 350, 400, undefined, result.keyframes);
     expect(after.scale).toBe(1.0);
     expect(after.isZoomed).toBe(false);
+  });
+
+  it("smoothCursorTrajectory handles none, smooth, and cinematic modes with click anchoring", () => {
+    const rawPoints = [
+      { timestampMs: 0, x: 0.1, y: 0.1 },
+      { timestampMs: 100, x: 0.9, y: 0.9 }, // Sudden jerky spike
+      { timestampMs: 200, x: 0.5, y: 0.5 },
+      { timestampMs: 300, x: 0.6, y: 0.6 },
+    ];
+
+    // Mode none: returns untouched
+    const none = smoothCursorTrajectory(rawPoints, "none");
+    expect(none[1]?.x).toBe(0.9);
+    expect(none[1]?.y).toBe(0.9);
+
+    // Mode smooth: dampens the spike
+    const smooth = smoothCursorTrajectory(rawPoints, "smooth");
+    expect(smooth[1]?.x).toBeLessThan(0.9);
+    expect(smooth[1]?.x).toBeGreaterThan(0.1);
+
+    // Mode cinematic: dampens even more
+    const cinematic = smoothCursorTrajectory(rawPoints, "cinematic");
+    expect(cinematic[1]?.x).toBeLessThan(smooth[1]?.x!);
+
+    // Click anchoring: anchors trajectory near click point
+    const clicks = [
+      { id: "c-click", timestampMs: 195, x: 0.42, y: 0.44, button: "left" as const },
+    ];
+    const anchored = smoothCursorTrajectory(rawPoints, "smooth", clicks);
+    expect(anchored[2]?.x).toBeCloseTo(0.42, 1);
+    expect(anchored[2]?.y).toBeCloseTo(0.44, 1);
+  });
+
+  it("calculateCameraAtTime auto-tracks cursor smoothly across screen when enabled", () => {
+    const trajectory = [
+      { timestampMs: 0, x: 0.2, y: 0.2 },
+      { timestampMs: 1000, x: 0.4, y: 0.3 },
+      { timestampMs: 2000, x: 0.7, y: 0.75 },
+    ];
+
+    // Continuous auto-tracking without zoom blocks
+    const autoTracked = calculateCameraAtTime(2000, [], 350, 400, trajectory, undefined, {
+      autoTrackCursor: true,
+      autoTrackScale: 1.8,
+    });
+    expect(autoTracked.isZoomed).toBe(true);
+    expect(autoTracked.scale).toBe(1.8);
+    // Camera center should clamp and follow cursor (x near 0.7, y near 0.72)
+    expect(autoTracked.x).toBeGreaterThanOrEqual(0.65);
+    expect(autoTracked.y).toBeGreaterThanOrEqual(0.65);
+
+    // Disabled auto-tracking returns unzoomed frame
+    const unzoomed = calculateCameraAtTime(2000, [], 350, 400, trajectory, undefined, {
+      autoTrackCursor: false,
+    });
+    expect(unzoomed.scale).toBe(1.0);
+    expect(unzoomed.isZoomed).toBe(false);
   });
 });
 

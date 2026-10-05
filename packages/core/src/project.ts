@@ -114,6 +114,14 @@ export interface ProjectLooks {
   showClickRipples: boolean;
   /** Inset border color. */
   borderColor?: string;
+  /** Scale multiplier for cursor pointer overlay (1.0 to 2.5). */
+  cursorSize?: number;
+  /** Cursor path smoothing filter. */
+  cursorSmoothing?: "none" | "smooth" | "cinematic";
+  /** Continuous auto-tracking camera following cursor. */
+  autoTrackCursor?: boolean;
+  /** Camera zoom scale when auto-tracking cursor (1.2 to 2.5). */
+  autoTrackScale?: number;
 }
 
 /** Video effect types that can be placed on the timeline or attached to keyframes. */
@@ -237,7 +245,11 @@ export const DEFAULT_LOOKS: ProjectLooks = {
   padding: 32,
   borderRadius: 16,
   shadow: "lift",
-  cursorStyle: "default",
+  cursorStyle: "mac",
   showClickRipples: true,
+  cursorSize: 1.4,
+  cursorSmoothing: "smooth",
+  autoTrackCursor: true,
+  autoTrackScale: 1.6,
 };
 

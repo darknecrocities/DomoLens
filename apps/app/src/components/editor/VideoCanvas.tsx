@@ -4,6 +4,7 @@ import {
   calculateActiveEffectsState,
   calculateCameraAtTime,
   screenToVideoCoordinates,
+  smoothCursorTrajectory,
   type ProjectData,
 } from "@domolens/core";
 import { sfx } from "../../lib/sound-effects";
@@ -45,17 +46,41 @@ export function VideoCanvas({ project, currentTimeMs }: VideoCanvasProps) {
     setTimeout(() => setClickShiftMarker(null), 600);
   };
 
-  // Calculate live camera frame with real-time mouse cursor tracking and keyframes
+  // OpenScreen smooth trajectory computation
+  const smoothedTrajectory = useMemo(() => {
+    return smoothCursorTrajectory(
+      project.cursorTrajectory || [],
+      looks.cursorSmoothing || "smooth",
+      clicks,
+    );
+  }, [project.cursorTrajectory, looks.cursorSmoothing, clicks]);
+
+  // Calculate live camera frame with real-time mouse cursor auto-tracking and keyframes
   const camera = useMemo(() => {
     return calculateCameraAtTime(
       currentTimeMs,
       zoomBlocks,
       350,
       400,
-      project.cursorTrajectory,
+      smoothedTrajectory,
       keyframes,
+      {
+        autoTrackCursor: looks.autoTrackCursor !== false,
+        autoTrackScale: looks.autoTrackScale || 1.6,
+        cursorSmoothing: looks.cursorSmoothing || "smooth",
+        clicks,
+      },
     );
-  }, [currentTimeMs, zoomBlocks, project.cursorTrajectory, keyframes]);
+  }, [
+    currentTimeMs,
+    zoomBlocks,
+    smoothedTrajectory,
+    keyframes,
+    looks.autoTrackCursor,
+    looks.autoTrackScale,
+    looks.cursorSmoothing,
+    clicks,
+  ]);
 
   // Real-time video effects calculation (Spotlight, Vignette, Blur, Color Grade, Glow, Speed)
   const effectsState = useMemo(() => {
@@ -334,23 +359,31 @@ export function VideoCanvas({ project, currentTimeMs }: VideoCanvasProps) {
 
           {/* Real-Time Tracked Mouse Cursor Pointer: zero latency */}
           <div
-            className="pointer-events-none absolute -translate-x-1/2 -translate-y-1/2 will-change-transform z-30"
+            className="pointer-events-none absolute will-change-transform z-30 transition-transform duration-75"
             style={{
               left: `${camera.cursorX * 100}%`,
               top: `${camera.cursorY * 100}%`,
+              transform: `translate(-50%, -50%) scale(${looks.cursorSize || 1.4})`,
             }}
           >
             {looks.cursorStyle === "dot" ? (
-              <div className="size-3.5 rounded-full bg-white shadow-sm" />
+              <div className="size-3.5 rounded-full bg-white shadow-sm ring-1 ring-black/40" />
             ) : looks.cursorStyle === "ring" ? (
-              <div className="size-6 rounded-full border-2 border-white shadow-sm" />
-            ) : (
-              /* Mac / Studio Cursor Pointer */
+              <div className="size-6 rounded-full border-2 border-white bg-white/10 shadow-sm" />
+            ) : looks.cursorStyle === "default" ? (
               <svg
-                className="size-5.5 fill-white stroke-ink-950 stroke-[1.5] drop-shadow-md"
+                className="size-5.5 fill-white stroke-black stroke-[1.5] drop-shadow-md"
                 viewBox="0 0 24 24"
               >
-                <path d="M4.5 3.5l14 7-6.5 1.5-2.5 6.5-5-15z" />
+                <path d="M4 2l12 12-5.5 1 4.5 7-3 1.5-4.5-7L4 20V2z" />
+              </svg>
+            ) : (
+              /* Mac / OpenScreen Studio Pointer */
+              <svg
+                className="size-6 fill-white stroke-neutral-900 stroke-[1.2] drop-shadow-md"
+                viewBox="0 0 24 24"
+              >
+                <path d="M5.5 3.21a.5.5 0 0 1 .86-.29l12.43 12.06a.5.5 0 0 1-.36.85l-5.63.14-2.48 5.75a.5.5 0 0 1-.92-.04l-2.02-4.68-4.22 3.86a.5.5 0 0 1-.84-.37V3.21z" />
               </svg>
             )}
 
@@ -407,7 +440,7 @@ export function VideoCanvas({ project, currentTimeMs }: VideoCanvasProps) {
             <span>{camera.scale.toFixed(1)}x Zoom</span>
             <span className="size-1 rounded-full bg-white/60" />
             <span className="text-[11px] font-mono text-fg-muted font-normal">
-              Tracking Mouse ({Math.round(camera.cursorX * 100)}%, {Math.round(camera.cursorY * 100)}%)
+              Auto-Tracking Cursor ({Math.round(camera.cursorX * 100)}%, {Math.round(camera.cursorY * 100)}%)
             </span>
           </div>
         )}

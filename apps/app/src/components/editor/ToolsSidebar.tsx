@@ -189,6 +189,19 @@ export function ToolsSidebar() {
                   onChange={(e) => setZoomScale(parseFloat(e.target.value))}
                   className="w-full accent-white cursor-pointer h-1.5 bg-ink-800 rounded-lg"
                 />
+
+                <div className="flex items-center justify-between rounded-lg border border-ink-800 bg-ink-950/80 p-2.5 mt-2">
+                  <div>
+                    <span className="block text-xs font-semibold text-white">Auto-Track Cursor</span>
+                    <span className="block text-[10px] text-fg-faint">Continuous camera glide following cursor</span>
+                  </div>
+                  <input
+                    type="checkbox"
+                    checked={project?.looks.autoTrackCursor !== false}
+                    onChange={(e) => updateLooks({ autoTrackCursor: e.target.checked })}
+                    className="size-4 accent-white rounded cursor-pointer"
+                  />
+                </div>
               </div>
 
               <button
@@ -1131,19 +1144,108 @@ export function ToolsSidebar() {
           </div>
         )}
 
-        {/* TAB 5: CURSOR & RIPPLES */}
+        {/* TAB 5: CURSOR & AUTOTRACKING (OPENSCREEN) */}
         {activeToolTab === "cursor" && (
           <div className="space-y-4">
             <span className="text-[11px] font-semibold uppercase tracking-wider text-fg-faint">
-              Pointer & Click Indicators
+              OpenScreen Auto-Tracking & Cursor
             </span>
 
+            {/* 1. Auto-Track Camera Toggle */}
+            <div className="rounded-xl border border-ink-800 bg-ink-900/80 p-3 shadow-sm space-y-3">
+              <div className="flex items-center justify-between">
+                <div>
+                  <span className="block text-xs font-semibold text-white">Auto-Track Cursor</span>
+                  <span className="block text-[10px] text-fg-faint">
+                    Camera smoothly follows mouse across screen
+                  </span>
+                </div>
+                <input
+                  type="checkbox"
+                  checked={project?.looks.autoTrackCursor !== false}
+                  onChange={(e) => updateLooks({ autoTrackCursor: e.target.checked })}
+                  className="size-4 accent-white rounded cursor-pointer"
+                />
+              </div>
+
+              {(project?.looks.autoTrackCursor !== false) && (
+                <div className="space-y-1 pt-1 border-t border-ink-800/80">
+                  <div className="flex justify-between text-[11px]">
+                    <span className="text-fg-muted">Follow Zoom Scale</span>
+                    <span className="font-mono text-white font-semibold">
+                      {(project?.looks.autoTrackScale ?? 1.6).toFixed(2)}x
+                    </span>
+                  </div>
+                  <input
+                    type="range"
+                    min="1.2"
+                    max="2.5"
+                    step="0.05"
+                    value={project?.looks.autoTrackScale ?? 1.6}
+                    onChange={(e) => updateLooks({ autoTrackScale: parseFloat(e.target.value) })}
+                    className="w-full accent-white cursor-pointer h-1.5 bg-ink-800 rounded-lg"
+                  />
+                </div>
+              )}
+            </div>
+
+            {/* 2. Cursor Size Multiplier */}
+            <div className="rounded-xl border border-ink-800 bg-ink-900/80 p-3 shadow-sm space-y-2">
+              <div className="flex justify-between text-[11px]">
+                <span className="text-fg-muted">Cursor Size</span>
+                <span className="font-mono text-white font-semibold">
+                  {Math.round((project?.looks.cursorSize ?? 1.4) * 100)}%
+                </span>
+              </div>
+              <input
+                type="range"
+                min="1.0"
+                max="2.5"
+                step="0.1"
+                value={project?.looks.cursorSize ?? 1.4}
+                onChange={(e) => updateLooks({ cursorSize: parseFloat(e.target.value) })}
+                className="w-full accent-white cursor-pointer h-1.5 bg-ink-800 rounded-lg"
+              />
+              <p className="text-[10px] text-fg-faint">
+                Scales vector pointer for crisp high-DPI viewing.
+              </p>
+            </div>
+
+            {/* 3. Trajectory Smoothing Presets */}
+            <div className="space-y-2">
+              <label className="text-[11px] text-fg-muted block">Cursor Motion Smoothing</label>
+              <div className="grid grid-cols-3 gap-1.5">
+                {[
+                  { id: "none" as const, label: "Raw (None)" },
+                  { id: "smooth" as const, label: "Balanced" },
+                  { id: "cinematic" as const, label: "Cinematic" },
+                ].map((sm) => {
+                  const isActive = (project?.looks.cursorSmoothing ?? "smooth") === sm.id;
+                  return (
+                    <button
+                      key={sm.id}
+                      type="button"
+                      onClick={() => updateLooks({ cursorSmoothing: sm.id })}
+                      className={`rounded-lg py-1.5 px-2 text-[10px] font-semibold transition-all ${
+                        isActive
+                          ? "bg-white text-black font-bold shadow-sm"
+                          : "bg-ink-800 text-fg-muted hover:text-white hover:bg-ink-700"
+                      }`}
+                    >
+                      {sm.label}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* 4. Pointer Style */}
             <div className="space-y-2">
               <label className="text-[11px] text-fg-muted block">Cursor Pointer Style</label>
               <div className="grid grid-cols-2 gap-2">
                 {[
+                  { id: "mac", label: "Mac Studio" },
                   { id: "default", label: "Default OS" },
-                  { id: "mac", label: "Mac Arrow" },
                   { id: "dot", label: "Focus Dot" },
                   { id: "ring", label: "Glow Ring" },
                 ].map((cur) => (
@@ -1163,6 +1265,7 @@ export function ToolsSidebar() {
               </div>
             </div>
 
+            {/* 5. Click Ripples */}
             <div className="flex items-center justify-between rounded-xl border border-ink-800 bg-ink-900 p-3">
               <div>
                 <span className="block text-xs font-semibold text-fg">Click Ripples</span>
