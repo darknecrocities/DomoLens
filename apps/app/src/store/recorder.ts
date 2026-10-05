@@ -2,6 +2,7 @@ import { create } from "zustand";
 import {
   DEFAULT_AUDIO_SETTINGS,
   DEFAULT_LOOKS,
+  fillInteractionGaps,
   plotInteractionsToKeyframesAndZoomBlocks,
   type ClickEvent,
   type InteractionEvent,
@@ -482,6 +483,18 @@ export const useRecorder = create<RecorderStore>((set, get) => ({
       mediaUrl = "/domolens_smooth_autozoom_demo.mp4";
     }
 
+    // Fill long gaps (> 4200ms) between interactions to avoid dead zones across the timeline
+    if (finalInteractions.length > 0) {
+      finalInteractions = fillInteractionGaps(finalInteractions, duration, finalTrajectory);
+      finalClicks = finalInteractions.map((i) => ({
+        id: i.id,
+        timestampMs: i.timestampMs,
+        x: i.x,
+        y: i.y,
+        button: "left" as const,
+      }));
+    }
+
     // Auto-plot all click and typing interactions into smooth zooms with keyframes
     const { keyframes, zoomBlocks } = plotInteractionsToKeyframesAndZoomBlocks(
       finalInteractions.length > 0
@@ -501,6 +514,8 @@ export const useRecorder = create<RecorderStore>((set, get) => ({
         fallbackIfEmpty: true,
         continuousGlide: true,
         maxGlideGapMs: 3500,
+        autoFillGaps: true,
+        cursorTrajectory: finalTrajectory,
       },
     );
 

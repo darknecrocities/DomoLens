@@ -335,6 +335,7 @@ export function VideoCanvas({ project, currentTimeMs: propTimeMs }: VideoCanvasP
           className="relative size-full origin-center will-change-transform"
           style={{
             transform: `scale(${camera.scale}) translate3d(${(0.5 - camera.x) * 100}%, ${(0.5 - camera.y) * 100}%, 0)`,
+            transition: isPlaying ? "none" : "transform 0.35s cubic-bezier(0.16, 1, 0.3, 1)",
           }}
         >
           {mediaSrc ? (

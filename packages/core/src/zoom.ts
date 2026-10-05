@@ -452,14 +452,12 @@ export function calculateCameraAtTime(
       let finalX = firstKf.targetX;
       let finalY = firstKf.targetY;
       if (firstKf.scale > 1.05 && effectiveTrajectory && effectiveTrajectory.length > 0) {
-        const tracked = isAutoTrack
-          ? clampCameraToBounds(defaultCursor.x, defaultCursor.y, firstKf.scale)
-          : calculateDeadzoneCamera(
-              { x: firstKf.targetX, y: firstKf.targetY },
-              defaultCursor,
-              firstKf.scale,
-              0.30,
-            );
+        const tracked = calculateDeadzoneCamera(
+          { x: firstKf.targetX, y: firstKf.targetY },
+          defaultCursor,
+          firstKf.scale,
+          isAutoTrack ? 0.22 : 0.30,
+        );
         finalX = tracked.x;
         finalY = tracked.y;
       }
@@ -477,14 +475,12 @@ export function calculateCameraAtTime(
       let finalX = lastKf.targetX;
       let finalY = lastKf.targetY;
       if (lastKf.scale > 1.05 && effectiveTrajectory && effectiveTrajectory.length > 0) {
-        const tracked = isAutoTrack
-          ? clampCameraToBounds(defaultCursor.x, defaultCursor.y, lastKf.scale)
-          : calculateDeadzoneCamera(
-              { x: lastKf.targetX, y: lastKf.targetY },
-              defaultCursor,
-              lastKf.scale,
-              0.30,
-            );
+        const tracked = calculateDeadzoneCamera(
+          { x: lastKf.targetX, y: lastKf.targetY },
+          defaultCursor,
+          lastKf.scale,
+          isAutoTrack ? 0.22 : 0.30,
+        );
         finalX = tracked.x;
         finalY = tracked.y;
       }
@@ -514,14 +510,12 @@ export function calculateCameraAtTime(
 
         // When zoomed in or transitioning, smoothly follow the cursor frame-by-frame with spring damping
         if (scale > 1.05 && effectiveTrajectory && effectiveTrajectory.length > 0) {
-          const tracked = isAutoTrack
-            ? clampCameraToBounds(cursor.x, cursor.y, scale)
-            : calculateDeadzoneCamera(
-                { x: baseTargetX, y: baseTargetY },
-                cursor,
-                scale,
-                0.20,
-              );
+          const tracked = calculateDeadzoneCamera(
+            { x: baseTargetX, y: baseTargetY },
+            cursor,
+            scale,
+            isAutoTrack ? 0.22 : 0.30,
+          );
 
           if (k1.scale <= 1.05) {
             // Zooming in from full frame: smoothly glide from 0.5 center to target cursor position
@@ -620,14 +614,12 @@ export function calculateCameraAtTime(
 
     // 2. Inside active zoom hold: apply dynamic cursor tracking
     if (timeMs >= transitionInEnd && timeMs <= transitionOutStart) {
-      const target = isAutoTrack
-        ? clampCameraToBounds(currentCursor.x, currentCursor.y, block.scale)
-        : calculateDeadzoneCamera(
-            { x: block.targetX, y: block.targetY },
-            currentCursor,
-            block.scale,
-            0.30,
-          );
+      const target = calculateDeadzoneCamera(
+        { x: block.targetX, y: block.targetY },
+        currentCursor,
+        block.scale,
+        isAutoTrack ? 0.22 : 0.30,
+      );
       return {
         x: target.x,
         y: target.y,
@@ -706,6 +698,90 @@ export interface PlotInteractionsOptions {
   leadInMs?: number;
   leadOutMs?: number;
   inactivityResetMs?: number;
+  cursorTrajectory?: import("./project").CursorTrajectoryPoint[];
+  autoFillGaps?: boolean;
+  maxGapMs?: number;
+}
+
+/**
+ * Bridges long inactive gaps (> 4200ms) between detected interactions
+ * with intermediate focal transition nodes, preventing multi-second dead zones
+ * and ensuring continuous camera framing and shifting across reading/navigation sequences.
+ */
+export function fillInteractionGaps(
+  interactions: import("./project").InteractionEvent[],
+  videoDurationMs: number,
+  trajectory?: import("./project").CursorTrajectoryPoint[],
+  maxGapMs = 4200,
+): import("./project").InteractionEvent[] {
+  if (videoDurationMs < 4000) return interactions ? [...interactions] : [];
+  const events = interactions ? [...interactions] : [];
+  const sorted = events.sort((a, b) => a.timestampMs - b.timestampMs);
+  const result: import("./project").InteractionEvent[] = [];
+
+  const getFocalPointAt = (t: number, index: number) => {
+    if (trajectory && trajectory.length > 0) {
+      const p = interpolateCursorAtTime(t, trajectory, 0.5, 0.45);
+      if (Math.abs(p.x - 0.5) > 0.02 || Math.abs(p.y - 0.5) > 0.02) {
+        return { x: p.x, y: p.y };
+      }
+    }
+    const readingPattern = [
+      { x: 0.46, y: 0.38 },
+      { x: 0.54, y: 0.46 },
+      { x: 0.40, y: 0.52 },
+      { x: 0.58, y: 0.42 },
+      { x: 0.48, y: 0.60 },
+    ];
+    return readingPattern[index % readingPattern.length]!;
+  };
+
+  let nodeIndex = 0;
+
+  // 1. Check gap before first interaction
+  const firstTime = sorted[0]?.timestampMs ?? videoDurationMs;
+  if (firstTime > maxGapMs) {
+    const step = 3200;
+    for (let t = 2000; t < firstTime - 1200; t += step) {
+      const pt = getFocalPointAt(t, nodeIndex++);
+      result.push({
+        id: `act-gap-pre-${t}`,
+        type: "click",
+        timestampMs: t,
+        x: pt.x,
+        y: pt.y,
+        button: "left",
+      });
+    }
+  }
+
+  for (let i = 0; i < sorted.length; i++) {
+    const cur = sorted[i]!;
+    result.push(cur);
+
+    const next = sorted[i + 1];
+    const curEnd = cur.timestampMs + (cur.durationMs ?? 0);
+    const nextStart = next ? next.timestampMs : Math.max(0, videoDurationMs - 500);
+    const gap = nextStart - curEnd;
+
+    if (gap > maxGapMs) {
+      const segments = Math.max(2, Math.ceil(gap / 3200));
+      const step = Math.round(gap / segments);
+      for (let t = curEnd + step; t < nextStart - 1000; t += step) {
+        const pt = getFocalPointAt(t, nodeIndex++);
+        result.push({
+          id: `act-gap-${t}`,
+          type: "click",
+          timestampMs: t,
+          x: pt.x,
+          y: pt.y,
+          button: "left",
+        });
+      }
+    }
+  }
+
+  return result.sort((a, b) => a.timestampMs - b.timestampMs);
 }
 
 /**
@@ -725,6 +801,15 @@ export function plotInteractionsToKeyframesAndZoomBlocks(
   }
 
   let events = interactions ? [...interactions] : [];
+
+  if (options.autoFillGaps) {
+    events = fillInteractionGaps(
+      events,
+      videoDurationMs,
+      options.cursorTrajectory,
+      options.maxGapMs ?? 4200,
+    );
+  }
 
   // If no interactions were provided and fallback is requested, generate 2 smart focal zooms
   if (events.length === 0 && options.fallbackIfEmpty && videoDurationMs >= 3000) {

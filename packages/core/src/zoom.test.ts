@@ -7,6 +7,7 @@ import {
   classifySpatialTransition,
   detectZoomBlocksFromClicks,
   easeInOutCubic,
+  fillInteractionGaps,
   plotInteractionsToKeyframesAndZoomBlocks,
   screenToVideoCoordinates,
   smoothCursorTrajectory,
@@ -550,6 +551,45 @@ describe("timeline operations", () => {
     expect(b1.endTimeMs).toBe(3000);
     expect(b2.startTimeMs).toBe(3000);
     expect(b2.endTimeMs).toBe(5000);
+  });
+
+  it("fillInteractionGaps bridges gaps greater than 4200ms with intermediate focal nodes", () => {
+    const sparseInteractions = [
+      { id: "i1", type: "click" as const, timestampMs: 2000, x: 0.3, y: 0.4 },
+      // 16 second gap between 2000ms and 18000ms
+      { id: "i2", type: "click" as const, timestampMs: 18000, x: 0.7, y: 0.6 },
+    ];
+
+    const filled = fillInteractionGaps(sparseInteractions, 25000);
+    expect(filled.length).toBeGreaterThan(sparseInteractions.length);
+
+    // Verify all gaps between consecutive events are <= 4200ms
+    for (let i = 0; i < filled.length - 1; i++) {
+      const gap = filled[i + 1]!.timestampMs - filled[i]!.timestampMs;
+      expect(gap).toBeLessThanOrEqual(4200);
+    }
+  });
+
+  it("calculateCameraAtTime honors keyframe target coordinates when cursor trajectory is present", () => {
+    const keyframes = [
+      { id: "kf-1", timeMs: 1000, scale: 1.0, targetX: 0.5, targetY: 0.5, easing: "cubic" as const },
+      { id: "kf-2", timeMs: 2000, scale: 1.85, targetX: 0.25, targetY: 0.35, easing: "spring" as const },
+      { id: "kf-3", timeMs: 5000, scale: 1.85, targetX: 0.25, targetY: 0.35, easing: "cubic" as const },
+      { id: "kf-4", timeMs: 6000, scale: 1.0, targetX: 0.5, targetY: 0.5, easing: "cubic" as const },
+    ];
+
+    // Cursor is at (0.28, 0.37), very close to target (0.25, 0.35) inside deadzone
+    const trajectory = [
+      { timestampMs: 1500, x: 0.28, y: 0.37 },
+      { timestampMs: 2000, x: 0.28, y: 0.37 },
+      { timestampMs: 4000, x: 0.28, y: 0.37 },
+    ];
+
+    const camera = calculateCameraAtTime(2000, [], 500, 400, trajectory, keyframes);
+    expect(camera.scale).toBeCloseTo(1.85, 2);
+    // Camera center must center closely on target coordinates rather than snapping solely to cursor
+    expect(camera.x).toBeCloseTo(0.25, 1);
+    expect(camera.y).toBeCloseTo(0.35, 1);
   });
 });
 

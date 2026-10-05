@@ -193,6 +193,27 @@ describe("useEditor store", () => {
     const updatedKf = useEditor.getState().project!.keyframes!.find((k) => k.id === kf.id)!;
     expect(updatedKf.targetX).toBeGreaterThan(0.6);
     expect(updatedKf.targetY).toBeLessThan(0.4);
+
+    // Case 3: When clicking at an empty timestamp outside any zoom block (e.g. at 6800ms)
+    useEditor.getState().selectKeyframe(null);
+    useEditor.getState().setCurrentTime(6800);
+    const initialBlocksCount = useEditor.getState().project!.zoomBlocks.length;
+    useEditor.getState().shiftCameraTarget(0.35, 0.45);
+
+    const stateAfterEmptyClick = useEditor.getState();
+    expect(stateAfterEmptyClick.project!.zoomBlocks.length).toBe(initialBlocksCount + 1);
+
+    // Verify newly created keyframes include lead-in, peak, hold, and lead-out
+    const newPeakKf = stateAfterEmptyClick.project!.keyframes!.find((k) => k.timeMs === 6800);
+    expect(newPeakKf).toBeDefined();
+    expect(newPeakKf?.targetX).toBeCloseTo(0.35, 2);
+    expect(newPeakKf?.targetY).toBeCloseTo(0.45, 2);
+    expect(newPeakKf?.scale).toBeGreaterThan(1.5);
+    expect(newPeakKf?.sound).toBe("click");
+
+    // Verify click and interaction were recorded
+    expect(stateAfterEmptyClick.project!.clicks.some((c) => c.timestampMs === 6800)).toBe(true);
+    expect(stateAfterEmptyClick.project!.interactions?.some((i) => i.timestampMs === 6800)).toBe(true);
   });
 
   it("detects real activity from video frame sequence and updates project", async () => {

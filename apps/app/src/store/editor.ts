@@ -481,6 +481,7 @@ export const useEditor = create<EditorState>((set, get) => ({
         leadInMs: 500,
         holdDurationMs: 1000,
         scale: 1.85,
+        cursorTrajectory: state.project.cursorTrajectory,
         ...options,
       },
     );
@@ -511,6 +512,37 @@ export const useEditor = create<EditorState>((set, get) => ({
     const time = state.currentTimeMs;
     const activeScale = options?.scale ?? 1.85;
     const clamped = clampCameraToBounds(targetX, targetY, activeScale);
+    const now = Date.now();
+
+    // Trigger acoustic bop feedback immediately
+    sfx.playClickBop(state.project.audioSettings?.clickSoundPreset || "bop", state.project.audioSettings?.clickSoundVolume || 0.75);
+
+    // Update cursor trajectory around time so cursor coordinates align with click
+    const existingTraj = state.project.cursorTrajectory ? [...state.project.cursorTrajectory] : [];
+    const trajIdx = existingTraj.findIndex((p) => Math.abs(p.timestampMs - time) <= 80);
+    if (trajIdx >= 0) {
+      existingTraj[trajIdx] = { timestampMs: time, x: clamped.x, y: clamped.y };
+    } else {
+      existingTraj.push({ timestampMs: time, x: clamped.x, y: clamped.y });
+      existingTraj.sort((a, b) => a.timestampMs - b.timestampMs);
+    }
+
+    const newClickId = `c-shift-${now}`;
+    const newClick: ClickEvent = {
+      id: newClickId,
+      timestampMs: time,
+      x: clamped.x,
+      y: clamped.y,
+      button: "left",
+    };
+    const newInteraction: InteractionEvent = {
+      id: newClickId,
+      type: "click",
+      timestampMs: time,
+      x: clamped.x,
+      y: clamped.y,
+      button: "left",
+    };
 
     // Case 1: An existing keyframe is explicitly selected
     if (state.selectedKeyframeId && state.project.keyframes) {
@@ -539,12 +571,15 @@ export const useEditor = create<EditorState>((set, get) => ({
         selectedKfId = nearbyKf.id;
       } else {
         const newKf: KeyframeNode = {
-          id: `kf-shift-${Date.now()}`,
+          id: `kf-shift-${now}`,
           timeMs: time,
           scale: activeBlock.scale,
           targetX: clamped.x,
           targetY: clamped.y,
           easing: "spring",
+          sound: "click",
+          soundPreset: "bop",
+          soundVolume: 0.70,
         };
         updatedKfs.push(newKf);
         updatedKfs.sort((a, b) => a.timeMs - b.timeMs);
@@ -555,6 +590,9 @@ export const useEditor = create<EditorState>((set, get) => ({
         ...pushHistory(state),
         project: {
           ...state.project,
+          cursorTrajectory: existingTraj,
+          clicks: [...(state.project.clicks || []), newClick].sort((a, b) => a.timestampMs - b.timestampMs),
+          interactions: [...(state.project.interactions || []), newInteraction].sort((a, b) => a.timestampMs - b.timestampMs),
           zoomBlocks: updatedBlocks,
           keyframes: updatedKfs,
         },
@@ -565,36 +603,101 @@ export const useEditor = create<EditorState>((set, get) => ({
       return;
     }
 
-    // Case 4: Create new focal keyframe and zoom block at playhead
-    const newKf: KeyframeNode = {
-      id: `kf-shift-${Date.now()}`,
-      timeMs: time,
-      scale: activeScale,
-      targetX: clamped.x,
-      targetY: clamped.y,
-      easing: "cubic",
-    };
+    // Case 3 / 4: Click outside any zoom block (e.g. at 0:14 halfway through recording)
+    // Create a complete, beautifully formed zoom block and keyframe cluster centered on the clicked position!
+    const leadInMs = 350;
+    const holdMs = 2200;
+    const leadOutMs = 350;
+
+    // Determine non-overlapping startMs with previous block
+    const prevBlock = [...state.project.zoomBlocks]
+      .filter((b) => b.endTimeMs <= time)
+      .sort((a, b) => b.endTimeMs - a.endTimeMs)[0];
+    const rawStart = Math.max(0, time - leadInMs);
+    const startMs = prevBlock && prevBlock.endTimeMs > rawStart
+      ? Math.min(time - 80, prevBlock.endTimeMs + 50)
+      : rawStart;
+
+    // Determine non-overlapping end with next block
+    const nextBlock = [...state.project.zoomBlocks]
+      .filter((b) => b.startTimeMs >= time)
+      .sort((a, b) => a.startTimeMs - b.startTimeMs)[0];
+    const rawHoldEnd = Math.min(state.durationMs, time + holdMs);
+    const holdEndMs = nextBlock && nextBlock.startTimeMs < rawHoldEnd + leadOutMs
+      ? Math.max(time + 400, nextBlock.startTimeMs - leadOutMs - 50)
+      : rawHoldEnd;
+    const outMs = Math.min(state.durationMs, holdEndMs + leadOutMs);
+
+    const clusterKfs: KeyframeNode[] = [
+      {
+        id: `kf-in-${now}`,
+        timeMs: startMs,
+        scale: 1.0,
+        targetX: 0.5,
+        targetY: 0.5,
+        easing: "cubic",
+      },
+      {
+        id: `kf-peak-${now}`,
+        timeMs: time,
+        scale: activeScale,
+        targetX: clamped.x,
+        targetY: clamped.y,
+        easing: "spring",
+        sound: "click",
+        soundPreset: "bop",
+        soundVolume: 0.70,
+      },
+      {
+        id: `kf-hold-${now}`,
+        timeMs: holdEndMs,
+        scale: activeScale,
+        targetX: clamped.x,
+        targetY: clamped.y,
+        easing: "cubic",
+      },
+      {
+        id: `kf-out-${now}`,
+        timeMs: outMs,
+        scale: 1.0,
+        targetX: 0.5,
+        targetY: 0.5,
+        easing: "cubic",
+      },
+    ];
+
     const newBlock: ZoomBlock = {
-      id: `zoom-${Date.now()}`,
-      startTimeMs: time,
-      endTimeMs: Math.min(state.durationMs, time + 2500),
+      id: `zoom-shift-${now}`,
+      startTimeMs: startMs,
+      endTimeMs: holdEndMs,
       targetX: clamped.x,
       targetY: clamped.y,
       scale: activeScale,
       enabled: true,
     };
 
+    // Filter out conflicting dummy keyframes between startMs and outMs
+    const filteredExistingKfs = (state.project.keyframes || []).filter(
+      (k) => k.timeMs < startMs || k.timeMs > outMs,
+    );
+
+    const mergedKfs = [...filteredExistingKfs, ...clusterKfs].sort((a, b) => a.timeMs - b.timeMs);
+    const mergedBlocks = [...state.project.zoomBlocks, newBlock].sort((a, b) => a.startTimeMs - b.startTimeMs);
+
     set({
       ...pushHistory(state),
       project: {
         ...state.project,
-        keyframes: [...(state.project.keyframes || []), newKf].sort((a, b) => a.timeMs - b.timeMs),
-        zoomBlocks: [...state.project.zoomBlocks, newBlock].sort((a, b) => a.startTimeMs - b.startTimeMs),
+        cursorTrajectory: existingTraj,
+        clicks: [...(state.project.clicks || []), newClick].sort((a, b) => a.timestampMs - b.timestampMs),
+        interactions: [...(state.project.interactions || []), newInteraction].sort((a, b) => a.timestampMs - b.timestampMs),
+        keyframes: mergedKfs,
+        zoomBlocks: mergedBlocks,
       },
-      selectedKeyframeId: newKf.id,
+      selectedKeyframeId: clusterKfs[1]!.id,
       selectedBlockId: newBlock.id,
     });
-    toast.success(`Focal zoom created at (${Math.round(clamped.x * 100)}%, ${Math.round(clamped.y * 100)}%)`);
+    toast.success(`Camera shifted to (${Math.round(clamped.x * 100)}%, ${Math.round(clamped.y * 100)}%)`);
   },
 
   detectActivityFromFrames: (frames, options) => {

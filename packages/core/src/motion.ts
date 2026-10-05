@@ -198,16 +198,16 @@ export function classifyFrameActivity(
   motionEnergy: number,
   spread: number,
   minEnergy = 80,
-  maxSpread = 0.12,
+  maxSpread = 0.26,
 ): DetectedActivityKind {
   if (motionEnergy < minEnergy) {
     return "idle";
   }
-  if (spread > 0.30) {
+  if (spread > 0.32) {
     return "navigation";
   }
   if (spread <= maxSpread) {
-    // Tight localized activity (button click or typing)
+    // Localized activity (button click, text link, paragraph click, or typing)
     return "click";
   }
   return "navigation";

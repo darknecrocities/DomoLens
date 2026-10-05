@@ -62,6 +62,7 @@ export function createLiveStreamMotionTracker(
   let prevLuma: Uint8ClampedArray | null = null;
   let isRunning = true;
   let lastTypingTime = 0;
+  let lastInteractionTime = 0;
   let activeTypingId: string | null = null;
   let lastX = 0.5;
   let lastY = 0.5;
@@ -100,33 +101,51 @@ export function createLiveStreamMotionTracker(
 
           const kind = classifyFrameActivity(diff.motionEnergy, centroid.spread, minEnergy, maxSpread);
 
-          if (callbacks.onInteraction && kind === "click") {
-            const isTypingSequence =
-              now - lastTypingTime < 1800 &&
-              Math.hypot(centroid.x - lastX, centroid.y - lastY) < 0.16;
-            lastTypingTime = now;
-            lastX = centroid.x;
-            lastY = centroid.y;
+          if (callbacks.onInteraction) {
+            if (kind === "click" || (diff.motionEnergy >= minEnergy && centroid.spread <= 0.28)) {
+              const isTypingSequence =
+                now - lastTypingTime < 1800 &&
+                Math.hypot(centroid.x - lastX, centroid.y - lastY) < 0.16;
+              lastTypingTime = now;
+              lastInteractionTime = now;
+              lastX = centroid.x;
+              lastY = centroid.y;
 
-            if (isTypingSequence && activeTypingId) {
-              callbacks.onInteraction({
-                id: activeTypingId,
-                type: "typing",
-                timestampMs: now,
-                x: centroid.x,
-                y: centroid.y,
-                snippet: "Form Input",
-              });
-            } else {
-              activeTypingId = `type-opt-${now}`;
-              callbacks.onInteraction({
-                id: `click-opt-${now}`,
-                type: "click",
-                timestampMs: now,
-                x: centroid.x,
-                y: centroid.y,
-                button: "left",
-              });
+              if (isTypingSequence && activeTypingId) {
+                callbacks.onInteraction({
+                  id: activeTypingId,
+                  type: "typing",
+                  timestampMs: now,
+                  x: centroid.x,
+                  y: centroid.y,
+                  snippet: "Form Input",
+                });
+              } else {
+                activeTypingId = `type-opt-${now}`;
+                callbacks.onInteraction({
+                  id: `click-opt-${now}`,
+                  type: "click",
+                  timestampMs: now,
+                  x: centroid.x,
+                  y: centroid.y,
+                  button: "left",
+                });
+              }
+            } else if (kind === "navigation" && diff.motionEnergy >= minEnergy * 1.4) {
+              // Significant navigation / text reading motion: trigger focal shift if >= 1100ms
+              if (now - lastInteractionTime >= 1100) {
+                lastInteractionTime = now;
+                lastX = centroid.x;
+                lastY = centroid.y;
+                callbacks.onInteraction({
+                  id: `nav-opt-${now}`,
+                  type: "click",
+                  timestampMs: now,
+                  x: centroid.x,
+                  y: centroid.y,
+                  button: "left",
+                });
+              }
             }
           }
         }
