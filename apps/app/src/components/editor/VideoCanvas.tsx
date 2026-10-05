@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Film, Sparkles } from "lucide-react";
-import { calculateCameraAtTime, type ProjectData } from "@domolens/core";
+import { calculateCameraAtTime, screenToVideoCoordinates, type ProjectData } from "@domolens/core";
 import { sfx } from "../../lib/sound-effects";
 import { platform } from "../../platform";
 import { useEditor } from "../../store/editor";
@@ -14,8 +14,31 @@ export function VideoCanvas({ project, currentTimeMs }: VideoCanvasProps) {
   const { summary, zoomBlocks, looks, clicks, keyframes } = project;
   const isPlaying = useEditor((s) => s.isPlaying);
   const videoRef = useRef<HTMLVideoElement>(null);
+  const viewportRef = useRef<HTMLDivElement>(null);
   const prevTimeRef = useRef(currentTimeMs);
   const triggeredEventsRef = useRef<Set<string>>(new Set());
+  const [clickShiftMarker, setClickShiftMarker] = useState<{ x: number; y: number; id: number } | null>(null);
+
+  const handleCanvasClick = (e: React.MouseEvent<HTMLDivElement>) => {
+    const container = viewportRef.current;
+    if (!container) return;
+
+    const rect = container.getBoundingClientRect();
+    const clickX = e.clientX - rect.left;
+    const clickY = e.clientY - rect.top;
+
+    const videoCoords = screenToVideoCoordinates(
+      clickX,
+      clickY,
+      rect.width,
+      rect.height,
+      camera,
+    );
+
+    useEditor.getState().shiftCameraTarget(videoCoords.x, videoCoords.y);
+    setClickShiftMarker({ x: clickX, y: clickY, id: Date.now() });
+    setTimeout(() => setClickShiftMarker(null), 600);
+  };
 
   // Calculate live camera frame with real-time mouse cursor tracking and keyframes
   const camera = useMemo(() => {
@@ -216,13 +239,16 @@ export function VideoCanvas({ project, currentTimeMs }: VideoCanvasProps) {
         padding: `${looks.padding}px`,
       }}
     >
-      {/* Video Viewport with Framing */}
+      {/* Video Viewport with Framing and Click-to-Shift */}
       <div
-        className="relative aspect-video max-h-full max-w-full overflow-hidden bg-ink-950 transition-all duration-200"
+        ref={viewportRef}
+        onClick={handleCanvasClick}
+        className="relative aspect-video max-h-full max-w-full overflow-hidden bg-ink-950 transition-all duration-200 cursor-crosshair group select-none"
         style={{
           borderRadius: `${looks.borderRadius}px`,
           boxShadow: shadowStyles[looks.shadow] || shadowStyles.lift,
         }}
+        title="Click anywhere to shift camera focal center"
       >
         {/* Dynamic Zooming Video Container: zero latency with smooth cubic easing tracking mouse */}
         <div
@@ -309,6 +335,20 @@ export function VideoCanvas({ project, currentTimeMs }: VideoCanvasProps) {
             )}
           </div>
         </div>
+
+        {/* Tactile Click-to-Shift Focal Target Reticle */}
+        {clickShiftMarker && (
+          <div
+            key={clickShiftMarker.id}
+            className="pointer-events-none absolute -translate-x-1/2 -translate-y-1/2 z-40 animate-ping"
+            style={{
+              left: `${clickShiftMarker.x}px`,
+              top: `${clickShiftMarker.y}px`,
+            }}
+          >
+            <div className="size-8 rounded-full border-2 border-amber-400 bg-amber-400/25 shadow-lg" />
+          </div>
+        )}
 
         {/* Live Zoom & Mouse Tracking Badge Overlay */}
         {camera.isZoomed && (

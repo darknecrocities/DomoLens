@@ -8,6 +8,7 @@ import {
   type ProjectSummary,
 } from "@domolens/core";
 import { sfx } from "../lib/sound-effects";
+import { createLiveStreamMotionTracker } from "../lib/video-activity-detector";
 import { toast } from "./toast";
 import { useProjects } from "./projects";
 import { useNav } from "./nav";
@@ -306,7 +307,35 @@ export const useRecorder = create<RecorderStore>((set, get) => ({
       }
     };
 
+    let stopOpticalTracker: (() => void) | null = null;
+    if (activeStream) {
+      try {
+        stopOpticalTracker = createLiveStreamMotionTracker(activeStream, {
+          onPoint: (p) => {
+            lastX = p.x;
+            lastY = p.y;
+            get().recordCursorPoint(p.x, p.y);
+          },
+          onInteraction: (i) => {
+            lastX = i.x;
+            lastY = i.y;
+            if (i.type === "typing") {
+              get().recordTyping(i.x, i.y, i.snippet, i.id);
+            } else {
+              get().recordClick(i.x, i.y, "left");
+            }
+          },
+        });
+      } catch {
+        // Fall back gracefully if canvas context unavailable in testing
+      }
+    }
+
     const cleanupListeners = () => {
+      if (stopOpticalTracker) {
+        stopOpticalTracker();
+        stopOpticalTracker = null;
+      }
       window.removeEventListener("mousemove", handlePointerMove);
       window.removeEventListener("mousedown", handleClick);
       window.removeEventListener("keydown", handleKeyDown);
@@ -407,7 +436,12 @@ export const useRecorder = create<RecorderStore>((set, get) => ({
             button: c.button,
           })),
       duration,
-      { holdDurationMs: 2400, fallbackIfEmpty: true },
+      {
+        holdDurationMs: 2400,
+        fallbackIfEmpty: true,
+        continuousGlide: true,
+        maxGlideGapMs: 4500,
+      },
     );
 
     // Auto-plot text callouts from typing interactions

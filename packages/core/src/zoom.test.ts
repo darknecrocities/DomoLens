@@ -8,6 +8,8 @@ import {
   detectZoomBlocksFromClicks,
   easeInOutCubic,
   plotInteractionsToKeyframesAndZoomBlocks,
+  screenToVideoCoordinates,
+  videoToScreenCoordinates,
 } from "./zoom";
 import type { ClickEvent, TimelineClip } from "./project";
 import { removeClipAndRipple, splitClip, splitZoomBlock } from "./timeline";
@@ -333,6 +335,60 @@ describe("zoom algorithms", () => {
     const block = result.zoomBlocks[0]!;
     expect(block.scale).toBe(2.1); // Typing intent scale
     expect(block.targetY).toBeLessThan(0.5); // Slight negative offset for typing
+  });
+
+  it("screenToVideoCoordinates inverts viewport screen pixels to normalized video coordinates", () => {
+    const camera = { x: 0.35, y: 0.45, scale: 2.0, isZoomed: true };
+    const width = 800;
+    const height = 450;
+
+    // Center of viewport (400, 225) must invert exactly to the camera center (0.35, 0.45)
+    const center = screenToVideoCoordinates(400, 225, width, height, camera);
+    expect(center.x).toBeCloseTo(0.35, 3);
+    expect(center.y).toBeCloseTo(0.45, 3);
+
+    // Offset point in viewport
+    const offset = screenToVideoCoordinates(600, 300, width, height, camera);
+    expect(offset.x).toBeGreaterThan(0.35);
+    expect(offset.y).toBeGreaterThan(0.45);
+
+    // Test round-trip with videoToScreenCoordinates
+    const projected = videoToScreenCoordinates(offset.x, offset.y, width, height, camera);
+    expect(projected.pixelX).toBeCloseTo(600, 1);
+    expect(projected.pixelY).toBeCloseTo(300, 1);
+  });
+
+  it("continuously glides camera between typing and clicking targets without dropping to 1.0x", () => {
+    const interactions = [
+      { id: "act-1", type: "typing" as const, timestampMs: 2000, x: 0.3, y: 0.4, snippet: "search" },
+      // Adjacent interaction separated by 2.6 seconds (less than 3.8s inactivity lull)
+      { id: "act-2", type: "click" as const, timestampMs: 4600, x: 0.65, y: 0.7, button: "left" as const },
+    ];
+
+    const result = plotInteractionsToKeyframesAndZoomBlocks(interactions, 12000, {
+      continuousGlide: true,
+      maxGlideGapMs: 3800,
+    });
+
+    expect(result.keyframes.length).toBeGreaterThanOrEqual(4);
+
+    // In between act-1 and act-2 (at t = 3500ms and t = 4200ms), camera must NOT drop to 1.0x
+    const mid1 = calculateCameraAtTime(3500, result.zoomBlocks, 350, 400, undefined, result.keyframes);
+    const mid2 = calculateCameraAtTime(4200, result.zoomBlocks, 350, 400, undefined, result.keyframes);
+
+    expect(mid1.scale).toBeGreaterThanOrEqual(1.4);
+    expect(mid1.isZoomed).toBe(true);
+
+    expect(mid2.scale).toBeGreaterThanOrEqual(1.35);
+    expect(mid2.isZoomed).toBe(true);
+
+    // Camera target must have moved smoothly towards act-2 (x > 0.3)
+    expect(mid2.x).toBeGreaterThan(0.35);
+
+    // After act-2 finishes (at t = 10000ms), camera gracefully returns to full frame (1.0x)
+    const after = calculateCameraAtTime(10000, result.zoomBlocks, 350, 400, undefined, result.keyframes);
+    expect(after.scale).toBe(1.0);
+    expect(after.isZoomed).toBe(false);
   });
 });
 

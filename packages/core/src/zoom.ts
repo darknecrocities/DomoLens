@@ -54,6 +54,54 @@ export function clampCameraToBounds(targetX: number, targetY: number, scale: num
   return { x: clampedX, y: clampedY };
 }
 
+/**
+ * Inverts viewport container screen coordinates to normalized video coordinates [0, 1].
+ * Reverses the active CSS camera zoom scale and centering translation.
+ */
+export function screenToVideoCoordinates(
+  pixelX: number,
+  pixelY: number,
+  containerWidth: number,
+  containerHeight: number,
+  camera: CameraState,
+): { x: number; y: number } {
+  if (containerWidth <= 0 || containerHeight <= 0) {
+    return { x: 0.5, y: 0.5 };
+  }
+  const u = pixelX / containerWidth;
+  const v = pixelY / containerHeight;
+  const scale = Math.max(1.0, camera.scale);
+
+  // Invert the CSS transform: scale(S) translate((0.5 - camera.x)*100%, (0.5 - camera.y)*100%)
+  const videoX = camera.x + (u - 0.5) / scale;
+  const videoY = camera.y + (v - 0.5) / scale;
+
+  return {
+    x: Math.min(1.0, Math.max(0.0, videoX)),
+    y: Math.min(1.0, Math.max(0.0, videoY)),
+  };
+}
+
+/**
+ * Projects normalized video coordinates [0, 1] to viewport container screen pixel coordinates.
+ */
+export function videoToScreenCoordinates(
+  videoX: number,
+  videoY: number,
+  containerWidth: number,
+  containerHeight: number,
+  camera: CameraState,
+): { pixelX: number; pixelY: number } {
+  const scale = Math.max(1.0, camera.scale);
+  const u = 0.5 + (videoX - camera.x) * scale;
+  const v = 0.5 + (videoY - camera.y) * scale;
+
+  return {
+    pixelX: u * containerWidth,
+    pixelY: v * containerHeight,
+  };
+}
+
 /** Cubic ease-in-out easing function. */
 export function easeInOutCubic(t: number): number {
   return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
@@ -446,8 +494,17 @@ export function calculateCameraAtTime(
     // Track moving cursor or block target
     const currentCursor = interpolateCursorAtTime(timeMs, cursorTrajectory, block.targetX, block.targetY);
 
+    const maxGlideGapMs = 4500;
+    const prevBlock = i > 0 ? activeBlocks[i - 1] : undefined;
+    const glidedFromPrev = Boolean(
+      prevBlock &&
+        block.startTimeMs - prevBlock.endTimeMs <= maxGlideGapMs &&
+        block.startTimeMs > prevBlock.endTimeMs,
+    );
+
     // 1. Inside lead-in transition: smoothly zoom in while tracking the moving cursor
-    if (timeMs >= transitionInStart && timeMs < transitionInEnd) {
+    // If previous block already glided into this block, camera is already zoomed in and tracking
+    if (!glidedFromPrev && timeMs >= transitionInStart && timeMs < transitionInEnd) {
       const span = transitionInEnd - transitionInStart;
       const progress = span > 0 ? easeInOutCubic((timeMs - transitionInStart) / span) : 1;
       const target = clampCameraToBounds(currentCursor.x, currentCursor.y, block.scale);
@@ -479,37 +536,40 @@ export function calculateCameraAtTime(
       };
     }
 
-    // 3. Inside lead-out transition: smoothly glide from cursor back to full screen center or next block
-    if (timeMs > transitionOutStart && timeMs <= transitionOutEnd) {
-      if (nextBlock && nextBlock.startTimeMs <= transitionOutEnd + leadInMs) {
-        const nextInStart = transitionOutStart;
-        const nextInEnd = Math.max(transitionOutStart + 50, nextBlock.startTimeMs);
-        if (timeMs <= nextInEnd) {
-          const span = nextInEnd - nextInStart;
-          const progress = span > 0 ? easeInOutCubic((timeMs - nextInStart) / span) : 1;
-          const target1 = clampCameraToBounds(block.targetX, block.targetY, block.scale);
-          const nextCursor = interpolateCursorAtTime(timeMs, cursorTrajectory, nextBlock.targetX, nextBlock.targetY);
-          const target2 = clampCameraToBounds(nextCursor.x, nextCursor.y, nextBlock.scale);
+    // 3. Between this block and next block: glide smoothly across fields if within 4500ms
+    if (
+      nextBlock &&
+      nextBlock.startTimeMs - transitionOutStart <= maxGlideGapMs &&
+      nextBlock.startTimeMs > transitionOutStart
+    ) {
+      if (timeMs > transitionOutStart && timeMs <= nextBlock.startTimeMs) {
+        const span = nextBlock.startTimeMs - transitionOutStart;
+        const progress = span > 0 ? easeInOutCubic((timeMs - transitionOutStart) / span) : 1;
+        const target1 = clampCameraToBounds(block.targetX, block.targetY, block.scale);
+        const nextCursor = interpolateCursorAtTime(timeMs, cursorTrajectory, nextBlock.targetX, nextBlock.targetY);
+        const target2 = clampCameraToBounds(nextCursor.x, nextCursor.y, nextBlock.scale);
 
-          // Spatial classification: Crane pull-back on wide cross-screen jumps
-          const spatial = classifySpatialTransition(target1, target2);
-          let currentScale = block.scale + (nextBlock.scale - block.scale) * progress;
-          if (spatial.type === "crane") {
-            const dipFactor = Math.sin(progress * Math.PI);
-            currentScale = Math.max(1.18, currentScale - spatial.recommendedScaleDip * dipFactor);
-          }
-
-          return {
-            x: target1.x + (target2.x - target1.x) * progress,
-            y: target1.y + (target2.y - target1.y) * progress,
-            scale: currentScale,
-            isZoomed: true,
-            cursorX: currentCursor.x,
-            cursorY: currentCursor.y,
-          };
+        // Spatial classification: Crane pull-back on wide cross-screen jumps
+        const spatial = classifySpatialTransition(target1, target2);
+        let currentScale = block.scale + (nextBlock.scale - block.scale) * progress;
+        if (spatial.type === "crane") {
+          const dipFactor = Math.sin(progress * Math.PI);
+          currentScale = Math.max(1.18, currentScale - spatial.recommendedScaleDip * dipFactor);
         }
-      }
 
+        return {
+          x: target1.x + (target2.x - target1.x) * progress,
+          y: target1.y + (target2.y - target1.y) * progress,
+          scale: currentScale,
+          isZoomed: true,
+          cursorX: currentCursor.x,
+          cursorY: currentCursor.y,
+        };
+      }
+    }
+
+    // 4. Return to full frame when true inactivity lull occurs (> 4500ms) or end of video
+    if (timeMs > transitionOutStart && timeMs <= transitionOutEnd) {
       const span = transitionOutEnd - transitionOutStart;
       const progress = span > 0 ? easeInOutCubic((timeMs - transitionOutStart) / span) : 1;
       const target = clampCameraToBounds(block.targetX, block.targetY, block.scale);
@@ -539,6 +599,8 @@ export interface PlotInteractionsOptions {
   scale?: number;
   minBlockDurationMs?: number;
   fallbackIfEmpty?: boolean;
+  continuousGlide?: boolean;
+  maxGlideGapMs?: number;
 }
 
 /**
@@ -624,9 +686,11 @@ export function plotInteractionsToKeyframesAndZoomBlocks(
   const keyframes: import("./project").KeyframeNode[] = [];
   const zoomBlocks: ZoomBlock[] = [];
   let lastBlockEndTime = 0;
+  let previousGlidedIntoThis = false;
 
   for (let i = 0; i < clusters.length; i++) {
     const cluster = clusters[i]!;
+    const nextCluster = clusters[i + 1];
     const firstEvt = cluster[0]!;
     const lastEvt = cluster[cluster.length - 1]!;
 
@@ -659,11 +723,24 @@ export function plotInteractionsToKeyframesAndZoomBlocks(
 
     const clampedFirst = clampCameraToBounds(firstEvt.x, firstEvt.y + intent.offsetY, clusterScale);
 
+    // Check if next cluster is eligible for continuous glide
+    const maxGlideGap = options.maxGlideGapMs ?? 3800;
+    const canGlideToNext = Boolean(
+      options.continuousGlide &&
+        nextCluster &&
+        nextCluster[0]!.timestampMs - lastEvt.timestampMs <= maxGlideGap &&
+        nextCluster[0]!.timestampMs > lastEvt.timestampMs,
+    );
+
+    const blockEnd = canGlideToNext
+      ? Math.max(endMs, nextCluster![0]!.timestampMs)
+      : endMs;
+
     // Timeline ZoomBlock
     zoomBlocks.push({
       id: `zoom-auto-${i + 1}`,
       startTimeMs: startMs,
-      endTimeMs: endMs,
+      endTimeMs: blockEnd,
       targetX: clampedFirst.x,
       targetY: clampedFirst.y,
       scale: clusterScale,
@@ -675,35 +752,37 @@ export function plotInteractionsToKeyframesAndZoomBlocks(
     const effLeadIn = Math.min(leadInMs, Math.round(span * 0.22));
     const effLeadOut = Math.min(leadOutMs, Math.round(span * 0.22));
 
-    // Keyframe 1: Start zoom lead-in (1.0x full frame)
-    keyframes.push({
-      id: `kf-start-${firstEvt.id}`,
-      timeMs: startMs,
-      scale: 1.0,
-      targetX: 0.5,
-      targetY: 0.5,
-      easing: "cubic",
-    });
+    // Keyframe 1: Start zoom lead-in (only if previous cluster did not already glide into this cluster)
+    if (!previousGlidedIntoThis) {
+      keyframes.push({
+        id: `kf-start-${firstEvt.id}`,
+        timeMs: startMs,
+        scale: 1.0,
+        targetX: 0.5,
+        targetY: 0.5,
+        easing: "cubic",
+      });
 
-    // Keyframe 2: Peak zoom reached
-    const minPeak = startMs + Math.max(80, effLeadIn);
-    const maxPeak = Math.max(minPeak, endMs - effLeadOut - 150);
-    const peakTime = Math.max(minPeak, Math.min(maxPeak, firstEvt.timestampMs));
+      // Keyframe 2: Peak zoom reached
+      const minPeak = startMs + Math.max(80, effLeadIn);
+      const maxPeak = Math.max(minPeak, endMs - effLeadOut - 150);
+      const peakTime = Math.max(minPeak, Math.min(maxPeak, firstEvt.timestampMs));
 
-    keyframes.push({
-      id: `kf-peak-${firstEvt.id}`,
-      timeMs: peakTime,
-      scale: clusterScale,
-      targetX: clampedFirst.x,
-      targetY: clampedFirst.y,
-      easing: "spring",
-    });
+      keyframes.push({
+        id: `kf-peak-${firstEvt.id}`,
+        timeMs: peakTime,
+        scale: clusterScale,
+        targetX: clampedFirst.x,
+        targetY: clampedFirst.y,
+        easing: "spring",
+      });
+    }
 
     // Intermediate tracking keyframes for multiple actions in cluster
     for (let j = 1; j < cluster.length; j++) {
       const midEvt = cluster[j]!;
       const clampedMid = clampCameraToBounds(midEvt.x, midEvt.y, clusterScale);
-      const trackMin = peakTime + 60;
+      const trackMin = firstEvt.timestampMs + 60;
       const trackMax = Math.max(trackMin, endMs - effLeadOut - 100);
       const trackTime = Math.max(trackMin, Math.min(trackMax, midEvt.timestampMs));
 
@@ -717,14 +796,14 @@ export function plotInteractionsToKeyframesAndZoomBlocks(
       });
     }
 
-    // Keyframe 3: End of hold before lead-out
+    // Keyframe 3: End of hold before lead-out or glide
     const idealHoldEnd = lastEvt.timestampMs + clusterHoldMs;
-    const minHold = peakTime + 100;
+    const minHold = firstEvt.timestampMs + 100;
     const maxHold = Math.max(minHold, endMs - effLeadOut);
     const holdTime = Math.max(minHold, Math.min(maxHold, idealHoldEnd));
+    const clampedLast = clampCameraToBounds(lastEvt.x, lastEvt.y, clusterScale);
 
-    if (holdTime > peakTime + 80) {
-      const clampedLast = clampCameraToBounds(lastEvt.x, lastEvt.y, clusterScale);
+    if (holdTime > firstEvt.timestampMs + 80) {
       keyframes.push({
         id: `kf-hold-${lastEvt.id}`,
         timeMs: holdTime,
@@ -735,17 +814,58 @@ export function plotInteractionsToKeyframesAndZoomBlocks(
       });
     }
 
-    // Keyframe 4: Return to full frame
-    keyframes.push({
-      id: `kf-out-${lastEvt.id}`,
-      timeMs: endMs,
-      scale: 1.0,
-      targetX: 0.5,
-      targetY: 0.5,
-      easing: "cubic",
-    });
+    if (canGlideToNext) {
+      // Connect seamlessly to next cluster via continuous glide
+      const nextFirst = nextCluster![0]!;
+      const nextHasTyping = nextCluster!.some((e) => "type" in e && e.type === "typing");
+      const nextIntent = nextHasTyping
+        ? calculateIntentZoom({ id: nextFirst.id, type: "typing", timestampMs: nextFirst.timestampMs, x: nextFirst.x, y: nextFirst.y })
+        : calculateIntentZoom(nextFirst);
+      const nextScale = options.scale ?? nextIntent.scale;
+      const clampedNext = clampCameraToBounds(nextFirst.x, nextFirst.y + nextIntent.offsetY, nextScale);
 
-    lastBlockEndTime = endMs + 50;
+      const spatial = classifySpatialTransition(clampedLast, clampedNext);
+      const glideStart = Math.min(holdTime, Math.max(holdTime - 100, nextFirst.timestampMs - leadInMs));
+      const glideEnd = nextFirst.timestampMs;
+
+      if (spatial.type === "crane") {
+        const midTime = Math.round((glideStart + glideEnd) / 2);
+        const craneScale = Math.max(1.2, Math.min(clusterScale, nextScale) - spatial.recommendedScaleDip);
+        keyframes.push({
+          id: `kf-crane-${lastEvt.id}`,
+          timeMs: midTime,
+          scale: craneScale,
+          targetX: (clampedLast.x + clampedNext.x) / 2,
+          targetY: (clampedLast.y + clampedNext.y) / 2,
+          easing: "cubic",
+        });
+      }
+
+      keyframes.push({
+        id: `kf-glide-${nextFirst.id}`,
+        timeMs: glideEnd,
+        scale: nextScale,
+        targetX: clampedNext.x,
+        targetY: clampedNext.y,
+        easing: "spring",
+      });
+
+      previousGlidedIntoThis = true;
+      lastBlockEndTime = glideEnd;
+    } else {
+      // Keyframe 4: Return to full frame
+      keyframes.push({
+        id: `kf-out-${lastEvt.id}`,
+        timeMs: endMs,
+        scale: 1.0,
+        targetX: 0.5,
+        targetY: 0.5,
+        easing: "cubic",
+      });
+
+      previousGlidedIntoThis = false;
+      lastBlockEndTime = endMs + 50;
+    }
   }
 
   // Deduplicate and sort keyframes chronologically

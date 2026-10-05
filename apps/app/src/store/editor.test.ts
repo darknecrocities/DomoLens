@@ -170,4 +170,48 @@ describe("useEditor store", () => {
     useEditor.getState().executeLlmAction("plot_zooms");
     expect(useEditor.getState().project?.zoomBlocks.length).toBeGreaterThan(0);
   });
+
+  it("shifts camera target dynamically on interactive canvas click", async () => {
+    await useEditor.getState().loadProject("proj-test");
+
+    // Case 1: When playhead is inside an active zoom block
+    const activeBlock = useEditor.getState().project!.zoomBlocks[0]!;
+    useEditor.getState().setCurrentTime(activeBlock.startTimeMs + 200);
+
+    // Shift camera target to (0.2, 0.8)
+    useEditor.getState().shiftCameraTarget(0.2, 0.8);
+
+    const updatedBlock = useEditor.getState().project!.zoomBlocks.find((b) => b.id === activeBlock.id)!;
+    expect(updatedBlock.targetX).toBeLessThan(0.35);
+    expect(updatedBlock.targetY).toBeGreaterThan(0.65);
+
+    // Case 2: When an explicit keyframe is selected
+    const kf = useEditor.getState().project!.keyframes![0]!;
+    useEditor.getState().selectKeyframe(kf.id);
+    useEditor.getState().shiftCameraTarget(0.7, 0.3);
+
+    const updatedKf = useEditor.getState().project!.keyframes!.find((k) => k.id === kf.id)!;
+    expect(updatedKf.targetX).toBeGreaterThan(0.6);
+    expect(updatedKf.targetY).toBeLessThan(0.4);
+  });
+
+  it("detects real activity from video frame sequence and updates project", async () => {
+    await useEditor.getState().loadProject("proj-test");
+
+    const w = 40;
+    const h = 40;
+    const f0 = { timestampMs: 0, data: new Uint8ClampedArray(w * h).fill(30), width: w, height: h };
+    const d1 = new Uint8ClampedArray(w * h).fill(30);
+    // Draw motion energy around center
+    d1[20 * w + 20] = 200;
+    d1[20 * w + 21] = 200;
+    const f1 = { timestampMs: 600, data: d1, width: w, height: h };
+
+    useEditor.getState().detectActivityFromFrames([f0, f1], { minEnergyThreshold: 50 });
+
+    const state = useEditor.getState();
+    expect(state.project?.interactions?.length).toBeGreaterThan(0);
+    expect(state.project?.zoomBlocks.length).toBeGreaterThan(0);
+    expect(state.project?.keyframes?.length).toBeGreaterThan(0);
+  });
 });

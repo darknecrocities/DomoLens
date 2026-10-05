@@ -2,6 +2,8 @@ import { create } from "zustand";
 import {
   DEFAULT_AUDIO_SETTINGS,
   DEFAULT_LOOKS,
+  clampCameraToBounds,
+  detectActivityEventsFromFrames,
   plotInteractionsToKeyframesAndZoomBlocks,
   removeClipAndRipple,
   splitClip,
@@ -11,6 +13,7 @@ import {
   type ClickSoundPreset,
   type InteractionEvent,
   type KeyframeNode,
+  type OpticalAnalysisOptions,
   type ProjectAudioSettings,
   type ProjectData,
   type ProjectLooks,
@@ -81,7 +84,28 @@ interface EditorState {
   selectAudio: (id: string | null) => void;
 
   // Interaction auto-plotting (translates recorded click/typing data into 2-3s zoom loops with keyframes)
-  plotInteractions: (options?: { holdDurationMs?: number; scale?: number }) => void;
+  plotInteractions: (options?: {
+    holdDurationMs?: number;
+    scale?: number;
+    continuousGlide?: boolean;
+    maxGlideGapMs?: number;
+  }) => void;
+
+  // Optical video activity detection & camera shifting
+  shiftCameraTarget: (
+    targetX: number,
+    targetY: number,
+    options?: { createKeyframe?: boolean; scale?: number },
+  ) => void;
+  detectActivityFromFrames: (
+    frames: Array<{
+      timestampMs: number;
+      data: Uint8ClampedArray | number[];
+      width?: number;
+      height?: number;
+    }>,
+    options?: OpticalAnalysisOptions,
+  ) => void;
 
   // Editing actions with undo support
   updateZoomBlock: (id: string, updates: Partial<ZoomBlock>) => void;
@@ -374,7 +398,13 @@ export const useEditor = create<EditorState>((set, get) => ({
     const { keyframes, zoomBlocks } = plotInteractionsToKeyframesAndZoomBlocks(
       eventsToUse,
       state.durationMs,
-      options ?? { holdDurationMs: 2400, scale: 1.85 },
+      {
+        continuousGlide: true,
+        maxGlideGapMs: 4500,
+        holdDurationMs: 2400,
+        scale: 1.85,
+        ...options,
+      },
     );
 
     set({
@@ -394,6 +424,131 @@ export const useEditor = create<EditorState>((set, get) => ({
       isFallback
         ? `Auto-generated ${zoomBlocks.length} zooms and ${keyframes.length} keyframes across timeline!`
         : `Plotted ${zoomBlocks.length} zooms and ${keyframes.length} keyframes!`,
+    );
+  },
+
+  shiftCameraTarget: (targetX, targetY, options) => {
+    const state = get();
+    if (!state.project) return;
+    const time = state.currentTimeMs;
+    const activeScale = options?.scale ?? 1.85;
+    const clamped = clampCameraToBounds(targetX, targetY, activeScale);
+
+    // Case 1: An existing keyframe is explicitly selected
+    if (state.selectedKeyframeId && state.project.keyframes) {
+      const exists = state.project.keyframes.some((k) => k.id === state.selectedKeyframeId);
+      if (exists) {
+        state.updateKeyframe(state.selectedKeyframeId, { targetX: clamped.x, targetY: clamped.y });
+        toast.info(`Updated keyframe target to (${Math.round(clamped.x * 100)}%, ${Math.round(clamped.y * 100)}%)`);
+        return;
+      }
+    }
+
+    // Case 2: Playhead is inside an active zoom block
+    const activeBlock = state.project.zoomBlocks.find((b) => time >= b.startTimeMs && time <= b.endTimeMs);
+    if (activeBlock) {
+      const updatedBlocks = state.project.zoomBlocks.map((b) =>
+        b.id === activeBlock.id ? { ...b, targetX: clamped.x, targetY: clamped.y } : b,
+      );
+
+      let updatedKfs = state.project.keyframes ? [...state.project.keyframes] : [];
+      const nearbyKf = updatedKfs.find((k) => Math.abs(k.timeMs - time) <= 150);
+      let selectedKfId: string;
+      if (nearbyKf) {
+        updatedKfs = updatedKfs.map((k) =>
+          k.id === nearbyKf.id ? { ...k, targetX: clamped.x, targetY: clamped.y } : k,
+        );
+        selectedKfId = nearbyKf.id;
+      } else {
+        const newKf: KeyframeNode = {
+          id: `kf-shift-${Date.now()}`,
+          timeMs: time,
+          scale: activeBlock.scale,
+          targetX: clamped.x,
+          targetY: clamped.y,
+          easing: "spring",
+        };
+        updatedKfs.push(newKf);
+        updatedKfs.sort((a, b) => a.timeMs - b.timeMs);
+        selectedKfId = newKf.id;
+      }
+
+      set({
+        ...pushHistory(state),
+        project: {
+          ...state.project,
+          zoomBlocks: updatedBlocks,
+          keyframes: updatedKfs,
+        },
+        selectedKeyframeId: selectedKfId,
+        selectedBlockId: activeBlock.id,
+      });
+      toast.info(`Camera shifted to (${Math.round(clamped.x * 100)}%, ${Math.round(clamped.y * 100)}%)`);
+      return;
+    }
+
+    // Case 4: Create new focal keyframe and zoom block at playhead
+    const newKf: KeyframeNode = {
+      id: `kf-shift-${Date.now()}`,
+      timeMs: time,
+      scale: activeScale,
+      targetX: clamped.x,
+      targetY: clamped.y,
+      easing: "cubic",
+    };
+    const newBlock: ZoomBlock = {
+      id: `zoom-${Date.now()}`,
+      startTimeMs: time,
+      endTimeMs: Math.min(state.durationMs, time + 2500),
+      targetX: clamped.x,
+      targetY: clamped.y,
+      scale: activeScale,
+      enabled: true,
+    };
+
+    set({
+      ...pushHistory(state),
+      project: {
+        ...state.project,
+        keyframes: [...(state.project.keyframes || []), newKf].sort((a, b) => a.timeMs - b.timeMs),
+        zoomBlocks: [...state.project.zoomBlocks, newBlock].sort((a, b) => a.startTimeMs - b.startTimeMs),
+      },
+      selectedKeyframeId: newKf.id,
+      selectedBlockId: newBlock.id,
+    });
+    toast.success(`Focal zoom created at (${Math.round(clamped.x * 100)}%, ${Math.round(clamped.y * 100)}%)`);
+  },
+
+  detectActivityFromFrames: (frames, options) => {
+    const state = get();
+    if (!state.project || frames.length === 0) return;
+    const { interactions, clicks, cursorTrajectory } = detectActivityEventsFromFrames(
+      frames,
+      320,
+      180,
+      options,
+    );
+
+    const { keyframes, zoomBlocks } = plotInteractionsToKeyframesAndZoomBlocks(
+      interactions,
+      state.durationMs,
+      { continuousGlide: true, holdDurationMs: 2400, scale: 1.85 },
+    );
+
+    set({
+      ...pushHistory(state),
+      project: {
+        ...state.project,
+        clicks: clicks.length > 0 ? clicks : state.project.clicks,
+        interactions: interactions.length > 0 ? interactions : state.project.interactions,
+        cursorTrajectory: cursorTrajectory.length > 0 ? cursorTrajectory : state.project.cursorTrajectory,
+        zoomBlocks,
+        keyframes,
+      },
+      selectedBlockId: zoomBlocks[0]?.id ?? null,
+    });
+    toast.success(
+      `Detected ${interactions.length} activities from video frames. Auto-plotted ${zoomBlocks.length} zooms.`,
     );
   },
 
