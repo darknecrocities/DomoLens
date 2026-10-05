@@ -157,6 +157,37 @@ export interface ProjectAiData {
   chapters?: Array<{ timeMs: number; title: string }>;
 }
 
+export type ClickSoundPreset = "bop" | "click" | "tap" | "none";
+export type TypingSoundPreset = "mechanical" | "laptop" | "typewriter" | "none";
+
+export interface ProjectAudioSettings {
+  /** Whether clicks automatically trigger a tactile sound effect. */
+  clickSoundEnabled: boolean;
+  clickSoundPreset: ClickSoundPreset;
+  /** Volume from 0.0 to 1.0. */
+  clickSoundVolume: number;
+  /** Whether typing automatically plays typing sounds. */
+  typingSoundEnabled: boolean;
+  typingSoundPreset: TypingSoundPreset;
+  /** Volume from 0.0 to 1.0. */
+  typingSoundVolume: number;
+  /** Whether to duck background music during clicks and typing. */
+  musicDuckingEnabled: boolean;
+  /** Ducking volume factor (0.0 to 1.0). */
+  duckingAmount: number;
+}
+
+export const DEFAULT_AUDIO_SETTINGS: ProjectAudioSettings = {
+  clickSoundEnabled: true,
+  clickSoundPreset: "bop",
+  clickSoundVolume: 0.7,
+  typingSoundEnabled: true,
+  typingSoundPreset: "mechanical",
+  typingSoundVolume: 0.6,
+  musicDuckingEnabled: true,
+  duckingAmount: 0.45,
+};
+
 /** The full project state loaded in the editor. */
 export interface ProjectData {
   summary: ProjectSummary;
@@ -167,6 +198,7 @@ export interface ProjectData {
   keyframes?: KeyframeNode[];
   textOverlays?: TextOverlay[];
   audioTracks?: AudioTrack[];
+  audioSettings?: ProjectAudioSettings;
   clips: TimelineClip[];
   looks: ProjectLooks;
   ai?: ProjectAiData;
@@ -181,3 +213,4 @@ export const DEFAULT_LOOKS: ProjectLooks = {
   cursorStyle: "default",
   showClickRipples: true,
 };
+

@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import {
+  DEFAULT_AUDIO_SETTINGS,
   DEFAULT_LOOKS,
   plotInteractionsToKeyframesAndZoomBlocks,
   removeClipAndRipple,
@@ -7,16 +8,21 @@ import {
   splitZoomBlock,
   type AudioTrack,
   type ClickEvent,
+  type ClickSoundPreset,
   type InteractionEvent,
   type KeyframeNode,
+  type ProjectAudioSettings,
   type ProjectData,
   type ProjectLooks,
   type TextOverlay,
   type TimelineClip,
+  type TypingSoundPreset,
   type ZoomBlock,
 } from "@domolens/core";
+import { sfx } from "../lib/sound-effects";
 import { useProjects } from "./projects";
 import { toast } from "./toast";
+
 
 export type ToolTab = "zoom" | "text" | "audio" | "looks" | "cursor" | "export";
 
@@ -97,6 +103,10 @@ interface EditorState {
   addAudioTrack: (name: string, url: string, type?: "music" | "sfx") => void;
   updateAudioTrack: (id: string, updates: Partial<AudioTrack>) => void;
   deleteAudioTrack: (id: string) => void;
+  updateAudioSettings: (updates: Partial<ProjectAudioSettings>) => void;
+  playClickSoundPreview: (preset?: ClickSoundPreset) => void;
+  playTypingSoundPreview: (preset?: TypingSoundPreset) => void;
+
 
   updateLooks: (updates: Partial<ProjectLooks>) => void;
   splitAtCurrentTime: () => void;
@@ -163,6 +173,9 @@ export const useEditor = create<EditorState>((set, get) => ({
       if (stored) {
         try {
           const parsed = JSON.parse(stored) as ProjectData;
+          if (!parsed.audioSettings) {
+            parsed.audioSettings = { ...DEFAULT_AUDIO_SETTINGS };
+          }
           set({
             project: parsed,
             currentTimeMs: 0,
@@ -255,6 +268,7 @@ export const useEditor = create<EditorState>((set, get) => ({
         },
       ],
       looks: DEFAULT_LOOKS,
+      audioSettings: { ...DEFAULT_AUDIO_SETTINGS },
     };
 
     set({
@@ -577,6 +591,31 @@ export const useEditor = create<EditorState>((set, get) => ({
       selectedAudioId: null,
     });
     toast.info("Audio track removed.");
+  },
+
+  updateAudioSettings: (updates) => {
+    const state = get();
+    if (!state.project) return;
+    const current = state.project.audioSettings || { ...DEFAULT_AUDIO_SETTINGS };
+    set({
+      ...pushHistory(state),
+      project: {
+        ...state.project,
+        audioSettings: { ...current, ...updates },
+      },
+    });
+  },
+
+  playClickSoundPreview: (preset) => {
+    const state = get();
+    const settings = state.project?.audioSettings || DEFAULT_AUDIO_SETTINGS;
+    sfx.playClickBop(preset || settings.clickSoundPreset, settings.clickSoundVolume);
+  },
+
+  playTypingSoundPreview: (preset) => {
+    const state = get();
+    const settings = state.project?.audioSettings || DEFAULT_AUDIO_SETTINGS;
+    sfx.playTypingBurst(5, 90, preset || settings.typingSoundPreset, settings.typingSoundVolume);
   },
 
   updateLooks: (updates) => {

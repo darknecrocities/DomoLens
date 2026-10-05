@@ -40,6 +40,9 @@ export function ToolsSidebar() {
     addAudioTrack,
     updateAudioTrack,
     deleteAudioTrack,
+    updateAudioSettings,
+    playClickSoundPreview,
+    playTypingSoundPreview,
     updateLooks,
     setCurrentTime,
     selectKeyframe,
@@ -430,38 +433,215 @@ export function ToolsSidebar() {
         {/* TAB 3: AUDIO & MUSIC */}
         {activeToolTab === "audio" && (
           <div className="space-y-4">
-            <span className="text-[11px] font-semibold uppercase tracking-wider text-fg-faint">
-              Background Music Presets
-            </span>
-
-            {[
-              { name: "Ambient Lo-Fi Chill", url: "sample://lofi-chill.mp3" },
-              { name: "Modern Tech Flow", url: "sample://tech-flow.mp3" },
-              { name: "Energetic Upbeat Beat", url: "sample://upbeat-beat.mp3" },
-            ].map((preset) => (
-              <div
-                key={preset.name}
-                className="flex items-center justify-between rounded-xl border border-ink-800 bg-ink-900 p-2.5"
-              >
-                <div className="flex items-center gap-2">
-                  <div className="flex size-7 items-center justify-center rounded-lg bg-emerald-500/20 text-emerald-400">
-                    <Music className="size-3.5" />
-                  </div>
-                  <div>
-                    <span className="block font-medium text-fg text-xs">{preset.name}</span>
-                    <span className="block text-[10px] text-fg-faint">Royalty-free background track</span>
-                  </div>
+            {/* 1. Click Sound Effects */}
+            <div className="rounded-xl border border-ink-800 bg-ink-900/80 p-3 shadow-sm space-y-3">
+              <div className="flex items-center justify-between">
+                <div>
+                  <span className="block text-xs font-semibold text-white">Click Sound Effects</span>
+                  <span className="block text-[10px] text-fg-faint">Tactile bop sound on every button click</span>
                 </div>
-
-                <button
-                  type="button"
-                  onClick={() => addAudioTrack(preset.name, preset.url, "music")}
-                  className="rounded-lg bg-ink-800 px-2.5 py-1 text-[11px] font-semibold text-fg hover:bg-white hover:text-black transition-colors"
-                >
-                  + Add
-                </button>
+                <input
+                  type="checkbox"
+                  checked={project?.audioSettings?.clickSoundEnabled ?? true}
+                  onChange={(e) => updateAudioSettings({ clickSoundEnabled: e.target.checked })}
+                  className="size-4 accent-white rounded cursor-pointer"
+                />
               </div>
-            ))}
+
+              {(project?.audioSettings?.clickSoundEnabled ?? true) && (
+                <div className="space-y-2 pt-1 border-t border-ink-800/80">
+                  <div className="grid grid-cols-3 gap-1.5">
+                    {[
+                      { id: "bop" as const, label: "Bop (Bubble)" },
+                      { id: "click" as const, label: "Modern Click" },
+                      { id: "tap" as const, label: "Wooden Tap" },
+                    ].map((preset) => {
+                      const isActive = (project?.audioSettings?.clickSoundPreset ?? "bop") === preset.id;
+                      return (
+                        <button
+                          key={preset.id}
+                          type="button"
+                          onClick={() => {
+                            updateAudioSettings({ clickSoundPreset: preset.id });
+                            playClickSoundPreview(preset.id);
+                          }}
+                          className={`rounded-lg py-1.5 px-2 text-[10px] font-semibold transition-all ${
+                            isActive
+                              ? "bg-white text-black font-bold shadow-sm"
+                              : "bg-ink-800 text-fg-muted hover:text-white hover:bg-ink-700"
+                          }`}
+                        >
+                          {preset.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  <div className="flex items-center justify-between text-[11px] pt-1">
+                    <span className="text-fg-muted">Click Volume:</span>
+                    <span className="font-mono text-white font-semibold">
+                      {Math.round((project?.audioSettings?.clickSoundVolume ?? 0.7) * 100)}%
+                    </span>
+                  </div>
+                  <input
+                    type="range"
+                    min="0"
+                    max="1"
+                    step="0.05"
+                    value={project?.audioSettings?.clickSoundVolume ?? 0.7}
+                    onChange={(e) => updateAudioSettings({ clickSoundVolume: parseFloat(e.target.value) })}
+                    className="w-full accent-white cursor-pointer h-1.5 bg-ink-800 rounded-lg"
+                  />
+
+                  <button
+                    type="button"
+                    onClick={() => playClickSoundPreview()}
+                    className="w-full mt-1 rounded-lg border border-ink-700 bg-ink-800/60 py-1 text-[11px] font-medium text-fg-muted hover:text-white hover:bg-ink-700 transition-colors"
+                  >
+                    ▶ Test Click Bop
+                  </button>
+                </div>
+              )}
+            </div>
+
+            {/* 2. Typing Keystroke Sound Effects */}
+            <div className="rounded-xl border border-ink-800 bg-ink-900/80 p-3 shadow-sm space-y-3">
+              <div className="flex items-center justify-between">
+                <div>
+                  <span className="block text-xs font-semibold text-white">Auto Typing Sounds</span>
+                  <span className="block text-[10px] text-fg-faint">Plays mechanical key sounds during typing</span>
+                </div>
+                <input
+                  type="checkbox"
+                  checked={project?.audioSettings?.typingSoundEnabled ?? true}
+                  onChange={(e) => updateAudioSettings({ typingSoundEnabled: e.target.checked })}
+                  className="size-4 accent-white rounded cursor-pointer"
+                />
+              </div>
+
+              {(project?.audioSettings?.typingSoundEnabled ?? true) && (
+                <div className="space-y-2 pt-1 border-t border-ink-800/80">
+                  <div className="grid grid-cols-3 gap-1.5">
+                    {[
+                      { id: "mechanical" as const, label: "Thocky Mech" },
+                      { id: "laptop" as const, label: "Laptop Key" },
+                      { id: "typewriter" as const, label: "Typewriter" },
+                    ].map((preset) => {
+                      const isActive = (project?.audioSettings?.typingSoundPreset ?? "mechanical") === preset.id;
+                      return (
+                        <button
+                          key={preset.id}
+                          type="button"
+                          onClick={() => {
+                            updateAudioSettings({ typingSoundPreset: preset.id });
+                            playTypingSoundPreview(preset.id);
+                          }}
+                          className={`rounded-lg py-1.5 px-2 text-[10px] font-semibold transition-all ${
+                            isActive
+                              ? "bg-white text-black font-bold shadow-sm"
+                              : "bg-ink-800 text-fg-muted hover:text-white hover:bg-ink-700"
+                          }`}
+                        >
+                          {preset.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  <div className="flex items-center justify-between text-[11px] pt-1">
+                    <span className="text-fg-muted">Typing Volume:</span>
+                    <span className="font-mono text-white font-semibold">
+                      {Math.round((project?.audioSettings?.typingSoundVolume ?? 0.6) * 100)}%
+                    </span>
+                  </div>
+                  <input
+                    type="range"
+                    min="0"
+                    max="1"
+                    step="0.05"
+                    value={project?.audioSettings?.typingSoundVolume ?? 0.6}
+                    onChange={(e) => updateAudioSettings({ typingSoundVolume: parseFloat(e.target.value) })}
+                    className="w-full accent-white cursor-pointer h-1.5 bg-ink-800 rounded-lg"
+                  />
+
+                  <button
+                    type="button"
+                    onClick={() => playTypingSoundPreview()}
+                    className="w-full mt-1 rounded-lg border border-ink-700 bg-ink-800/60 py-1 text-[11px] font-medium text-fg-muted hover:text-white hover:bg-ink-700 transition-colors"
+                  >
+                    ▶ Test Typing Burst
+                  </button>
+                </div>
+              )}
+            </div>
+
+            {/* 3. Audio Ducking Toggle */}
+            <div className="flex items-center justify-between rounded-xl border border-ink-800 bg-ink-900/60 p-2.5">
+              <div>
+                <span className="block text-xs font-semibold text-white">Smart Audio Ducking</span>
+                <span className="block text-[10px] text-fg-faint">Dips music volume during clicks & typing</span>
+              </div>
+              <input
+                type="checkbox"
+                checked={project?.audioSettings?.musicDuckingEnabled ?? true}
+                onChange={(e) => updateAudioSettings({ musicDuckingEnabled: e.target.checked })}
+                className="size-4 accent-white rounded cursor-pointer"
+              />
+            </div>
+
+            {/* 4. Background Music */}
+            <div className="space-y-2 pt-1 border-t border-ink-800">
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] font-semibold uppercase tracking-wider text-fg-faint">
+                  Background Music
+                </span>
+                <label className="cursor-pointer rounded-lg bg-ink-800 px-2 py-0.5 text-[10px] font-semibold text-fg-muted hover:text-white hover:bg-ink-700 transition-colors">
+                  + Upload Audio
+                  <input
+                    type="file"
+                    accept="audio/*"
+                    className="hidden"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (file) {
+                        const url = URL.createObjectURL(file);
+                        addAudioTrack(file.name.replace(/\.[^/.]+$/, ""), url, "music");
+                      }
+                    }}
+                  />
+                </label>
+              </div>
+
+              {[
+                { name: "Ambient Lo-Fi Chill", url: "sample://lofi-chill.mp3" },
+                { name: "Modern Tech Flow", url: "sample://tech-flow.mp3" },
+                { name: "Energetic Upbeat Beat", url: "sample://upbeat-beat.mp3" },
+                { name: "Deep Focus Minimal", url: "sample://focus-drone.mp3" },
+              ].map((preset) => (
+                <div
+                  key={preset.name}
+                  className="flex items-center justify-between rounded-xl border border-ink-800 bg-ink-900 p-2.5"
+                >
+                  <div className="flex items-center gap-2">
+                    <div className="flex size-7 items-center justify-center rounded-lg bg-emerald-500/20 text-emerald-400">
+                      <Music className="size-3.5" />
+                    </div>
+                    <div>
+                      <span className="block font-medium text-fg text-xs">{preset.name}</span>
+                      <span className="block text-[10px] text-fg-faint">Royalty-free background track</span>
+                    </div>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => addAudioTrack(preset.name, preset.url, "music")}
+                    className="rounded-lg bg-ink-800 px-2.5 py-1 text-[11px] font-semibold text-fg hover:bg-white hover:text-black transition-colors"
+                  >
+                    + Add
+                  </button>
+                </div>
+              ))}
+            </div>
 
             {/* Active tracks list */}
             {project?.audioTracks && project.audioTracks.length > 0 && (
@@ -472,27 +652,49 @@ export function ToolsSidebar() {
                 {project.audioTracks.map((tr) => (
                   <div
                     key={tr.id}
-                    className="flex items-center justify-between rounded-lg border border-ink-800 bg-ink-900/60 p-2"
+                    className="space-y-2 rounded-lg border border-ink-800 bg-ink-900/60 p-2.5"
                   >
-                    <div className="flex items-center gap-2 truncate">
-                      <Music className="size-3.5 text-emerald-400 shrink-0" />
-                      <span className="truncate text-xs font-medium text-fg">{tr.name}</span>
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2 truncate">
+                        <Music className="size-3.5 text-emerald-400 shrink-0" />
+                        <span className="truncate text-xs font-medium text-fg">{tr.name}</span>
+                      </div>
+                      <div className="flex items-center gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() => updateAudioTrack(tr.id, { muted: !tr.muted })}
+                          className="p-1 text-fg-muted hover:text-fg"
+                          title={tr.muted ? "Unmute" : "Mute"}
+                        >
+                          {tr.muted ? <VolumeX className="size-3.5" /> : <Volume2 className="size-3.5" />}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => deleteAudioTrack(tr.id)}
+                          className="p-1 text-danger hover:opacity-80"
+                          title="Remove track"
+                        >
+                          <Trash2 className="size-3.5" />
+                        </button>
+                      </div>
                     </div>
-                    <div className="flex items-center gap-1.5">
-                      <button
-                        type="button"
-                        onClick={() => updateAudioTrack(tr.id, { muted: !tr.muted })}
-                        className="p-1 text-fg-muted hover:text-fg"
-                      >
-                        {tr.muted ? <VolumeX className="size-3.5" /> : <Volume2 className="size-3.5" />}
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => deleteAudioTrack(tr.id)}
-                        className="p-1 text-danger hover:opacity-80"
-                      >
-                        <Trash2 className="size-3.5" />
-                      </button>
+
+                    <div className="flex items-center gap-2 pt-1">
+                      <span className="text-[10px] text-fg-faint">Volume</span>
+                      <input
+                        type="range"
+                        min="0"
+                        max="1"
+                        step="0.05"
+                        value={tr.volume}
+                        onChange={(e) =>
+                          updateAudioTrack(tr.id, { volume: parseFloat(e.target.value) })
+                        }
+                        className="w-full accent-white cursor-pointer h-1.5 bg-ink-800 rounded-lg"
+                      />
+                      <span className="font-mono text-[10px] text-fg-muted w-8 text-right">
+                        {Math.round(tr.volume * 100)}%
+                      </span>
                     </div>
                   </div>
                 ))}

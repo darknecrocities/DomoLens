@@ -1,7 +1,10 @@
 import { describe, expect, it } from "vitest";
 import {
   calculateCameraAtTime,
+  calculateDeadzoneCamera,
+  calculateIntentZoom,
   clampCameraToBounds,
+  classifySpatialTransition,
   detectZoomBlocksFromClicks,
   easeInOutCubic,
   plotInteractionsToKeyframesAndZoomBlocks,
@@ -179,6 +182,63 @@ describe("zoom algorithms", () => {
 
     // Keyframes should include nodes for intermediate tracking
     expect(result.keyframes.length).toBeGreaterThanOrEqual(8);
+  });
+
+  it("classifySpatialTransition categorizes anchor, glide, and crane transitions", () => {
+    // Distance < 0.12 => anchor
+    const anchor = classifySpatialTransition({ x: 0.2, y: 0.2 }, { x: 0.25, y: 0.23 });
+    expect(anchor.type).toBe("anchor");
+    expect(anchor.recommendedScaleDip).toBe(0);
+
+    // Distance 0.12 - 0.38 => glide
+    const glide = classifySpatialTransition({ x: 0.2, y: 0.2 }, { x: 0.45, y: 0.3 });
+    expect(glide.type).toBe("glide");
+    expect(glide.recommendedScaleDip).toBe(0.1);
+
+    // Distance > 0.38 => crane
+    const crane = classifySpatialTransition({ x: 0.1, y: 0.1 }, { x: 0.85, y: 0.85 });
+    expect(crane.type).toBe("crane");
+    expect(crane.recommendedScaleDip).toBeGreaterThan(0.3);
+  });
+
+  it("calculateDeadzoneCamera maintains rock-solid position inside deadzone and smoothly tracks outside", () => {
+    const center = { x: 0.5, y: 0.5 };
+    const scale = 2.0; // visible frame is 0.5 x 0.5. At 35% deadzone, halfW = 0.5 * 0.35 / 2 = 0.0875
+
+    // 1. Cursor slightly moved inside deadzone box (offset < 0.0875): camera center does NOT move
+    const slightMove = calculateDeadzoneCamera(center, { x: 0.53, y: 0.52 }, scale, 0.35);
+    expect(slightMove.x).toBe(0.5);
+    expect(slightMove.y).toBe(0.5);
+
+    // 2. Cursor moved outside deadzone box (offset = 0.2): camera center shifts to keep cursor framed
+    const largeMove = calculateDeadzoneCamera(center, { x: 0.7, y: 0.5 }, scale, 0.35);
+    expect(largeMove.x).toBeGreaterThan(0.5);
+    expect(largeMove.x).toBeCloseTo(0.7 - 0.0875, 2);
+  });
+
+  it("calculateIntentZoom assigns higher scale for typing and offset for right clicks", () => {
+    const typingEvt = { id: "t1", type: "typing" as const, timestampMs: 1000, x: 0.5, y: 0.5, snippet: "Hello" };
+    const typingIntent = calculateIntentZoom(typingEvt);
+    expect(typingIntent.scale).toBe(2.1);
+    expect(typingIntent.holdMs).toBeGreaterThanOrEqual(2400);
+
+    const rightClickEvt = { id: "c1", timestampMs: 2000, x: 0.4, y: 0.4, button: "right" as const };
+    const rightClickIntent = calculateIntentZoom(rightClickEvt);
+    expect(rightClickIntent.scale).toBe(1.7);
+    expect(rightClickIntent.offsetY).toBeGreaterThan(0); // Offset down for context menu
+  });
+
+  it("crane pull-back dips scale during wide cross-screen transitions between blocks", () => {
+    const wideBlocks = [
+      { id: "b1", startTimeMs: 1000, endTimeMs: 3000, targetX: 0.1, targetY: 0.1, scale: 2.0, enabled: true },
+      { id: "b2", startTimeMs: 3500, endTimeMs: 5500, targetX: 0.9, targetY: 0.9, scale: 2.0, enabled: true },
+    ];
+
+    // Midpoint of transition between b1 (ends at 3000ms) and b2 (starts at 3500ms): t = 3250ms
+    const midState = calculateCameraAtTime(3250, wideBlocks);
+    expect(midState.scale).toBeLessThan(2.0); // Should crane dip below 2.0
+    expect(midState.scale).toBeGreaterThanOrEqual(1.15); // Stays comfortably zoomed above 1.15
+    expect(midState.isZoomed).toBe(true);
   });
 });
 

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef } from "react";
 import { motion } from "framer-motion";
 import { Film, Sparkles } from "lucide-react";
 import { calculateCameraAtTime, type ProjectData } from "@domolens/core";
+import { sfx } from "../../lib/sound-effects";
 import { platform } from "../../platform";
 import { useEditor } from "../../store/editor";
 
@@ -14,6 +15,8 @@ export function VideoCanvas({ project, currentTimeMs }: VideoCanvasProps) {
   const { summary, zoomBlocks, looks, clicks, keyframes } = project;
   const isPlaying = useEditor((s) => s.isPlaying);
   const videoRef = useRef<HTMLVideoElement>(null);
+  const lastTriggeredClickId = useRef<string | null>(null);
+  const lastTriggeredTypingId = useRef<string | null>(null);
 
   // Calculate live camera frame with real-time mouse cursor tracking and keyframes
   const camera = useMemo(() => {
@@ -48,6 +51,61 @@ export function VideoCanvas({ project, currentTimeMs }: VideoCanvasProps) {
       video.currentTime = targetSec;
     }
   }, [currentTimeMs]);
+
+  // Synchronize audio sound effects (Bop on click, typing sounds, and audio ducking)
+  useEffect(() => {
+    if (!isPlaying) {
+      lastTriggeredClickId.current = null;
+      lastTriggeredTypingId.current = null;
+      return;
+    }
+
+    const audioSettings = project.audioSettings;
+    const clickSoundEnabled = audioSettings?.clickSoundEnabled !== false;
+    const typingSoundEnabled = audioSettings?.typingSoundEnabled !== false;
+
+    // Trigger procedural click bop sound
+    if (clickSoundEnabled) {
+      const activeClick = clicks.find(
+        (c) => Math.abs(currentTimeMs - c.timestampMs) <= 65 && c.id !== lastTriggeredClickId.current,
+      );
+      if (activeClick) {
+        lastTriggeredClickId.current = activeClick.id;
+        sfx.playClickBop(audioSettings?.clickSoundPreset || "bop", audioSettings?.clickSoundVolume || 0.7);
+        if (audioSettings?.musicDuckingEnabled) {
+          sfx.duckMusic(400, audioSettings.duckingAmount);
+        }
+      }
+    }
+
+    // Trigger typing bursts
+    if (typingSoundEnabled && project.interactions) {
+      const activeTyping = project.interactions.find(
+        (i) => i.type === "typing" && Math.abs(currentTimeMs - i.timestampMs) <= 85 && i.id !== lastTriggeredTypingId.current,
+      );
+      if (activeTyping) {
+        lastTriggeredTypingId.current = activeTyping.id;
+        sfx.playTypingBurst(4, 90, audioSettings?.typingSoundPreset || "mechanical", audioSettings?.typingSoundVolume || 0.6);
+        if (audioSettings?.musicDuckingEnabled) {
+          sfx.duckMusic(550, audioSettings.duckingAmount);
+        }
+      }
+    }
+  }, [isPlaying, currentTimeMs, clicks, project.interactions, project.audioSettings]);
+
+  // Sync background music track
+  useEffect(() => {
+    const musicTrack = project.audioTracks?.find((t) => t.type === "music" && !t.muted);
+    if (!musicTrack || !isPlaying) {
+      sfx.pauseMusic();
+      return;
+    }
+    sfx.playMusic(musicTrack.url, musicTrack.volume, true);
+    return () => {
+      sfx.pauseMusic();
+    };
+  }, [isPlaying, project.audioTracks]);
+
 
   // Check if a click ripple should trigger right now (within 350ms of a click)
   const activeRipple = useMemo(() => {

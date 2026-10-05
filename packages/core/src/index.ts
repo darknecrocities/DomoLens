@@ -3,3 +3,4 @@ export * from "./format";
 export * from "./zoom";
 export * from "./timeline";
 export * from "./looks";
+export * from "./audio";

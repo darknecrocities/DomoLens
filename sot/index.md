@@ -28,18 +28,22 @@ The following specifications serve as the definitive reference for the DomoLens 
 7. [Python Engine Sidecar](engine-sidecar.md)
    Outlines the FastAPI microservice architecture, loopback interface binding (`127.0.0.1`), endpoint contracts, and media probing logic.
 
+8. [Audio and Sound Effects System](audio-system.md)
+   Specifies the procedural click bop synthesis, mechanical typing sound engine, background music presets, and dynamic audio ducking.
+
 ### Design, Voice, and Security
-8. [Design System](design-system.md)
+9. [Design System](design-system.md)
    Defines the charcoal and orange color palettes, Tailwind CSS v4 design tokens, typography, component hierarchies, and responsive breakpoints.
 
-9. [Plain-Language Guidelines](plain-language-guidelines.md)
+10. [Plain-Language Guidelines](plain-language-guidelines.md)
    Provides the editorial framework, jargon elimination dictionary, and user-facing copy standards across the application.
 
-10. [Security Model](security-model.md)
+11. [Security Model](security-model.md)
     Details the local-first security boundary, Content Security Policy (CSP), desktop sandboxing, threat modeling, and local API key management.
 
-11. [Release and Packaging](release-and-packaging.md)
+12. [Release and Packaging](release-and-packaging.md)
     Documents native bundle formats across platforms (macOS DMG/App, Windows MSI/EXE, Linux DEB/AppImage), version tagging rules, and CI release workflows.
+
 
 ---
 

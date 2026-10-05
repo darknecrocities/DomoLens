@@ -59,6 +59,89 @@ export function easeInOutCubic(t: number): number {
   return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
 }
 
+export interface SpatialTransitionClassification {
+  distance: number;
+  type: "anchor" | "glide" | "crane";
+  recommendedScaleDip: number;
+}
+
+/**
+ * Classifies the spatial transition between two points.
+ * - "anchor" (distance < 0.12): user works in same UI area; keep scale rock-solid.
+ * - "glide" (0.12 <= distance <= 0.38): adjacent widget; smooth continuous pan.
+ * - "crane" (distance > 0.38): cross-screen jump; apply cinematic crane pull-back.
+ */
+export function classifySpatialTransition(
+  p1: { x: number; y: number },
+  p2: { x: number; y: number },
+): SpatialTransitionClassification {
+  const distance = Math.hypot(p2.x - p1.x, p2.y - p1.y);
+  if (distance < 0.12) {
+    return { distance, type: "anchor", recommendedScaleDip: 0 };
+  }
+  if (distance <= 0.38) {
+    return { distance, type: "glide", recommendedScaleDip: 0.1 };
+  }
+  const dip = Math.min(0.65, 0.25 + distance * 0.45);
+  return { distance, type: "crane", recommendedScaleDip: dip };
+}
+
+/**
+ * Applies a 2D camera deadzone around the cursor.
+ * When the mouse cursor moves within the central deadzone box, the camera remains
+ * rock-solid still (eliminating tremor). When the cursor crosses outside, the camera
+ * gently follows the mouse using spring-damped tracking.
+ */
+export function calculateDeadzoneCamera(
+  cameraCenter: { x: number; y: number },
+  cursor: { x: number; y: number },
+  scale: number,
+  deadzoneRatio = 0.35,
+): { x: number; y: number } {
+  if (scale <= 1.0) return { x: 0.5, y: 0.5 };
+  const visW = 1.0 / scale;
+  const visH = 1.0 / scale;
+  const halfDzW = (visW * deadzoneRatio) / 2;
+  const halfDzH = (visH * deadzoneRatio) / 2;
+
+  let newX = cameraCenter.x;
+  let newY = cameraCenter.y;
+
+  const diffX = cursor.x - cameraCenter.x;
+  if (diffX > halfDzW) {
+    newX = cursor.x - halfDzW;
+  } else if (diffX < -halfDzW) {
+    newX = cursor.x + halfDzW;
+  }
+
+  const diffY = cursor.y - cameraCenter.y;
+  if (diffY > halfDzH) {
+    newY = cursor.y - halfDzH;
+  } else if (diffY < -halfDzH) {
+    newY = cursor.y + halfDzH;
+  }
+
+  return clampCameraToBounds(newX, newY, scale);
+}
+
+/**
+ * Calculates adaptive zoom scale and hold parameters based on user interaction intent.
+ */
+export function calculateIntentZoom(
+  event: import("./project").InteractionEvent | import("./project").ClickEvent,
+): { scale: number; holdMs: number; offsetY: number } {
+  const isTyping = "type" in event && event.type === "typing";
+  if (isTyping) {
+    return { scale: 2.1, holdMs: 2600, offsetY: -0.015 };
+  }
+  const isRightClick = event.button === "right";
+  if (isRightClick) {
+    return { scale: 1.7, holdMs: 2200, offsetY: 0.04 };
+  }
+  return { scale: 1.85, holdMs: 2000, offsetY: 0 };
+}
+
+
 /**
  * Automatically detects and generates zoom blocks from click events.
  */
@@ -319,12 +402,17 @@ export function calculateCameraAtTime(
       };
     }
 
-    // 2. Inside active zoom hold: camera actively tracks the mouse across the screen
+    // 2. Inside active zoom hold: apply 2D deadzone camera tracking
     if (timeMs >= transitionInEnd && timeMs <= transitionOutStart) {
-      const target = clampCameraToBounds(currentCursor.x, currentCursor.y, block.scale);
+      const deadzoneTarget = calculateDeadzoneCamera(
+        { x: block.targetX, y: block.targetY },
+        currentCursor,
+        block.scale,
+        0.35,
+      );
       return {
-        x: target.x,
-        y: target.y,
+        x: deadzoneTarget.x,
+        y: deadzoneTarget.y,
         scale: block.scale,
         isZoomed: true,
         cursorX: currentCursor.x,
@@ -340,13 +428,22 @@ export function calculateCameraAtTime(
         if (timeMs <= nextInEnd) {
           const span = nextInEnd - nextInStart;
           const progress = span > 0 ? easeInOutCubic((timeMs - nextInStart) / span) : 1;
-          const target1 = clampCameraToBounds(currentCursor.x, currentCursor.y, block.scale);
+          const target1 = clampCameraToBounds(block.targetX, block.targetY, block.scale);
           const nextCursor = interpolateCursorAtTime(timeMs, cursorTrajectory, nextBlock.targetX, nextBlock.targetY);
           const target2 = clampCameraToBounds(nextCursor.x, nextCursor.y, nextBlock.scale);
+
+          // Spatial classification: Crane pull-back on wide cross-screen jumps
+          const spatial = classifySpatialTransition(target1, target2);
+          let currentScale = block.scale + (nextBlock.scale - block.scale) * progress;
+          if (spatial.type === "crane") {
+            const dipFactor = Math.sin(progress * Math.PI);
+            currentScale = Math.max(1.18, currentScale - spatial.recommendedScaleDip * dipFactor);
+          }
+
           return {
             x: target1.x + (target2.x - target1.x) * progress,
             y: target1.y + (target2.y - target1.y) * progress,
-            scale: block.scale + (nextBlock.scale - block.scale) * progress,
+            scale: currentScale,
             isZoomed: true,
             cursorX: currentCursor.x,
             cursorY: currentCursor.y,
@@ -356,7 +453,7 @@ export function calculateCameraAtTime(
 
       const span = transitionOutEnd - transitionOutStart;
       const progress = span > 0 ? easeInOutCubic((timeMs - transitionOutStart) / span) : 1;
-      const target = clampCameraToBounds(currentCursor.x, currentCursor.y, block.scale);
+      const target = clampCameraToBounds(block.targetX, block.targetY, block.scale);
       return {
         x: target.x + (0.5 - target.x) * progress,
         y: target.y + (0.5 - target.y) * progress,
@@ -433,15 +530,19 @@ export function plotInteractionsToKeyframesAndZoomBlocks(
     const firstEvt = cluster[0]!;
     const lastEvt = cluster[cluster.length - 1]!;
 
+    const intent = calculateIntentZoom(firstEvt);
+    const clusterScale = options.scale ?? intent.scale;
+    const clusterHoldMs = options.holdDurationMs ?? intent.holdMs;
+
     const rawStart = Math.max(0, firstEvt.timestampMs - leadInMs);
     const startMs = Math.max(lastBlockEndTime, rawStart);
 
-    const rawEnd = lastEvt.timestampMs + holdMs + leadOutMs;
+    const rawEnd = lastEvt.timestampMs + clusterHoldMs + leadOutMs;
     const endMs = Math.min(videoDurationMs, Math.max(startMs + leadInMs + 600, rawEnd));
 
     if (endMs <= startMs) continue;
 
-    const clampedFirst = clampCameraToBounds(firstEvt.x, firstEvt.y, scale);
+    const clampedFirst = clampCameraToBounds(firstEvt.x, firstEvt.y + intent.offsetY, clusterScale);
 
     // ZoomBlock for timeline
     zoomBlocks.push({
@@ -450,7 +551,7 @@ export function plotInteractionsToKeyframesAndZoomBlocks(
       endTimeMs: endMs,
       targetX: clampedFirst.x,
       targetY: clampedFirst.y,
-      scale,
+      scale: clusterScale,
       enabled: true,
     });
 
@@ -468,7 +569,7 @@ export function plotInteractionsToKeyframesAndZoomBlocks(
     keyframes.push({
       id: `kf-peak-${firstEvt.id}`,
       timeMs: Math.min(endMs - leadOutMs, Math.max(startMs, firstEvt.timestampMs)),
-      scale,
+      scale: clusterScale,
       targetX: clampedFirst.x,
       targetY: clampedFirst.y,
       easing: "spring",

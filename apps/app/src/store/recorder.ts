@@ -1,14 +1,17 @@
 import { create } from "zustand";
 import {
+  DEFAULT_AUDIO_SETTINGS,
   DEFAULT_LOOKS,
   plotInteractionsToKeyframesAndZoomBlocks,
   type ClickEvent,
   type InteractionEvent,
   type ProjectSummary,
 } from "@domolens/core";
+import { sfx } from "../lib/sound-effects";
 import { toast } from "./toast";
 import { useProjects } from "./projects";
 import { useNav } from "./nav";
+
 
 export type RecordingState = "idle" | "requesting_share" | "countdown" | "recording" | "paused";
 export type RecordingSource = "screen" | "window" | "tab";
@@ -102,6 +105,9 @@ export const useRecorder = create<RecorderStore>((set, get) => ({
       interactions: [...s.interactions, newInteraction],
       cursorTrajectory: [...s.cursorTrajectory, { timestampMs, x: clampedX, y: clampedY }],
     }));
+
+    // Tactile click sound feedback
+    sfx.playClickBop("bop", 0.65);
   },
 
   recordTyping: (x, y, snippet) => {
@@ -125,6 +131,9 @@ export const useRecorder = create<RecorderStore>((set, get) => ({
       interactions: [...s.interactions, newInteraction],
       cursorTrajectory: [...s.cursorTrajectory, { timestampMs, x: clampedX, y: clampedY }],
     }));
+
+    // Mechanical keystroke sound feedback
+    sfx.playKeystroke("mechanical", 0.55);
   },
 
   startCountdown: async () => {
@@ -374,6 +383,7 @@ export const useRecorder = create<RecorderStore>((set, get) => ({
         },
       ],
       looks: DEFAULT_LOOKS,
+      audioSettings: DEFAULT_AUDIO_SETTINGS,
     };
 
     // Register project

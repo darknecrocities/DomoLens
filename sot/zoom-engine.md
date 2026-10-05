@@ -74,7 +74,30 @@ When transitioning between consecutive clicks at different coordinates without z
 - DomoLens computes a linear-to-cubic pan trajectory between `(FocusX_1, FocusY_1)` and `(FocusX_2, FocusY_2)`.
 - The first derivative (velocity) matches across keyframe boundaries, eliminating visible camera speed stutter.
 
-## 4. Viewport Boundary Clamping
+## 4. Spatial Distance-Adaptive Transitions
+
+When camera transitions occur across different screen regions, DomoLens computes euclidean distance `D = hypot(x2 - x1, y2 - y1)` and classifies the motion:
+
+1. **Anchor Hold (`D < 0.12`)**:
+   - The user interacts within the same logical UI widget or dialog.
+   - Scale remains steady at target zoom depth; micro-pan without zooming out.
+
+2. **Lateral Glide (`0.12 <= D <= 0.38`)**:
+   - The user navigates to an adjacent widget.
+   - Camera applies a smooth lateral cubic pan with continuous velocity.
+
+3. **Cinematic Crane / Dolly Pull-Back (`D > 0.38`)**:
+   - Wide cross-screen jump (e.g. top-left toolbar to bottom-right submit button).
+   - Direct panning at 2.0x causes motion blur and nausea.
+   - The camera pulls back slightly at midpoint (e.g. down to 1.25x), reveals the travel path, and smoothly plunges into the destination target.
+
+## 5. 2D Deadzone Inertial Auto-Tracking
+
+During active zoom holds, DomoLens enforces a 2D camera deadzone bounding box (35% of the zoomed viewport):
+- **Inside Deadzone**: Hand tremor or minor mouse wiggles produce zero camera shift (rock-solid stability).
+- **Outside Deadzone**: Damped spring tracking gently displaces the camera to keep the pointer framed with golden-ratio margins.
+
+## 6. Viewport Boundary Clamping
 
 When zooming into corners or edges, naive centering would reveal black letterbox voids. DomoLens enforces strict bounding constraints:
 
@@ -96,10 +119,14 @@ For all `t`:
 ```
 This guarantees that 100% of the rendered video frame is filled with original recording footage, with zero black border leakage.
 
-## 5. Automated Verification
+## 7. Automated Verification
 
 The auto-zoom module is verified via `packages/core/src/zoom.test.ts`:
 - Centroid calculation accuracy across dense click bursts.
 - Edge clamping at boundary extremes `(0.0, 0.0)` and `(1.0, 1.0)`.
+- Spatial distance classification (Anchor, Glide, Crane).
+- 2D deadzone position stability and exterior tracking.
+- Parabolic crane pull-back scale dips during wide cross-screen jumps.
 - Trajectory continuity across overlapping zoom intervals.
 - Fallback behavior for recordings with zero clicks (maintains smooth 1.0x baseline).
+
