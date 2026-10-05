@@ -269,7 +269,7 @@ export const useEditor = create<EditorState>((set, get) => ({
     const { keyframes, zoomBlocks } = plotInteractionsToKeyframesAndZoomBlocks(
       starterInteractions,
       duration,
-      { holdDurationMs: 2400, scale: 1.85 },
+      { holdDurationMs: 1000, leadInMs: 500, scale: 1.85 },
     );
 
     const starterTrajectory = [
@@ -448,8 +448,9 @@ export const useEditor = create<EditorState>((set, get) => ({
       state.durationMs,
       {
         continuousGlide: true,
-        maxGlideGapMs: 4500,
-        holdDurationMs: 2400,
+        maxGlideGapMs: 1800,
+        leadInMs: 500,
+        holdDurationMs: 1000,
         scale: 1.85,
         ...options,
       },

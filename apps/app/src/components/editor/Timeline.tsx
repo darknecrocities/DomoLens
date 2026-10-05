@@ -16,6 +16,8 @@ import {
   VolumeX,
   Diamond,
   Wand2,
+  Keyboard,
+  MousePointer,
 } from "lucide-react";
 import { formatDuration, type ProjectData } from "@domolens/core";
 import { copy } from "../../copy/en";
@@ -54,6 +56,7 @@ export function Timeline({ project }: TimelineProps) {
     addZoomBlockAtCurrentTime,
     updateZoomBlock,
     addKeyframeAtCurrentTime,
+    updateKeyframe,
     deleteKeyframe,
     addEffectAtCurrentTime,
     updateEffect,
@@ -291,13 +294,27 @@ export function Timeline({ project }: TimelineProps) {
                 return (
                   <div
                     key={kf.id}
-                    onClick={(e) => {
+                    onPointerDown={(e) => {
                       e.stopPropagation();
                       selectKeyframe(kf.id);
                       setCurrentTime(kf.timeMs);
+                      const startX = e.clientX;
+                      const origTime = kf.timeMs;
+                      const onMove = (me: PointerEvent) => {
+                        const deltaRatio =
+                          (me.clientX - startX) / (trackContainerRef.current?.clientWidth || 1);
+                        const newTime = Math.max(0, Math.min(durationMs, origTime + deltaRatio * durationMs));
+                        updateKeyframe(kf.id, { timeMs: Math.round(newTime) });
+                      };
+                      const onUp = () => {
+                        window.removeEventListener("pointermove", onMove);
+                        window.removeEventListener("pointerup", onUp);
+                      };
+                      window.addEventListener("pointermove", onMove);
+                      window.addEventListener("pointerup", onUp);
                     }}
-                    title={`Keyframe #${idx + 1}: ${kf.scale.toFixed(1)}x at ${formatDuration(kf.timeMs)} (${kf.easing})${kf.effect ? ` - Effect: ${kf.effect}` : ""}`}
-                    className={`absolute -translate-x-1/2 cursor-pointer transition-all z-20 group ${
+                    title={`Keyframe #${idx + 1}: ${kf.scale.toFixed(1)}x at ${formatDuration(kf.timeMs)} (${kf.easing})${kf.sound ? ` - Sound: ${kf.sound}` : ""}${kf.effect ? ` - Effect: ${kf.effect}` : ""}`}
+                    className={`absolute -translate-x-1/2 cursor-grab active:cursor-grabbing transition-all z-20 group ${
                       isSelected
                         ? "scale-125 z-30"
                         : "hover:scale-125 opacity-90 hover:opacity-100"
@@ -305,14 +322,27 @@ export function Timeline({ project }: TimelineProps) {
                     style={{ left: `${pos}%` }}
                   >
                     <div
-                      className={`size-3.5 rotate-45 border shadow-sm ${
+                      className={`relative size-3.5 rotate-45 border shadow-sm ${
                         isSelected
                           ? "bg-white border-black shadow-md scale-110"
                           : kf.effect
                           ? "bg-amber-300 border-amber-600 shadow"
+                          : kf.sound === "typing"
+                          ? "bg-emerald-400 border-emerald-700 shadow"
+                          : kf.sound === "click"
+                          ? "bg-cyan-400 border-cyan-700 shadow"
                           : "bg-neutral-300 border-neutral-500"
                       }`}
                     />
+                    {kf.sound && (
+                      <div className="absolute -bottom-2.5 left-1/2 -translate-x-1/2 pointer-events-none flex items-center justify-center">
+                        {kf.sound === "typing" ? (
+                          <Keyboard className="size-2 text-emerald-400" />
+                        ) : (
+                          <MousePointer className="size-2 text-cyan-400" />
+                        )}
+                      </div>
+                    )}
                     {isSelected && (
                       <button
                         type="button"
@@ -349,7 +379,33 @@ export function Timeline({ project }: TimelineProps) {
                     e.stopPropagation();
                     selectBlock(block.id);
                   }}
-                  className={`absolute top-1 bottom-1 flex items-center justify-between rounded-md border px-2 text-xs font-medium transition-all ${
+                  onPointerDown={(e) => {
+                    if ((e.target as HTMLElement).closest(".group\\/handle")) return;
+                    e.stopPropagation();
+                    selectBlock(block.id);
+                    const startX = e.clientX;
+                    const origStart = block.startTimeMs;
+                    const blockDur = block.endTimeMs - block.startTimeMs;
+                    const onMove = (me: PointerEvent) => {
+                      const deltaRatio =
+                        (me.clientX - startX) / (trackContainerRef.current?.clientWidth || 1);
+                      const newStart = Math.max(
+                        0,
+                        Math.min(durationMs - blockDur, Math.round(origStart + deltaRatio * durationMs)),
+                      );
+                      updateZoomBlock(block.id, {
+                        startTimeMs: newStart,
+                        endTimeMs: newStart + blockDur,
+                      });
+                    };
+                    const onUp = () => {
+                      window.removeEventListener("pointermove", onMove);
+                      window.removeEventListener("pointerup", onUp);
+                    };
+                    window.addEventListener("pointermove", onMove);
+                    window.addEventListener("pointerup", onUp);
+                  }}
+                  className={`absolute top-1 bottom-1 flex items-center justify-between rounded-md border px-2 text-xs font-medium cursor-grab active:cursor-grabbing transition-all ${
                     isSelected
                       ? "border-white bg-white/25 text-white font-bold shadow-sm z-10"
                       : block.enabled
@@ -453,7 +509,35 @@ export function Timeline({ project }: TimelineProps) {
                       e.stopPropagation();
                       selectEffect(eff.id);
                     }}
-                    className={`absolute top-1 bottom-1 flex items-center justify-between rounded-md border px-2 text-[10px] font-medium transition-all group/eff ${
+                    onPointerDown={(e) => {
+                      if (
+                        (e.target as HTMLElement).closest(".group\\/handle") ||
+                        (e.target as HTMLElement).closest("button")
+                      ) {
+                        return;
+                      }
+                      e.stopPropagation();
+                      selectEffect(eff.id);
+                      const startX = e.clientX;
+                      const origStart = eff.startTimeMs;
+                      const origDur = eff.durationMs;
+                      const onMove = (me: PointerEvent) => {
+                        const deltaRatio =
+                          (me.clientX - startX) / (trackContainerRef.current?.clientWidth || 1);
+                        const newStart = Math.max(
+                          0,
+                          Math.min(durationMs - origDur, Math.round(origStart + deltaRatio * durationMs)),
+                        );
+                        updateEffect(eff.id, { startTimeMs: newStart });
+                      };
+                      const onUp = () => {
+                        window.removeEventListener("pointermove", onMove);
+                        window.removeEventListener("pointerup", onUp);
+                      };
+                      window.addEventListener("pointermove", onMove);
+                      window.addEventListener("pointerup", onUp);
+                    }}
+                    className={`absolute top-1 bottom-1 flex items-center justify-between rounded-md border px-2 text-[10px] font-medium cursor-grab active:cursor-grabbing transition-all group/eff ${
                       isSelected
                         ? "border-white bg-white/25 text-white font-bold shadow-md z-10"
                         : `${effectTheme} hover:border-white/50`

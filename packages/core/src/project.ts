@@ -144,6 +144,7 @@ export interface VideoEffect {
   intensity: number; // 0.0 to 1.0 (or speed multiplier e.g. 0.5 to 2.5)
   targetX?: number; // Normalized X coordinate (0.0 to 1.0) for localized effects
   targetY?: number; // Normalized Y coordinate (0.0 to 1.0)
+  radius?: number; // Pixel radius for localized spotlight (60 to 300)
   preset?: string; // Optional styling preset (e.g. "cinematic", "noir", "cyberpunk")
   enabled: boolean;
 }
@@ -158,6 +159,10 @@ export interface KeyframeNode {
   easing: "spring" | "cubic" | "linear";
   effect?: VideoEffectType;
   effectIntensity?: number;
+  /** Sound effect attached to this keyframe. */
+  sound?: "click" | "typing";
+  soundPreset?: string;
+  soundVolume?: number;
 }
 
 /** A text caption or graphic title on the timeline. */

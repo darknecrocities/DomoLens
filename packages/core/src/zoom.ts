@@ -417,7 +417,7 @@ export function smoothCursorTrajectory(
 export function calculateCameraAtTime(
   timeMs: number,
   zoomBlocks: ZoomBlock[],
-  leadInMs = 350,
+  leadInMs = 500,
   leadOutMs = 400,
   cursorTrajectory?: import("./project").CursorTrajectoryPoint[],
   keyframes?: import("./project").KeyframeNode[],
@@ -691,13 +691,16 @@ export interface PlotInteractionsOptions {
   fallbackIfEmpty?: boolean;
   continuousGlide?: boolean;
   maxGlideGapMs?: number;
+  leadInMs?: number;
+  leadOutMs?: number;
+  inactivityResetMs?: number;
 }
 
 /**
- * Translates recorded click and typing interactions into iterative 2-3 second auto-zooms
- * that track the mouse/cursor and smoothly return to full screen throughout the video.
- * Clusters rapid consecutive actions (e.g. typing or quick succession clicks) so they
- * continuously track the pointer instead of queuing up delayed jumps into the future.
+ * Translates recorded click and typing interactions into iterative auto-zooms
+ * that start 0.5s before the actual click/typing, track the mouse/cursor smoothly,
+ * and return to full-frame after 1.0s of user inactivity.
+ * Clusters rapid consecutive actions and automatically attaches typing and click sounds to keyframes.
  * Enforces strictly monotonic keyframe timestamps and protects against edge boundary collapses.
  */
 export function plotInteractionsToKeyframesAndZoomBlocks(
@@ -745,10 +748,12 @@ export function plotInteractionsToKeyframesAndZoomBlocks(
     return { keyframes: [], zoomBlocks: [] };
   }
 
-  const leadInMs = 300;
-  const leadOutMs = 400;
-  const minDuration = options.minBlockDurationMs ?? 1400;
-  const clusterGapMs = 2200; // actions within 2.2s are merged into a continuous zoom
+  // 0.5s lead-in: camera starts zooming into place 500ms before user interaction
+  const leadInMs = options.leadInMs ?? 500;
+  const leadOutMs = options.leadOutMs ?? 400;
+  const minDuration = options.minBlockDurationMs ?? 1000;
+  // Actions within 1.2s remain in continuous zoom; if no activity for 1s, camera shifts back to full frame
+  const clusterGapMs = options.inactivityResetMs ?? 1200;
 
   const sorted = [...validInteractions].sort((a, b) => a.timestampMs - b.timestampMs);
 
@@ -789,7 +794,7 @@ export function plotInteractionsToKeyframesAndZoomBlocks(
       ? calculateIntentZoom({ id: firstEvt.id, type: "typing", timestampMs: firstEvt.timestampMs, x: firstEvt.x, y: firstEvt.y })
       : calculateIntentZoom(firstEvt);
     const clusterScale = options.scale ?? intent.scale;
-    const clusterHoldMs = options.holdDurationMs ?? intent.holdMs;
+    const clusterHoldMs = options.holdDurationMs ?? 1000;
 
     const rawStart = Math.max(0, firstEvt.timestampMs - leadInMs);
     let startMs = Math.max(lastBlockEndTime, rawStart);
@@ -853,7 +858,7 @@ export function plotInteractionsToKeyframesAndZoomBlocks(
         easing: "cubic",
       });
 
-      // Keyframe 2: Peak zoom reached
+      // Keyframe 2: Peak zoom reached right on user interaction
       const minPeak = startMs + Math.max(80, effLeadIn);
       const maxPeak = Math.max(minPeak, endMs - effLeadOut - 150);
       const peakTime = Math.max(minPeak, Math.min(maxPeak, firstEvt.timestampMs));
@@ -865,6 +870,9 @@ export function plotInteractionsToKeyframesAndZoomBlocks(
         targetX: clampedFirst.x,
         targetY: clampedFirst.y,
         easing: "spring",
+        ...(firstEvt.type === "typing"
+          ? { sound: "typing", soundPreset: "mechanical", soundVolume: 0.65 }
+          : { sound: "click", soundPreset: "bop", soundVolume: 0.70 }),
       });
     }
 
@@ -883,6 +891,9 @@ export function plotInteractionsToKeyframesAndZoomBlocks(
         targetX: clampedMid.x,
         targetY: clampedMid.y,
         easing: "spring",
+        ...(midEvt.type === "typing"
+          ? { sound: "typing", soundPreset: "mechanical", soundVolume: 0.65 }
+          : { sound: "click", soundPreset: "bop", soundVolume: 0.70 }),
       });
     }
 
@@ -938,6 +949,9 @@ export function plotInteractionsToKeyframesAndZoomBlocks(
         targetX: clampedNext.x,
         targetY: clampedNext.y,
         easing: "spring",
+        ...(nextFirst.type === "typing"
+          ? { sound: "typing", soundPreset: "mechanical", soundVolume: 0.65 }
+          : { sound: "click", soundPreset: "bop", soundVolume: 0.70 }),
       });
 
       previousGlidedIntoThis = true;

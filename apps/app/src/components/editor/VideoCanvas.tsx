@@ -60,7 +60,7 @@ export function VideoCanvas({ project, currentTimeMs }: VideoCanvasProps) {
     return calculateCameraAtTime(
       currentTimeMs,
       zoomBlocks,
-      350,
+      500,
       400,
       smoothedTrajectory,
       keyframes,
@@ -241,7 +241,37 @@ export function VideoCanvas({ project, currentTimeMs }: VideoCanvasProps) {
         }
       }
     }
-  }, [isPlaying, currentTimeMs, clicks, project.interactions, project.audioSettings]);
+
+    // Zero-latency edge-triggered keyframe attached sound cues (typing & click bop)
+    if (keyframes && keyframes.length > 0) {
+      for (const kf of keyframes) {
+        if (
+          kf.sound &&
+          !triggeredEventsRef.current.has(`kf-${kf.id}`) &&
+          kf.timeMs >= prev &&
+          kf.timeMs <= currentTimeMs + 45
+        ) {
+          triggeredEventsRef.current.add(`kf-${kf.id}`);
+          if (kf.sound === "typing" && typingSoundEnabled) {
+            sfx.playTypingBurst(
+              5,
+              85,
+              (kf.soundPreset as any) || audioSettings?.typingSoundPreset || "mechanical",
+              kf.soundVolume || audioSettings?.typingSoundVolume || 0.65,
+            );
+          } else if (kf.sound === "click" && clickSoundEnabled) {
+            sfx.playClickBop(
+              (kf.soundPreset as any) || audioSettings?.clickSoundPreset || "bop",
+              kf.soundVolume || audioSettings?.clickSoundVolume || 0.7,
+            );
+          }
+          if (audioSettings?.musicDuckingEnabled) {
+            sfx.duckMusic(450, audioSettings.duckingAmount);
+          }
+        }
+      }
+    }
+  }, [isPlaying, currentTimeMs, clicks, project.interactions, keyframes, project.audioSettings]);
 
   // Sync background music track
   useEffect(() => {

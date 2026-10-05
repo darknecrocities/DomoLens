@@ -63,7 +63,7 @@ export function ToolsSidebar() {
     selectText,
   } = useEditor();
 
-  const [holdDurationSec, setHoldDurationSec] = useState(2.4);
+  const [holdDurationSec, setHoldDurationSec] = useState(1.0);
   const [zoomScale, setZoomScale] = useState(1.85);
 
   if (!isRightSidebarOpen) {
@@ -158,18 +158,18 @@ export function ToolsSidebar() {
                 )}
               </div>
               <p className="text-[11px] text-fg-muted leading-relaxed mb-3">
-                Translates every recorded mouse click and typing action into an iterative camera zoom that tracks the target, holds 2-3s, and returns to full screen.
+                Starts smooth zoom 0.5s before click or typing, auto-tracks the cursor, and shifts back to full-screen frame after 1.0s of inactivity.
               </p>
 
               <div className="space-y-2 mb-3 bg-ink-950/60 rounded-lg p-2 border border-ink-800">
                 <div className="flex justify-between text-[11px]">
-                  <span className="text-fg-muted">Zoom Hold Time:</span>
+                  <span className="text-fg-muted">Inactivity Reset / Hold:</span>
                   <span className="font-mono text-white font-semibold">{holdDurationSec.toFixed(1)}s</span>
                 </div>
                 <input
                   type="range"
-                  min="1.5"
-                  max="3.5"
+                  min="0.5"
+                  max="3.0"
                   step="0.1"
                   value={holdDurationSec}
                   onChange={(e) => setHoldDurationSec(parseFloat(e.target.value))}
@@ -406,6 +406,53 @@ export function ToolsSidebar() {
                     )}
                   </div>
 
+                  {/* Keyframe Attached Sound Trigger */}
+                  <div className="pt-2 border-t border-ink-800">
+                    <div className="flex items-center justify-between text-[10px] font-semibold text-fg-muted uppercase tracking-wider mb-1.5">
+                      <span>Sound Trigger</span>
+                      {selectedKeyframe.sound && (
+                        <button
+                          type="button"
+                          onClick={() => updateKeyframe(selectedKeyframe.id, { sound: undefined })}
+                          className="text-danger hover:underline font-normal text-[9px]"
+                        >
+                          Remove
+                        </button>
+                      )}
+                    </div>
+                    <div className="grid grid-cols-3 gap-1">
+                      {[
+                        { label: "None", value: undefined },
+                        { label: "Typing Sound", value: "typing" },
+                        { label: "Click Bop", value: "click" },
+                      ].map((item) => (
+                        <button
+                          key={item.label}
+                          type="button"
+                          onClick={() =>
+                            updateKeyframe(selectedKeyframe.id, {
+                              sound: item.value as any,
+                              soundPreset:
+                                item.value === "typing"
+                                  ? "mechanical"
+                                  : item.value === "click"
+                                  ? "bop"
+                                  : undefined,
+                              soundVolume: item.value ? 0.7 : undefined,
+                            })
+                          }
+                          className={`rounded px-1.5 py-1 text-[9px] font-medium transition-colors ${
+                            selectedKeyframe.sound === item.value
+                              ? "bg-white text-black font-bold shadow-sm"
+                              : "bg-ink-800 text-fg-muted hover:bg-ink-700"
+                          }`}
+                        >
+                          {item.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
                   {/* Delete Keyframe Action */}
                   <button
                     type="button"
@@ -626,6 +673,34 @@ export function ToolsSidebar() {
                     className="w-full accent-white cursor-pointer h-1.5 bg-ink-800 rounded-lg mt-1"
                   />
                 </div>
+
+                {selectedEffect.type === "spotlight" && (
+                  <div>
+                    <div className="flex justify-between text-[11px]">
+                      <span className="text-fg-muted">Spotlight Radius:</span>
+                      <span className="font-mono text-fg font-semibold">
+                        {(selectedEffect.radius ?? 140)}px
+                      </span>
+                    </div>
+                    <input
+                      type="range"
+                      min="60"
+                      max="300"
+                      step="10"
+                      value={selectedEffect.radius ?? 140}
+                      onChange={(e) =>
+                        updateEffect(selectedEffect.id, { radius: parseInt(e.target.value, 10) })
+                      }
+                      className="w-full accent-amber-400 cursor-pointer h-1.5 bg-ink-800 rounded-lg mt-1"
+                    />
+                    <div className="flex justify-between text-[10px] text-fg-muted mt-1.5">
+                      <span>Focal Target:</span>
+                      <span className="font-mono text-white">
+                        ({Math.round((selectedEffect.targetX ?? 0.5) * 100)}%, {Math.round((selectedEffect.targetY ?? 0.5) * 100)}%)
+                      </span>
+                    </div>
+                  </div>
+                )}
 
                 <div className="flex justify-between text-[11px] pt-1 border-t border-ink-800">
                   <span className="text-fg-muted">Duration:</span>

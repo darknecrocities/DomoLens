@@ -221,7 +221,7 @@ export function calculateActiveEffectsState(
         active: true,
         x: eff.targetX ?? defaultTarget?.x ?? 0.5,
         y: eff.targetY ?? defaultTarget?.y ?? 0.5,
-        radius: 120 + (1 - intensity) * 80,
+        radius: eff.radius ?? (120 + (1 - intensity) * 80),
         intensity,
       };
     } else if (eff.type === "vignette") {

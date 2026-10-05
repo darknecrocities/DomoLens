@@ -118,8 +118,8 @@ describe("useEditor store", () => {
     for (let i = 0; i < keyframes.length - 1; i++) {
       expect(keyframes[i]!.timeMs).toBeLessThan(keyframes[i + 1]!.timeMs);
     }
-    // Zoom block starts around mid-click (2200ms)
-    expect(state.project?.zoomBlocks[0]?.startTimeMs).toBe(2200);
+    // Zoom block starts 0.5s before mid-click (2500ms - 500ms = 2000ms)
+    expect(state.project?.zoomBlocks[0]?.startTimeMs).toBe(2000);
 
     // Clear keyframes and zoom blocks
     useEditor.getState().clearKeyframes();

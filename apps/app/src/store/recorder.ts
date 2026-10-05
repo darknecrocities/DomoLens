@@ -404,10 +404,11 @@ export const useRecorder = create<RecorderStore>((set, get) => ({
           })),
       duration,
       {
-        holdDurationMs: 2400,
+        holdDurationMs: 1000,
+        leadInMs: 500,
         fallbackIfEmpty: true,
         continuousGlide: true,
-        maxGlideGapMs: 4500,
+        maxGlideGapMs: 1800,
       },
     );
 

@@ -166,7 +166,7 @@ describe("zoom algorithms", () => {
     ];
 
     const result = plotInteractionsToKeyframesAndZoomBlocks(interactions, 15000, {
-      holdDurationMs: 2400,
+      holdDurationMs: 1000,
       scale: 1.85,
     });
 
@@ -174,17 +174,20 @@ describe("zoom algorithms", () => {
     expect(result.zoomBlocks).toHaveLength(2);
 
     const firstBlock = result.zoomBlocks[0]!;
-    // Starts before or at first interaction (1000ms - 300ms = 700ms)
-    expect(firstBlock.startTimeMs).toBe(700);
-    // Holds until last interaction in cluster (1800ms) + 2400ms hold + 400ms leadout = 4600ms
-    expect(firstBlock.endTimeMs).toBe(4600);
+    // Starts 0.5s before first interaction (1000ms - 500ms = 500ms)
+    expect(firstBlock.startTimeMs).toBe(500);
+    // Holds 1.0s of inactivity after last interaction in cluster (1800ms) + 1000ms hold + 400ms leadout = 3200ms
+    expect(firstBlock.endTimeMs).toBe(3200);
 
     const secondBlock = result.zoomBlocks[1]!;
-    expect(secondBlock.startTimeMs).toBe(7700);
-    expect(secondBlock.endTimeMs).toBe(10800);
+    // Second block for e4 (8000ms): 8000ms - 500ms = 7500ms
+    expect(secondBlock.startTimeMs).toBe(7500);
+    expect(secondBlock.endTimeMs).toBe(9400);
 
-    // Keyframes should include nodes for intermediate tracking
+    // Keyframes should include nodes for intermediate tracking and sound cues
     expect(result.keyframes.length).toBeGreaterThanOrEqual(8);
+    expect(result.keyframes.some((k) => k.sound === "typing")).toBe(true);
+    expect(result.keyframes.some((k) => k.sound === "click")).toBe(true);
   });
 
   it("classifySpatialTransition categorizes anchor, glide, and crane transitions", () => {
@@ -273,7 +276,8 @@ describe("zoom algorithms", () => {
     const lastKf = result.keyframes[result.keyframes.length - 1]!;
     expect(firstKf.timeMs).toBeLessThanOrEqual(22000);
     expect(firstKf.scale).toBe(1.0);
-    expect(lastKf.timeMs).toBe(24000);
+    // 22000ms + 1000ms inactivity hold + 400ms leadout = 23400ms (smoothly returns to 1.0x)
+    expect(lastKf.timeMs).toBe(23400);
     expect(lastKf.scale).toBe(1.0);
   });
 
