@@ -4,10 +4,15 @@ import {
   DEFAULT_LOOKS,
   clampCameraToBounds,
   detectActivityEventsFromFrames,
+  insertKeyframe,
+  insertVideoEffect,
   plotInteractionsToKeyframesAndZoomBlocks,
   removeClipAndRipple,
+  removeKeyframe,
+  removeVideoEffect,
   splitClip,
   splitZoomBlock,
+  updateVideoEffect,
   type AudioTrack,
   type ClickEvent,
   type ClickSoundPreset,
@@ -20,6 +25,8 @@ import {
   type TextOverlay,
   type TimelineClip,
   type TypingSoundPreset,
+  type VideoEffect,
+  type VideoEffectType,
   type ZoomBlock,
 } from "@domolens/core";
 import { sfx } from "../lib/sound-effects";
@@ -27,7 +34,14 @@ import { useProjects } from "./projects";
 import { toast } from "./toast";
 
 
-export type ToolTab = "zoom" | "text" | "audio" | "looks" | "cursor" | "export";
+export type ToolTab =
+  | "zoom"
+  | "effects"
+  | "text"
+  | "audio"
+  | "looks"
+  | "cursor"
+  | "export";
 
 export interface LlmMessage {
   id: string;
@@ -48,6 +62,7 @@ interface EditorState {
   selectedBlockId: string | null;
   selectedClipId: string | null;
   selectedKeyframeId: string | null;
+  selectedEffectId: string | null;
   selectedTextId: string | null;
   selectedAudioId: string | null;
   activeTab: "timeline" | "looks";
@@ -80,6 +95,7 @@ interface EditorState {
   selectBlock: (id: string | null) => void;
   selectClip: (id: string | null) => void;
   selectKeyframe: (id: string | null) => void;
+  selectEffect: (id: string | null) => void;
   selectText: (id: string | null) => void;
   selectAudio: (id: string | null) => void;
 
@@ -115,10 +131,22 @@ interface EditorState {
   addZoomBlockAtCurrentTime: () => void;
 
   // Keyframes
-  addKeyframeAtCurrentTime: (scale?: number, targetX?: number, targetY?: number) => void;
+  addKeyframeAtCurrentTime: (
+    scale?: number,
+    targetX?: number,
+    targetY?: number,
+    effect?: VideoEffectType,
+    effectIntensity?: number,
+  ) => void;
   updateKeyframe: (id: string, updates: Partial<KeyframeNode>) => void;
   deleteKeyframe: (id: string) => void;
   clearKeyframes: () => void;
+
+  // Video Effects
+  addEffectAtCurrentTime: (type?: VideoEffectType, preset?: string) => void;
+  updateEffect: (id: string, updates: Partial<VideoEffect>) => void;
+  deleteEffect: (id: string) => void;
+  clearEffects: () => void;
 
   // Text Overlays
   addTextOverlay: (text?: string) => void;
@@ -177,6 +205,7 @@ export const useEditor = create<EditorState>((set, get) => ({
   selectedBlockId: null,
   selectedClipId: null,
   selectedKeyframeId: null,
+  selectedEffectId: null,
   selectedTextId: null,
   selectedAudioId: null,
   activeTab: "timeline",
@@ -202,11 +231,16 @@ export const useEditor = create<EditorState>((set, get) => ({
           if (!parsed.audioSettings) {
             parsed.audioSettings = { ...DEFAULT_AUDIO_SETTINGS };
           }
+          if (!parsed.effects) {
+            parsed.effects = [];
+          }
           set({
             project: parsed,
             currentTimeMs: 0,
             durationMs: parsed.summary.durationMs || 10000,
             selectedBlockId: parsed.zoomBlocks[0]?.id || null,
+            selectedKeyframeId: null,
+            selectedEffectId: null,
             history: [],
             future: [],
           });
@@ -326,6 +360,7 @@ export const useEditor = create<EditorState>((set, get) => ({
       selectedBlockId: id,
       selectedClipId: null,
       selectedKeyframeId: null,
+      selectedEffectId: null,
       selectedTextId: null,
       selectedAudioId: null,
     }),
@@ -334,6 +369,7 @@ export const useEditor = create<EditorState>((set, get) => ({
       selectedClipId: id,
       selectedBlockId: null,
       selectedKeyframeId: null,
+      selectedEffectId: null,
       selectedTextId: null,
       selectedAudioId: null,
     }),
@@ -342,6 +378,16 @@ export const useEditor = create<EditorState>((set, get) => ({
       selectedKeyframeId: id,
       selectedBlockId: null,
       selectedClipId: null,
+      selectedEffectId: null,
+      selectedTextId: null,
+      selectedAudioId: null,
+    }),
+  selectEffect: (id) =>
+    set({
+      selectedEffectId: id,
+      selectedBlockId: null,
+      selectedClipId: null,
+      selectedKeyframeId: null,
       selectedTextId: null,
       selectedAudioId: null,
     }),
@@ -351,6 +397,7 @@ export const useEditor = create<EditorState>((set, get) => ({
       selectedBlockId: null,
       selectedClipId: null,
       selectedKeyframeId: null,
+      selectedEffectId: null,
       selectedAudioId: null,
     }),
   selectAudio: (id) =>
@@ -359,6 +406,7 @@ export const useEditor = create<EditorState>((set, get) => ({
       selectedBlockId: null,
       selectedClipId: null,
       selectedKeyframeId: null,
+      selectedEffectId: null,
       selectedTextId: null,
     }),
 
@@ -628,7 +676,13 @@ export const useEditor = create<EditorState>((set, get) => ({
     toast.success("Zoom block added.");
   },
 
-  addKeyframeAtCurrentTime: (scale = 1.8, targetX = 0.5, targetY = 0.5) => {
+  addKeyframeAtCurrentTime: (
+    scale = 1.8,
+    targetX = 0.5,
+    targetY = 0.5,
+    effect?: VideoEffectType,
+    effectIntensity?: number,
+  ) => {
     const state = get();
     if (!state.project) return;
     const time = state.currentTimeMs;
@@ -639,8 +693,9 @@ export const useEditor = create<EditorState>((set, get) => ({
       targetX,
       targetY,
       easing: "cubic",
+      ...(effect ? { effect, effectIntensity: effectIntensity ?? 0.8 } : {}),
     };
-    const updated = [...(state.project.keyframes || []), newKf].sort((a, b) => a.timeMs - b.timeMs);
+    const updated = insertKeyframe(state.project.keyframes || [], newKf);
     set({
       ...pushHistory(state),
       project: {
@@ -648,6 +703,8 @@ export const useEditor = create<EditorState>((set, get) => ({
         keyframes: updated,
       },
       selectedKeyframeId: newKf.id,
+      selectedBlockId: null,
+      selectedEffectId: null,
     });
     toast.success("Keyframe added at playhead.");
   },
@@ -671,7 +728,7 @@ export const useEditor = create<EditorState>((set, get) => ({
       ...pushHistory(state),
       project: {
         ...state.project,
-        keyframes: state.project.keyframes.filter((kf) => kf.id !== id),
+        keyframes: removeKeyframe(state.project.keyframes, id),
       },
       selectedKeyframeId: null,
     });
@@ -690,6 +747,92 @@ export const useEditor = create<EditorState>((set, get) => ({
       selectedKeyframeId: null,
     });
     toast.info("Cleared all keyframes.");
+  },
+
+  addEffectAtCurrentTime: (type = "spotlight", preset = "cinematic") => {
+    const state = get();
+    if (!state.project) return;
+    const time = state.currentTimeMs;
+    const activeBlock = state.project.zoomBlocks.find(
+      (b) => time >= b.startTimeMs && time <= b.endTimeMs,
+    );
+    const newEffect: VideoEffect = {
+      id: `eff-${Date.now()}`,
+      name:
+        type === "spotlight"
+          ? "Spotlight Focus"
+          : type === "vignette"
+          ? "Cinematic Vignette"
+          : type === "blur"
+          ? "Motion Blur"
+          : type === "glow"
+          ? "Cursor Glow"
+          : type === "speed"
+          ? "Speed Ramp (0.5x)"
+          : type === "filter"
+          ? `Color Grade (${preset})`
+          : "Video Effect",
+      type,
+      startTimeMs: time,
+      durationMs: 2500,
+      intensity: type === "speed" ? 0.5 : 0.75,
+      targetX: activeBlock?.targetX ?? 0.5,
+      targetY: activeBlock?.targetY ?? 0.5,
+      preset,
+      enabled: true,
+    };
+    const updated = insertVideoEffect(state.project.effects || [], newEffect);
+    set({
+      ...pushHistory(state),
+      project: {
+        ...state.project,
+        effects: updated,
+      },
+      selectedEffectId: newEffect.id,
+      selectedBlockId: null,
+      selectedKeyframeId: null,
+    });
+    toast.success(`Added ${newEffect.name} effect.`);
+  },
+
+  updateEffect: (id, updates) => {
+    const state = get();
+    if (!state.project || !state.project.effects) return;
+    set({
+      ...pushHistory(state),
+      project: {
+        ...state.project,
+        effects: updateVideoEffect(state.project.effects, id, updates),
+      },
+    });
+  },
+
+  deleteEffect: (id) => {
+    const state = get();
+    if (!state.project || !state.project.effects) return;
+    set({
+      ...pushHistory(state),
+      project: {
+        ...state.project,
+        effects: removeVideoEffect(state.project.effects, id),
+      },
+      selectedEffectId: null,
+    });
+    toast.info("Effect removed.");
+  },
+
+  clearEffects: () => {
+    const state = get();
+    if (!state.project) return;
+    set({
+      ...pushHistory(state),
+      project: {
+        ...state.project,
+        effects: [],
+      },
+      selectedEffectId: null,
+    });
+    toast.info("Cleared all effects.");
   },
 
   addTextOverlay: (text = "New Caption") => {
@@ -889,6 +1032,8 @@ export const useEditor = create<EditorState>((set, get) => ({
       state.deleteZoomBlock(state.selectedBlockId);
     } else if (state.selectedKeyframeId) {
       state.deleteKeyframe(state.selectedKeyframeId);
+    } else if (state.selectedEffectId) {
+      state.deleteEffect(state.selectedEffectId);
     } else if (state.selectedTextId) {
       state.deleteTextOverlay(state.selectedTextId);
     } else if (state.selectedAudioId) {

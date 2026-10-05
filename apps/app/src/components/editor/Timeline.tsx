@@ -15,6 +15,7 @@ import {
   Volume2,
   VolumeX,
   Diamond,
+  Wand2,
 } from "lucide-react";
 import { formatDuration, type ProjectData } from "@domolens/core";
 import { copy } from "../../copy/en";
@@ -33,6 +34,7 @@ export function Timeline({ project }: TimelineProps) {
     selectedBlockId,
     selectedClipId,
     selectedKeyframeId,
+    selectedEffectId,
     selectedTextId,
     selectedAudioId,
     timelineZoom,
@@ -44,6 +46,7 @@ export function Timeline({ project }: TimelineProps) {
     selectBlock,
     selectClip,
     selectKeyframe,
+    selectEffect,
     selectText,
     selectAudio,
     splitAtCurrentTime,
@@ -51,6 +54,10 @@ export function Timeline({ project }: TimelineProps) {
     addZoomBlockAtCurrentTime,
     updateZoomBlock,
     addKeyframeAtCurrentTime,
+    deleteKeyframe,
+    addEffectAtCurrentTime,
+    updateEffect,
+    deleteEffect,
     addTextOverlay,
     addAudioTrack,
     plotInteractions,
@@ -154,10 +161,21 @@ export function Timeline({ project }: TimelineProps) {
             type="button"
             onClick={() => addKeyframeAtCurrentTime()}
             className="flex items-center gap-1.5 rounded-lg border border-ink-700 bg-ink-800 px-2 py-1 text-xs font-medium text-fg hover:border-white hover:text-white transition-colors"
-            title="Add keyframe diamond at current playhead"
+            title="Add keyframe diamond at current playhead (K)"
           >
             <Diamond className="size-3 text-white fill-white shrink-0" />
             <span className="hidden md:inline">+ Keyframe</span>
+          </button>
+
+          {/* + Effect */}
+          <button
+            type="button"
+            onClick={() => addEffectAtCurrentTime("spotlight")}
+            className="flex items-center gap-1.5 rounded-lg border border-amber-500/40 bg-amber-500/15 px-2 py-1 text-xs font-medium text-amber-200 hover:border-amber-400 hover:bg-amber-500/25 transition-colors"
+            title="Add visual effect at playhead (Spotlight, Blur, Vignette, Glow, Filter)"
+          >
+            <Wand2 className="size-3 text-amber-300 shrink-0" />
+            <span className="hidden md:inline">+ Effect</span>
           </button>
 
           {/* + Text */}
@@ -202,6 +220,7 @@ export function Timeline({ project }: TimelineProps) {
               !selectedBlockId &&
               !selectedClipId &&
               !selectedKeyframeId &&
+              !selectedEffectId &&
               !selectedTextId &&
               !selectedAudioId
             }
@@ -259,7 +278,7 @@ export function Timeline({ project }: TimelineProps) {
           className="relative flex flex-col gap-1.5 rounded-xl bg-ink-950 p-2 cursor-pointer shadow-inner touch-none"
         >
           {/* TRACK 1: KEYFRAMES TRACK (Diamond Nodes) */}
-          <div className="relative h-6 rounded-md bg-ink-900/90 border border-ink-800/80 overflow-hidden flex items-center">
+          <div className="relative h-7 rounded-md bg-ink-900/90 border border-ink-800/80 flex items-center">
             <span className="absolute left-2 text-[9px] font-semibold uppercase tracking-wider text-fg-faint pointer-events-none z-10">
               Keyframes
             </span>
@@ -277,7 +296,7 @@ export function Timeline({ project }: TimelineProps) {
                       selectKeyframe(kf.id);
                       setCurrentTime(kf.timeMs);
                     }}
-                    title={`Keyframe #${idx + 1}: ${kf.scale.toFixed(1)}x at ${formatDuration(kf.timeMs)} (${kf.easing})`}
+                    title={`Keyframe #${idx + 1}: ${kf.scale.toFixed(1)}x at ${formatDuration(kf.timeMs)} (${kf.easing})${kf.effect ? ` - Effect: ${kf.effect}` : ""}`}
                     className={`absolute -translate-x-1/2 cursor-pointer transition-all z-20 group ${
                       isSelected
                         ? "scale-125 z-30"
@@ -286,12 +305,27 @@ export function Timeline({ project }: TimelineProps) {
                     style={{ left: `${pos}%` }}
                   >
                     <div
-                      className={`size-3 rotate-45 border shadow-sm ${
+                      className={`size-3.5 rotate-45 border shadow-sm ${
                         isSelected
                           ? "bg-white border-black shadow-md scale-110"
+                          : kf.effect
+                          ? "bg-amber-300 border-amber-600 shadow"
                           : "bg-neutral-300 border-neutral-500"
                       }`}
                     />
+                    {isSelected && (
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          deleteKeyframe(kf.id);
+                        }}
+                        className="absolute -top-5 left-1/2 -translate-x-1/2 size-4 rounded-full bg-danger text-white flex items-center justify-center hover:scale-110 transition-transform shadow-lg z-40 border border-ink-950"
+                        title="Delete keyframe (Delete)"
+                      >
+                        <Trash2 className="size-2.5" />
+                      </button>
+                    )}
                   </div>
                 );
               })}
@@ -386,6 +420,129 @@ export function Timeline({ project }: TimelineProps) {
               );
             })}
           </div>
+
+          {/* TRACK: VIDEO EFFECTS */}
+          {project.effects && project.effects.length > 0 && (
+            <div className="relative h-8 rounded-lg bg-ink-900 border border-ink-800/80 overflow-hidden">
+              <span className="absolute left-2 top-1.5 text-[9px] font-semibold uppercase tracking-wider text-fg-faint pointer-events-none">
+                Effects
+              </span>
+
+              {project.effects.map((eff) => {
+                const left = getPositionPercent(eff.startTimeMs);
+                const width = Math.max(3, getPositionPercent(eff.startTimeMs + eff.durationMs) - left);
+                const isSelected = selectedEffectId === eff.id;
+
+                const effectTheme =
+                  eff.type === "spotlight"
+                    ? "border-amber-500/70 bg-amber-500/20 text-amber-200"
+                    : eff.type === "vignette"
+                    ? "border-purple-500/70 bg-purple-500/20 text-purple-200"
+                    : eff.type === "blur"
+                    ? "border-blue-500/70 bg-blue-500/20 text-blue-200"
+                    : eff.type === "glow"
+                    ? "border-cyan-500/70 bg-cyan-500/20 text-cyan-200"
+                    : eff.type === "speed"
+                    ? "border-emerald-500/70 bg-emerald-500/20 text-emerald-200"
+                    : "border-rose-500/70 bg-rose-500/20 text-rose-200";
+
+                return (
+                  <div
+                    key={eff.id}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      selectEffect(eff.id);
+                    }}
+                    className={`absolute top-1 bottom-1 flex items-center justify-between rounded-md border px-2 text-[10px] font-medium transition-all group/eff ${
+                      isSelected
+                        ? "border-white bg-white/25 text-white font-bold shadow-md z-10"
+                        : `${effectTheme} hover:border-white/50`
+                    }`}
+                    style={{
+                      left: `${left}%`,
+                      width: `${width}%`,
+                    }}
+                  >
+                    <div className="flex items-center gap-1 min-w-0 truncate">
+                      <Wand2 className="size-2.5 shrink-0" />
+                      <span className="truncate">{eff.name}</span>
+                    </div>
+
+                    {/* Quick delete button on effect */}
+                    {isSelected && (
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          deleteEffect(eff.id);
+                        }}
+                        className="ml-1 rounded p-0.5 text-danger hover:bg-danger/20 transition-colors shrink-0"
+                        title="Delete effect (Delete)"
+                      >
+                        <Trash2 className="size-3" />
+                      </button>
+                    )}
+
+                    {/* Left & Right Drag Handles */}
+                    <div
+                      className="absolute -left-2 top-0 bottom-0 w-4 cursor-ew-resize flex items-center justify-center touch-none z-20 group/handle"
+                      onPointerDown={(e) => {
+                        e.stopPropagation();
+                        const startX = e.clientX;
+                        const origStart = eff.startTimeMs;
+                        const onMove = (me: PointerEvent) => {
+                          const deltaRatio =
+                            (me.clientX - startX) / (trackContainerRef.current?.clientWidth || 1);
+                          const newTime = Math.max(
+                            0,
+                            Math.min(eff.startTimeMs + eff.durationMs - 400, origStart + deltaRatio * durationMs),
+                          );
+                          const newDur = eff.startTimeMs + eff.durationMs - newTime;
+                          updateEffect(eff.id, {
+                            startTimeMs: Math.round(newTime),
+                            durationMs: Math.round(newDur),
+                          });
+                        };
+                        const onUp = () => {
+                          window.removeEventListener("pointermove", onMove);
+                          window.removeEventListener("pointerup", onUp);
+                        };
+                        window.addEventListener("pointermove", onMove);
+                        window.addEventListener("pointerup", onUp);
+                      }}
+                    >
+                      <div className="w-1 h-3/4 rounded-full bg-white/80 group-hover/handle:bg-white" />
+                    </div>
+                    <div
+                      className="absolute -right-2 top-0 bottom-0 w-4 cursor-ew-resize flex items-center justify-center touch-none z-20 group/handle"
+                      onPointerDown={(e) => {
+                        e.stopPropagation();
+                        const startX = e.clientX;
+                        const origDur = eff.durationMs;
+                        const onMove = (me: PointerEvent) => {
+                          const deltaRatio =
+                            (me.clientX - startX) / (trackContainerRef.current?.clientWidth || 1);
+                          const newDur = Math.max(
+                            400,
+                            Math.min(durationMs - eff.startTimeMs, origDur + deltaRatio * durationMs),
+                          );
+                          updateEffect(eff.id, { durationMs: Math.round(newDur) });
+                        };
+                        const onUp = () => {
+                          window.removeEventListener("pointermove", onMove);
+                          window.removeEventListener("pointerup", onUp);
+                        };
+                        window.addEventListener("pointermove", onMove);
+                        window.addEventListener("pointerup", onUp);
+                      }}
+                    >
+                      <div className="w-1 h-3/4 rounded-full bg-white/80 group-hover/handle:bg-white" />
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
 
           {/* TRACK 3: VIDEO CLIPS */}
           <div className="relative h-11 rounded-lg bg-ink-900 border border-ink-800/80 overflow-hidden">

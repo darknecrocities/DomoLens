@@ -214,4 +214,51 @@ describe("useEditor store", () => {
     expect(state.project?.zoomBlocks.length).toBeGreaterThan(0);
     expect(state.project?.keyframes?.length).toBeGreaterThan(0);
   });
+
+  it("adds, updates, and deletes keyframes with effects", async () => {
+    await useEditor.getState().loadProject("proj-test");
+    useEditor.getState().setCurrentTime(3500);
+
+    // Add keyframe at current time with attached effect
+    useEditor.getState().addKeyframeAtCurrentTime(2.2, 0.4, 0.6, "spotlight", 0.85);
+    const kfs = useEditor.getState().project?.keyframes || [];
+    const added = kfs.find((k) => Math.abs(k.timeMs - 3500) < 50);
+    expect(added).toBeDefined();
+    expect(added?.scale).toBe(2.2);
+    expect(added?.effect).toBe("spotlight");
+
+    // Update keyframe
+    useEditor.getState().updateKeyframe(added!.id, { scale: 2.6, effect: "blur" });
+    const updated = useEditor.getState().project?.keyframes?.find((k) => k.id === added!.id);
+    expect(updated?.scale).toBe(2.6);
+    expect(updated?.effect).toBe("blur");
+
+    // Delete keyframe directly
+    useEditor.getState().deleteKeyframe(added!.id);
+    expect(useEditor.getState().project?.keyframes?.find((k) => k.id === added!.id)).toBeUndefined();
+  });
+
+  it("adds, updates, and deletes video effects with deleteSelected", async () => {
+    await useEditor.getState().loadProject("proj-test");
+    useEditor.getState().setCurrentTime(2000);
+
+    // Add spotlight effect
+    useEditor.getState().addEffectAtCurrentTime("spotlight", "cinematic");
+    const effects = useEditor.getState().project?.effects || [];
+    expect(effects.length).toBe(1);
+    expect(effects[0]!.type).toBe("spotlight");
+
+    // Update effect
+    const effId = effects[0]!.id;
+    useEditor.getState().updateEffect(effId, { intensity: 0.9 });
+    expect(useEditor.getState().project?.effects?.[0]?.intensity).toBe(0.9);
+
+    // Select and delete via deleteSelected
+    useEditor.getState().selectEffect(effId);
+    expect(useEditor.getState().selectedEffectId).toBe(effId);
+
+    useEditor.getState().deleteSelected();
+    expect(useEditor.getState().project?.effects?.length).toBe(0);
+    expect(useEditor.getState().selectedEffectId).toBeNull();
+  });
 });

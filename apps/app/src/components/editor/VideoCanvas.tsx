@@ -1,6 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Film, Sparkles } from "lucide-react";
-import { calculateCameraAtTime, screenToVideoCoordinates, type ProjectData } from "@domolens/core";
+import { Film, Sparkles, Wand2 } from "lucide-react";
+import {
+  calculateActiveEffectsState,
+  calculateCameraAtTime,
+  screenToVideoCoordinates,
+  type ProjectData,
+} from "@domolens/core";
 import { sfx } from "../../lib/sound-effects";
 import { platform } from "../../platform";
 import { useEditor } from "../../store/editor";
@@ -11,7 +16,7 @@ interface VideoCanvasProps {
 }
 
 export function VideoCanvas({ project, currentTimeMs }: VideoCanvasProps) {
-  const { summary, zoomBlocks, looks, clicks, keyframes } = project;
+  const { summary, zoomBlocks, looks, clicks, keyframes, effects } = project;
   const isPlaying = useEditor((s) => s.isPlaying);
   const videoRef = useRef<HTMLVideoElement>(null);
   const viewportRef = useRef<HTMLDivElement>(null);
@@ -51,6 +56,24 @@ export function VideoCanvas({ project, currentTimeMs }: VideoCanvasProps) {
       keyframes,
     );
   }, [currentTimeMs, zoomBlocks, project.cursorTrajectory, keyframes]);
+
+  // Real-time video effects calculation (Spotlight, Vignette, Blur, Color Grade, Glow, Speed)
+  const effectsState = useMemo(() => {
+    return calculateActiveEffectsState(
+      effects,
+      currentTimeMs,
+      keyframes,
+      { x: camera.x, y: camera.y },
+    );
+  }, [effects, currentTimeMs, keyframes, camera.x, camera.y]);
+
+  // Synchronize dynamic playback rate (e.g. speed ramp / slow-mo effects)
+  useEffect(() => {
+    const video = videoRef.current;
+    if (video && typeof video.playbackRate === "number") {
+      video.playbackRate = effectsState.playbackRate;
+    }
+  }, [effectsState.playbackRate]);
 
   // Master hardware-locked video clock synchronization:
   // When video is playing, video presentation frames drive currentTimeMs with ZERO latency!
@@ -264,13 +287,15 @@ export function VideoCanvas({ project, currentTimeMs }: VideoCanvasProps) {
               playsInline
               muted
               preload="auto"
-              className="size-full object-contain pointer-events-none"
+              style={{ filter: effectsState.filterStyle || undefined }}
+              className="size-full object-contain pointer-events-none transition-[filter] duration-150"
             />
           ) : thumbnailSrc ? (
             <img
               src={thumbnailSrc}
               alt=""
-              className="size-full object-contain pointer-events-none"
+              style={{ filter: effectsState.filterStyle || undefined }}
+              className="size-full object-contain pointer-events-none transition-[filter] duration-150"
             />
           ) : (
             <div className="flex size-full flex-col items-center justify-center bg-ink-900 text-fg-muted">
@@ -333,8 +358,33 @@ export function VideoCanvas({ project, currentTimeMs }: VideoCanvasProps) {
             {camera.isZoomed && (
               <div className="absolute -inset-3 rounded-full border border-white/50 animate-ping pointer-events-none" />
             )}
+
+            {/* Dynamic Cursor Glow Effect */}
+            {effectsState.glow && (
+              <div className="absolute -inset-4 rounded-full border border-cyan-400 bg-cyan-400/20 animate-pulse pointer-events-none shadow-[0_0_20px_rgba(34,211,238,0.7)]" />
+            )}
           </div>
         </div>
+
+        {/* Dynamic Vignette Effect Overlay */}
+        {effectsState.vignette > 0 && (
+          <div
+            className="pointer-events-none absolute inset-0 z-20 transition-all duration-150"
+            style={{
+              boxShadow: `inset 0 0 ${Math.round(effectsState.vignette * 150)}px rgba(0, 0, 0, ${Math.min(0.95, effectsState.vignette * 0.9)})`,
+            }}
+          />
+        )}
+
+        {/* Dynamic Spotlight Effect Overlay */}
+        {effectsState.spotlight && effectsState.spotlight.active && (
+          <div
+            className="pointer-events-none absolute inset-0 z-20 transition-all duration-150"
+            style={{
+              background: `radial-gradient(circle ${Math.round(effectsState.spotlight.radius)}px at ${effectsState.spotlight.x * 100}% ${effectsState.spotlight.y * 100}%, transparent 0%, transparent 45%, rgba(0, 0, 0, ${effectsState.spotlight.intensity * 0.75}) 100%)`,
+            }}
+          />
+        )}
 
         {/* Tactile Click-to-Shift Focal Target Reticle */}
         {clickShiftMarker && (
@@ -352,12 +402,33 @@ export function VideoCanvas({ project, currentTimeMs }: VideoCanvasProps) {
 
         {/* Live Zoom & Mouse Tracking Badge Overlay */}
         {camera.isZoomed && (
-          <div className="absolute top-3 left-3 flex items-center gap-2 rounded-full bg-ink-950/90 px-3 py-1.5 text-xs font-semibold text-white backdrop-blur-md border border-neutral-700 shadow-md">
+          <div className="absolute top-3 left-3 flex items-center gap-2 rounded-full bg-ink-950/90 px-3 py-1.5 text-xs font-semibold text-white backdrop-blur-md border border-neutral-700 shadow-md z-30">
             <Sparkles className="size-3.5" />
             <span>{camera.scale.toFixed(1)}x Zoom</span>
             <span className="size-1 rounded-full bg-white/60" />
             <span className="text-[11px] font-mono text-fg-muted font-normal">
               Tracking Mouse ({Math.round(camera.cursorX * 100)}%, {Math.round(camera.cursorY * 100)}%)
+            </span>
+          </div>
+        )}
+
+        {/* Live Effects Active Badge Overlay */}
+        {(effectsState.spotlight?.active ||
+          effectsState.vignette > 0 ||
+          effectsState.blur > 0 ||
+          effectsState.glow ||
+          effectsState.filterStyle ||
+          effectsState.playbackRate !== 1.0) && (
+          <div className="absolute top-3 right-3 flex items-center gap-1.5 rounded-full bg-amber-500/90 px-2.5 py-1 text-[11px] font-semibold text-black backdrop-blur-md shadow-md z-30">
+            <Wand2 className="size-3 text-black" />
+            <span>
+              {effectsState.playbackRate !== 1.0
+                ? `${effectsState.playbackRate}x Speed`
+                : effectsState.spotlight?.active
+                ? "Spotlight Active"
+                : effectsState.vignette > 0
+                ? "Vignette Active"
+                : "Effect Active"}
             </span>
           </div>
         )}

@@ -15,6 +15,10 @@ import {
   VolumeX,
   Diamond,
   Play,
+  Wand2,
+  Zap,
+  Circle,
+  SunMedium,
 } from "lucide-react";
 import { formatDuration, type ProjectLooks } from "@domolens/core";
 import { useEditor, type ToolTab } from "../../store/editor";
@@ -29,6 +33,7 @@ export function ToolsSidebar() {
     setActiveToolTab,
     selectedBlockId,
     selectedKeyframeId,
+    selectedEffectId,
     selectedTextId,
     plotInteractions,
     updateZoomBlock,
@@ -38,6 +43,10 @@ export function ToolsSidebar() {
     updateKeyframe,
     deleteKeyframe,
     clearKeyframes,
+    addEffectAtCurrentTime,
+    updateEffect,
+    deleteEffect,
+    clearEffects,
     addTextOverlay,
     updateTextOverlay,
     deleteTextOverlay,
@@ -50,6 +59,7 @@ export function ToolsSidebar() {
     updateLooks,
     setCurrentTime,
     selectKeyframe,
+    selectEffect,
     selectText,
   } = useEditor();
 
@@ -77,6 +87,7 @@ export function ToolsSidebar() {
 
   const tabs: Array<{ id: ToolTab; label: string; icon: React.ReactNode }> = [
     { id: "zoom", label: "Zoom", icon: <Sparkles className="size-3.5" /> },
+    { id: "effects", label: "Effects", icon: <Wand2 className="size-3.5" /> },
     { id: "text", label: "Text", icon: <Type className="size-3.5" /> },
     { id: "audio", label: "Audio", icon: <Music className="size-3.5" /> },
     { id: "looks", label: "Canvas", icon: <Paintbrush className="size-3.5" /> },
@@ -86,6 +97,7 @@ export function ToolsSidebar() {
 
   const selectedBlock = project?.zoomBlocks.find((b) => b.id === selectedBlockId);
   const selectedKeyframe = project?.keyframes?.find((kf) => kf.id === selectedKeyframeId);
+  const selectedEffect = project?.effects?.find((e) => e.id === selectedEffectId);
   const selectedText = project?.textOverlays?.find((t) => t.id === selectedTextId);
 
   return (
@@ -265,7 +277,7 @@ export function ToolsSidebar() {
                       type="button"
                       onClick={() => deleteKeyframe(selectedKeyframe.id)}
                       className="text-danger hover:opacity-80 p-0.5"
-                      title="Delete Keyframe"
+                      title="Delete Keyframe (Delete)"
                     >
                       <Trash2 className="size-3.5" />
                     </button>
@@ -287,6 +299,14 @@ export function ToolsSidebar() {
                     }
                     className="w-full accent-white cursor-pointer h-1.5 bg-ink-800 rounded-lg"
                   />
+
+                  {/* Target Coordinates */}
+                  <div className="flex justify-between text-[10px] text-fg-muted">
+                    <span>Focal Target:</span>
+                    <span className="font-mono text-white">
+                      ({Math.round(selectedKeyframe.targetX * 100)}%, {Math.round(selectedKeyframe.targetY * 100)}%)
+                    </span>
+                  </div>
 
                   <div className="flex gap-2">
                     <button
@@ -312,6 +332,76 @@ export function ToolsSidebar() {
                       Spring Physics
                     </button>
                   </div>
+
+                  {/* Keyframe Attached Effect */}
+                  <div className="pt-2 border-t border-ink-800">
+                    <div className="flex items-center justify-between text-[10px] font-semibold text-fg-muted uppercase tracking-wider mb-1.5">
+                      <span>Attached Effect</span>
+                      {selectedKeyframe.effect && (
+                        <button
+                          type="button"
+                          onClick={() => updateKeyframe(selectedKeyframe.id, { effect: undefined })}
+                          className="text-danger hover:underline font-normal text-[9px]"
+                        >
+                          Remove
+                        </button>
+                      )}
+                    </div>
+                    <div className="grid grid-cols-4 gap-1">
+                      {(["spotlight", "blur", "vignette", "glow"] as const).map((eff) => (
+                        <button
+                          key={eff}
+                          type="button"
+                          onClick={() =>
+                            updateKeyframe(selectedKeyframe.id, {
+                              effect: selectedKeyframe.effect === eff ? undefined : eff,
+                              effectIntensity: selectedKeyframe.effectIntensity ?? 0.8,
+                            })
+                          }
+                          className={`rounded px-1.5 py-1 text-[9px] capitalize font-medium transition-colors ${
+                            selectedKeyframe.effect === eff
+                              ? "bg-amber-400 text-black font-bold shadow-sm"
+                              : "bg-ink-800 text-fg-muted hover:bg-ink-700"
+                          }`}
+                        >
+                          {eff}
+                        </button>
+                      ))}
+                    </div>
+                    {selectedKeyframe.effect && (
+                      <div className="mt-2 space-y-1">
+                        <div className="flex justify-between text-[10px] text-fg-muted">
+                          <span>Intensity</span>
+                          <span className="font-mono text-fg font-semibold">
+                            {Math.round((selectedKeyframe.effectIntensity ?? 0.8) * 100)}%
+                          </span>
+                        </div>
+                        <input
+                          type="range"
+                          min="0.1"
+                          max="1.0"
+                          step="0.05"
+                          value={selectedKeyframe.effectIntensity ?? 0.8}
+                          onChange={(e) =>
+                            updateKeyframe(selectedKeyframe.id, {
+                              effectIntensity: parseFloat(e.target.value),
+                            })
+                          }
+                          className="w-full accent-amber-400 cursor-pointer h-1.5 bg-ink-800 rounded-lg"
+                        />
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Delete Keyframe Action */}
+                  <button
+                    type="button"
+                    onClick={() => deleteKeyframe(selectedKeyframe.id)}
+                    className="w-full rounded-lg border border-danger/40 bg-danger/10 py-1.5 text-center text-[11px] font-semibold text-danger hover:bg-danger/20 transition-colors flex items-center justify-center gap-1.5 mt-1"
+                  >
+                    <Trash2 className="size-3" />
+                    Delete Keyframe
+                  </button>
                 </div>
               )}
 
@@ -335,17 +425,260 @@ export function ToolsSidebar() {
                           : "text-fg-muted hover:bg-ink-800 hover:text-fg"
                       }`}
                     >
-                      <div className="flex items-center gap-1.5">
+                      <div className="flex items-center gap-1.5 min-w-0 truncate">
                         <Diamond className="size-2.5 text-white fill-white shrink-0" />
-                        <span>Node #{i + 1} ({kf.scale.toFixed(1)}x)</span>
+                        <span className="truncate">Node #{i + 1} ({kf.scale.toFixed(1)}x)</span>
+                        {kf.effect && (
+                          <span className="rounded bg-amber-400/20 text-amber-300 text-[9px] px-1 py-0.2 shrink-0">
+                            {kf.effect}
+                          </span>
+                        )}
                       </div>
-                      <span className="font-mono text-[10px] text-fg-faint">
-                        {formatDuration(kf.timeMs)}
-                      </span>
+                      <div className="flex items-center gap-1 shrink-0">
+                        <span className="font-mono text-[10px] text-fg-faint">
+                          {formatDuration(kf.timeMs)}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            deleteKeyframe(kf.id);
+                          }}
+                          className="rounded p-0.5 text-danger hover:bg-ink-800 transition-colors"
+                          title="Delete keyframe"
+                        >
+                          <Trash2 className="size-3" />
+                        </button>
+                      </div>
                     </div>
                   ))
                 )}
               </div>
+            </div>
+          </div>
+        )}
+
+        {/* TAB 2: VIDEO EFFECTS */}
+        {activeToolTab === "effects" && (
+          <div className="space-y-4">
+            <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 shadow-sm">
+              <div className="flex items-center justify-between mb-1.5">
+                <div className="flex items-center gap-2">
+                  <Wand2 className="size-4 text-amber-300" />
+                  <span className="font-semibold text-white text-xs">Video Effects</span>
+                </div>
+                {(project?.effects?.length ?? 0) > 0 && (
+                  <button
+                    type="button"
+                    onClick={clearEffects}
+                    className="text-[10px] text-danger hover:underline font-medium"
+                    title="Clear all effects"
+                  >
+                    Clear All
+                  </button>
+                )}
+              </div>
+              <p className="text-[11px] text-fg-muted leading-relaxed mb-3">
+                Apply spotlights, cinematic vignettes, motion blur, cursor glow, or color grades on the timeline.
+              </p>
+
+              {/* 1-Click Effect Presets */}
+              <div className="grid grid-cols-2 gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => addEffectAtCurrentTime("spotlight")}
+                  className="flex items-center gap-1.5 rounded-lg border border-ink-700 bg-ink-900/80 px-2 py-2 text-left text-[11px] font-medium text-amber-200 hover:border-amber-400 hover:bg-ink-800 transition-colors"
+                >
+                  <SunMedium className="size-3.5 text-amber-400 shrink-0" />
+                  <span>Spotlight</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => addEffectAtCurrentTime("vignette")}
+                  className="flex items-center gap-1.5 rounded-lg border border-ink-700 bg-ink-900/80 px-2 py-2 text-left text-[11px] font-medium text-purple-200 hover:border-purple-400 hover:bg-ink-800 transition-colors"
+                >
+                  <Circle className="size-3.5 text-purple-400 shrink-0" />
+                  <span>Vignette</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => addEffectAtCurrentTime("blur")}
+                  className="flex items-center gap-1.5 rounded-lg border border-ink-700 bg-ink-900/80 px-2 py-2 text-left text-[11px] font-medium text-blue-200 hover:border-blue-400 hover:bg-ink-800 transition-colors"
+                >
+                  <Sparkles className="size-3.5 text-blue-400 shrink-0" />
+                  <span>Motion Blur</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => addEffectAtCurrentTime("glow")}
+                  className="flex items-center gap-1.5 rounded-lg border border-ink-700 bg-ink-900/80 px-2 py-2 text-left text-[11px] font-medium text-cyan-200 hover:border-cyan-400 hover:bg-ink-800 transition-colors"
+                >
+                  <Zap className="size-3.5 text-cyan-400 shrink-0" />
+                  <span>Cursor Glow</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => addEffectAtCurrentTime("filter", "cinematic")}
+                  className="flex items-center gap-1.5 rounded-lg border border-ink-700 bg-ink-900/80 px-2 py-2 text-left text-[11px] font-medium text-rose-200 hover:border-rose-400 hover:bg-ink-800 transition-colors"
+                >
+                  <Paintbrush className="size-3.5 text-rose-400 shrink-0" />
+                  <span>Color Grade</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => addEffectAtCurrentTime("speed")}
+                  className="flex items-center gap-1.5 rounded-lg border border-ink-700 bg-ink-900/80 px-2 py-2 text-left text-[11px] font-medium text-emerald-200 hover:border-emerald-400 hover:bg-ink-800 transition-colors"
+                >
+                  <Play className="size-3.5 text-emerald-400 shrink-0" />
+                  <span>Slow-Mo (0.5x)</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Inspector for selected effect */}
+            {selectedEffect ? (
+              <div className="rounded-xl border border-ink-800 bg-ink-900 p-3 space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="font-semibold text-fg flex items-center gap-1.5">
+                    <Wand2 className="size-3.5 text-amber-400" />
+                    Edit Effect
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => deleteEffect(selectedEffect.id)}
+                    className="text-danger hover:opacity-80 p-0.5"
+                    title="Delete effect (Delete)"
+                  >
+                    <Trash2 className="size-3.5" />
+                  </button>
+                </div>
+
+                <div>
+                  <label className="text-[10px] text-fg-faint uppercase font-semibold">Effect Name</label>
+                  <input
+                    type="text"
+                    value={selectedEffect.name}
+                    onChange={(e) => updateEffect(selectedEffect.id, { name: e.target.value })}
+                    className="mt-1 w-full rounded-lg border border-ink-700 bg-ink-950 px-2.5 py-1.5 text-xs text-fg focus:border-white focus:outline-none"
+                  />
+                </div>
+
+                {selectedEffect.type === "filter" && (
+                  <div>
+                    <label className="text-[10px] text-fg-faint uppercase font-semibold">Color Preset</label>
+                    <div className="grid grid-cols-2 gap-1.5 mt-1">
+                      {(["cinematic", "noir", "cyberpunk", "warm"] as const).map((pr) => (
+                        <button
+                          key={pr}
+                          type="button"
+                          onClick={() => updateEffect(selectedEffect.id, { preset: pr, name: `Color Grade (${pr})` })}
+                          className={`rounded px-2 py-1 text-[10px] capitalize font-medium transition-colors ${
+                            selectedEffect.preset === pr
+                              ? "bg-white text-black font-bold"
+                              : "bg-ink-800 text-fg-muted hover:bg-ink-700"
+                          }`}
+                        >
+                          {pr}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                <div>
+                  <div className="flex justify-between text-[11px]">
+                    <span className="text-fg-muted">
+                      {selectedEffect.type === "speed" ? "Playback Speed" : "Effect Intensity"}
+                    </span>
+                    <span className="font-mono text-fg font-semibold">
+                      {selectedEffect.type === "speed"
+                        ? `${selectedEffect.intensity.toFixed(2)}x`
+                        : `${Math.round(selectedEffect.intensity * 100)}%`}
+                    </span>
+                  </div>
+                  <input
+                    type="range"
+                    min={selectedEffect.type === "speed" ? "0.25" : "0.1"}
+                    max={selectedEffect.type === "speed" ? "2.0" : "1.0"}
+                    step={selectedEffect.type === "speed" ? "0.05" : "0.05"}
+                    value={selectedEffect.intensity}
+                    onChange={(e) =>
+                      updateEffect(selectedEffect.id, { intensity: parseFloat(e.target.value) })
+                    }
+                    className="w-full accent-white cursor-pointer h-1.5 bg-ink-800 rounded-lg mt-1"
+                  />
+                </div>
+
+                <div className="flex justify-between text-[11px] pt-1 border-t border-ink-800">
+                  <span className="text-fg-muted">Duration:</span>
+                  <span className="font-mono text-fg-faint">
+                    {formatDuration(selectedEffect.startTimeMs)} - {formatDuration(selectedEffect.startTimeMs + selectedEffect.durationMs)}
+                  </span>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => deleteEffect(selectedEffect.id)}
+                  className="w-full rounded-lg border border-danger/40 bg-danger/10 py-1.5 text-center text-[11px] font-semibold text-danger hover:bg-danger/20 transition-colors flex items-center justify-center gap-1.5"
+                >
+                  <Trash2 className="size-3" />
+                  Delete Effect
+                </button>
+              </div>
+            ) : (
+              <p className="text-[11px] text-fg-faint">
+                Select an effect on the timeline or click an effect preset above to add one.
+              </p>
+            )}
+
+            {/* List of active video effects */}
+            <div className="space-y-1.5">
+              <span className="text-[11px] font-semibold uppercase tracking-wider text-fg-faint">
+                Active Effects ({project?.effects?.length ?? 0})
+              </span>
+              {(!project?.effects || project.effects.length === 0) ? (
+                <div className="rounded-lg border border-ink-800 bg-ink-900/40 p-3 text-center text-[11px] text-fg-faint">
+                  No effects added yet. Click an effect above to add to timeline.
+                </div>
+              ) : (
+                project.effects.map((eff) => (
+                  <div
+                    key={eff.id}
+                    onClick={() => selectEffect(eff.id)}
+                    className={`flex items-center justify-between rounded-lg border p-2 cursor-pointer transition-colors ${
+                      selectedEffectId === eff.id
+                        ? "border-amber-400 bg-amber-500/15 text-amber-200 font-medium"
+                        : "border-ink-800 bg-ink-900/60 text-fg-muted hover:border-ink-700"
+                    }`}
+                  >
+                    <div className="flex items-center gap-2 min-w-0">
+                      <Wand2 className="size-3 shrink-0 text-amber-400" />
+                      <div className="truncate">
+                        <span className="font-semibold text-fg block text-xs truncate">{eff.name}</span>
+                        <span className="font-mono text-[10px] text-fg-faint">
+                          {formatDuration(eff.startTimeMs)} ({Math.round(eff.intensity * 100)}%)
+                        </span>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        deleteEffect(eff.id);
+                      }}
+                      className="rounded p-1 text-danger hover:bg-ink-800 transition-colors"
+                      title="Delete effect"
+                    >
+                      <Trash2 className="size-3.5" />
+                    </button>
+                  </div>
+                ))
+              )}
             </div>
           </div>
         )}

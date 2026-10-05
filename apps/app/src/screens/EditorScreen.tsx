@@ -39,6 +39,8 @@ export function EditorScreen({ id }: EditorScreenProps) {
     togglePlay,
     splitAtCurrentTime,
     deleteSelected,
+    addKeyframeAtCurrentTime,
+    addEffectAtCurrentTime,
     undo,
     redo,
   } = useEditor();
@@ -98,6 +100,12 @@ export function EditorScreen({ id }: EditorScreenProps) {
       } else if (e.code === "KeyS") {
         e.preventDefault();
         splitAtCurrentTime();
+      } else if (e.code === "KeyK") {
+        e.preventDefault();
+        addKeyframeAtCurrentTime();
+      } else if (e.code === "KeyE") {
+        e.preventDefault();
+        addEffectAtCurrentTime("spotlight");
       } else if (e.code === "Delete" || e.code === "Backspace") {
         e.preventDefault();
         deleteSelected();
@@ -116,7 +124,7 @@ export function EditorScreen({ id }: EditorScreenProps) {
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [togglePlay, splitAtCurrentTime, deleteSelected, undo, redo]);
+  }, [togglePlay, splitAtCurrentTime, deleteSelected, addKeyframeAtCurrentTime, addEffectAtCurrentTime, undo, redo]);
 
   if (!project) {
     return (

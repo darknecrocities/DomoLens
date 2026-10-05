@@ -116,6 +116,30 @@ export interface ProjectLooks {
   borderColor?: string;
 }
 
+/** Video effect types that can be placed on the timeline or attached to keyframes. */
+export type VideoEffectType =
+  | "spotlight"
+  | "vignette"
+  | "blur"
+  | "glow"
+  | "speed"
+  | "filter"
+  | "shake";
+
+/** A video effect block on the editor timeline. */
+export interface VideoEffect {
+  id: string;
+  name: string;
+  type: VideoEffectType;
+  startTimeMs: number;
+  durationMs: number;
+  intensity: number; // 0.0 to 1.0 (or speed multiplier e.g. 0.5 to 2.5)
+  targetX?: number; // Normalized X coordinate (0.0 to 1.0) for localized effects
+  targetY?: number; // Normalized Y coordinate (0.0 to 1.0)
+  preset?: string; // Optional styling preset (e.g. "cinematic", "noir", "cyberpunk")
+  enabled: boolean;
+}
+
 /** A discrete keyframe node on the timeline for zooming or camera positioning. */
 export interface KeyframeNode {
   id: string;
@@ -124,6 +148,8 @@ export interface KeyframeNode {
   targetX: number;
   targetY: number;
   easing: "spring" | "cubic" | "linear";
+  effect?: VideoEffectType;
+  effectIntensity?: number;
 }
 
 /** A text caption or graphic title on the timeline. */
@@ -196,6 +222,7 @@ export interface ProjectData {
   cursorTrajectory?: CursorTrajectoryPoint[];
   zoomBlocks: ZoomBlock[];
   keyframes?: KeyframeNode[];
+  effects?: VideoEffect[];
   textOverlays?: TextOverlay[];
   audioTracks?: AudioTrack[];
   audioSettings?: ProjectAudioSettings;
