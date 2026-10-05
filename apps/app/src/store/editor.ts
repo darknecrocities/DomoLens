@@ -434,13 +434,42 @@ export const useEditor = create<EditorState>((set, get) => ({
           }));
 
     let isFallback = false;
-    if (eventsToUse.length === 0) {
+    const isOldDummy =
+      eventsToUse.length === 2 &&
+      Boolean(eventsToUse[0]?.id?.startsWith("c-auto-")) &&
+      Boolean(eventsToUse[1]?.id?.startsWith("c-auto-"));
+
+    if (eventsToUse.length === 0 || isOldDummy) {
       isFallback = true;
       const dur = state.durationMs || 10000;
-      eventsToUse = [
-        { id: "c-auto-1", type: "click", timestampMs: Math.round(dur * 0.22), x: 0.38, y: 0.42, button: "left" },
-        { id: "c-auto-2", type: "click", timestampMs: Math.round(dur * 0.62), x: 0.62, y: 0.52, button: "left" },
+      const stepMs = Math.max(2800, Math.min(4500, Math.round(dur / 9)));
+      const focalPoints = [
+        { x: 0.50, y: 0.38, type: "typing" as const },
+        { x: 0.36, y: 0.44, type: "click" as const },
+        { x: 0.58, y: 0.46, type: "click" as const },
+        { x: 0.42, y: 0.54, type: "typing" as const },
+        { x: 0.62, y: 0.40, type: "click" as const },
+        { x: 0.38, y: 0.62, type: "click" as const },
+        { x: 0.52, y: 0.42, type: "typing" as const },
       ];
+      const autoEvents: InteractionEvent[] = [];
+      let fpIdx = 0;
+      for (let t = 2000; t < dur - 1200; t += stepMs) {
+        const fp = focalPoints[fpIdx % focalPoints.length]!;
+        fpIdx++;
+        autoEvents.push({
+          id: `act-auto-${t}`,
+          type: fp.type,
+          timestampMs: t,
+          x: fp.x,
+          y: fp.y,
+          button: "left",
+          ...(fp.type === "typing" ? { snippet: "Input", durationMs: 1200 } : {}),
+        });
+      }
+      if (autoEvents.length > 0) {
+        eventsToUse = autoEvents;
+      }
     }
 
     const { keyframes, zoomBlocks } = plotInteractionsToKeyframesAndZoomBlocks(

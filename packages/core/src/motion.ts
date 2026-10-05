@@ -284,8 +284,9 @@ export function detectActivityEventsFromFrames(
           activeTypingCluster.sampleCount++;
         } else {
           // Finalize previous typing cluster if one existed
-          if (activeTypingCluster && activeTypingCluster.sampleCount >= 3) {
+          if (activeTypingCluster && activeTypingCluster.sampleCount >= 2) {
             const typingId = `type-opt-${activeTypingCluster.startTimeMs}`;
+            const dur = Math.max(0, activeTypingCluster.endTimeMs - activeTypingCluster.startTimeMs);
             interactions.push({
               id: typingId,
               type: "typing",
@@ -293,6 +294,7 @@ export function detectActivityEventsFromFrames(
               x: activeTypingCluster.centerX,
               y: activeTypingCluster.centerY,
               snippet: "Activity Target",
+              durationMs: dur,
             });
             activeTypingCluster = null;
           }
@@ -303,8 +305,8 @@ export function detectActivityEventsFromFrames(
             Math.hypot(
               centroid.x - interactions[interactions.length - 1]!.x,
               centroid.y - interactions[interactions.length - 1]!.y,
-            ) < 0.05 &&
-            f.timestampMs - interactions[interactions.length - 1]!.timestampMs < 1500;
+            ) < 0.08 &&
+            f.timestampMs - interactions[interactions.length - 1]!.timestampMs < 1800;
 
           if (isNearPrevious) {
             activeTypingCluster = {
@@ -343,6 +345,7 @@ export function detectActivityEventsFromFrames(
   // Finalize any trailing typing cluster
   if (activeTypingCluster && activeTypingCluster.sampleCount >= 2) {
     const typingId = `type-opt-${activeTypingCluster.startTimeMs}`;
+    const dur = Math.max(0, activeTypingCluster.endTimeMs - activeTypingCluster.startTimeMs);
     interactions.push({
       id: typingId,
       type: "typing",
@@ -350,6 +353,7 @@ export function detectActivityEventsFromFrames(
       x: activeTypingCluster.centerX,
       y: activeTypingCluster.centerY,
       snippet: "Text Input",
+      durationMs: dur,
     });
   }
 

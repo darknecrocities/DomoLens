@@ -66,6 +66,7 @@ export const SHADOW_PRESETS: Array<{ id: ProjectLooks["shadow"]; name: string; c
 ];
 
 export const CURSOR_PRESETS: Array<{ id: ProjectLooks["cursorStyle"]; name: string }> = [
+  { id: "hidden", name: "Hidden (Native Video)" },
   { id: "default", name: "Default Pointer" },
   { id: "mac", name: "macOS Arrow" },
   { id: "dot", name: "Minimal Dot" },

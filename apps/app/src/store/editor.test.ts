@@ -261,4 +261,36 @@ describe("useEditor store", () => {
     expect(useEditor.getState().project?.effects?.length).toBe(0);
     expect(useEditor.getState().selectedEffectId).toBeNull();
   });
+
+  it("plotInteractions generates comprehensive multi-zoom coverage across long videos when no raw clicks exist", async () => {
+    await useEditor.getState().loadProject("proj-test");
+    // Set 41-second duration with old 2 dummy clicks
+    useEditor.setState((s) => ({
+      durationMs: 41000,
+      project: s.project ? {
+        ...s.project,
+        clicks: [
+          { id: "c-auto-1", timestampMs: 9000, x: 0.38, y: 0.42, button: "left" },
+          { id: "c-auto-2", timestampMs: 25000, x: 0.62, y: 0.52, button: "left" },
+        ],
+        interactions: [
+          { id: "c-auto-1", type: "click", timestampMs: 9000, x: 0.38, y: 0.42, button: "left" },
+          { id: "c-auto-2", type: "click", timestampMs: 25000, x: 0.62, y: 0.52, button: "left" },
+        ],
+      } : null,
+    }));
+
+    useEditor.getState().plotInteractions();
+    const state = useEditor.getState();
+    // Must generate many zooms across the 41-second recording, far more than 2
+    expect(state.project?.zoomBlocks.length).toBeGreaterThanOrEqual(6);
+    expect(state.project?.keyframes?.length).toBeGreaterThanOrEqual(15);
+  });
+
+  it("DEFAULT_LOOKS hides cursor overlay by default to preserve native recording", async () => {
+    await useEditor.getState().loadProject("proj-test");
+    const looks = useEditor.getState().project?.looks;
+    expect(looks?.cursorStyle).toBe("hidden");
+    expect(looks?.showCursor).toBe(false);
+  });
 });

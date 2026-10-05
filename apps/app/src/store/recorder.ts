@@ -268,7 +268,7 @@ export const useRecorder = create<RecorderStore>((set, get) => ({
             if (inter.type === "click") {
               get().recordClick(inter.x, inter.y, inter.button || "left");
             } else {
-              get().recordTyping(inter.x, inter.y, inter.snippet || "Type");
+              get().recordTyping(inter.x, inter.y, inter.snippet || "Type", inter.id);
             }
           },
         });
@@ -435,11 +435,39 @@ export const useRecorder = create<RecorderStore>((set, get) => ({
     }
 
     if (finalClicks.length === 0 && duration >= 3000) {
-      finalClicks = [
+      const stepMs = Math.max(2800, Math.min(4500, Math.round(duration / 9)));
+      const focalPoints = [
+        { x: 0.50, y: 0.38, type: "typing" as const },
+        { x: 0.36, y: 0.44, type: "click" as const },
+        { x: 0.58, y: 0.46, type: "click" as const },
+        { x: 0.42, y: 0.54, type: "typing" as const },
+        { x: 0.62, y: 0.40, type: "click" as const },
+        { x: 0.38, y: 0.62, type: "click" as const },
+        { x: 0.52, y: 0.42, type: "typing" as const },
+      ];
+      const autoEvents: InteractionEvent[] = [];
+      const autoClicks: ClickEvent[] = [];
+      let fpIdx = 0;
+      for (let t = 2000; t < duration - 1200; t += stepMs) {
+        const fp = focalPoints[fpIdx % focalPoints.length]!;
+        fpIdx++;
+        const id = `act-auto-${t}`;
+        autoClicks.push({ id, timestampMs: t, x: fp.x, y: fp.y, button: "left" });
+        autoEvents.push({
+          id,
+          type: fp.type,
+          timestampMs: t,
+          x: fp.x,
+          y: fp.y,
+          button: "left",
+          ...(fp.type === "typing" ? { snippet: "Input", durationMs: 1200 } : {}),
+        });
+      }
+      finalClicks = autoClicks.length > 0 ? autoClicks : [
         { id: "c-auto-1", timestampMs: Math.round(duration * 0.22), x: 0.38, y: 0.42, button: "left" },
         { id: "c-auto-2", timestampMs: Math.round(duration * 0.62), x: 0.62, y: 0.52, button: "left" },
       ];
-      finalInteractions = [
+      finalInteractions = autoEvents.length > 0 ? autoEvents : [
         { id: "c-auto-1", type: "click", timestampMs: Math.round(duration * 0.22), x: 0.38, y: 0.42, button: "left" },
         { id: "c-auto-2", type: "click", timestampMs: Math.round(duration * 0.62), x: 0.62, y: 0.52, button: "left" },
       ];

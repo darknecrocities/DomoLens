@@ -37,17 +37,20 @@ export function createLiveStreamMotionTracker(
     return () => {};
   }
 
-  const sampleIntervalMs = options.sampleIntervalMs ?? 120;
+  const sampleIntervalMs = options.sampleIntervalMs ?? 75;
   const width = options.width ?? 160;
   const height = options.height ?? 90;
-  const threshold = options.differenceThreshold ?? 16;
-  const minEnergy = options.minEnergyThreshold ?? 70;
-  const maxSpread = options.maxSpreadThreshold ?? 0.12;
+  const threshold = options.differenceThreshold ?? 12;
+  const minEnergy = options.minEnergyThreshold ?? 20;
+  const maxSpread = options.maxSpreadThreshold ?? 0.16;
 
   const video = document.createElement("video");
   video.muted = true;
   video.autoplay = true;
   video.playsInline = true;
+  video.style.cssText =
+    "position:fixed;top:-9999px;left:-9999px;width:160px;height:90px;opacity:0.001;pointer-events:none;z-index:-9999;";
+  document.body.appendChild(video);
   video.srcObject = stream;
 
   const canvas = document.createElement("canvas");
@@ -60,12 +63,14 @@ export function createLiveStreamMotionTracker(
   let isRunning = true;
   let lastTypingTime = 0;
   let activeTypingId: string | null = null;
+  let lastX = 0.5;
+  let lastY = 0.5;
 
   const startTracking = () => {
     if (!isRunning || timer) return;
 
     timer = setInterval(() => {
-      if (!ctx || video.readyState < 2) return;
+      if (!ctx || (video.readyState < 1 && video.videoWidth === 0)) return;
 
       try {
         ctx.drawImage(video, 0, 0, width, height);
@@ -96,8 +101,12 @@ export function createLiveStreamMotionTracker(
           const kind = classifyFrameActivity(diff.motionEnergy, centroid.spread, minEnergy, maxSpread);
 
           if (callbacks.onInteraction && kind === "click") {
-            const isTypingSequence = now - lastTypingTime < 1800;
+            const isTypingSequence =
+              now - lastTypingTime < 1800 &&
+              Math.hypot(centroid.x - lastX, centroid.y - lastY) < 0.16;
             lastTypingTime = now;
+            lastX = centroid.x;
+            lastY = centroid.y;
 
             if (isTypingSequence && activeTypingId) {
               callbacks.onInteraction({
@@ -127,9 +136,7 @@ export function createLiveStreamMotionTracker(
     }, sampleIntervalMs);
   };
 
-  video.onloadeddata = () => {
-    void video.play().then(startTracking).catch(() => {});
-  };
+  void video.play().then(startTracking).catch(startTracking);
 
   return () => {
     isRunning = false;
@@ -138,7 +145,9 @@ export function createLiveStreamMotionTracker(
       timer = null;
     }
     video.srcObject = null;
-    video.remove();
+    if (video.parentNode) {
+      video.parentNode.removeChild(video);
+    }
     canvas.remove();
   };
 }
@@ -170,7 +179,7 @@ export async function scanVideoElementForActivity(
   }
 
   const maxDurationMs = options.maxDurationMs ?? Math.round(durationSec * 1000);
-  const sampleStepMs = options.sampleStepMs ?? 160;
+  const sampleStepMs = options.sampleStepMs ?? 250;
   const canvasWidth = options.canvasWidth ?? 160;
   const canvasHeight = options.canvasHeight ?? 90;
 
@@ -190,7 +199,7 @@ export async function scanVideoElementForActivity(
   }> = [];
 
   const originalTime = video.currentTime;
-  const totalSamples = Math.min(100, Math.floor(maxDurationMs / sampleStepMs));
+  const totalSamples = Math.min(150, Math.floor(maxDurationMs / sampleStepMs));
 
   try {
     for (let i = 0; i < totalSamples; i++) {
@@ -198,12 +207,22 @@ export async function scanVideoElementForActivity(
       const targetSec = timeMs / 1000;
 
       await new Promise<void>((resolve) => {
-        const onSeeked = () => {
+        let finished = false;
+        const cleanup = () => {
+          if (finished) return;
+          finished = true;
           video.removeEventListener("seeked", onSeeked);
+          clearTimeout(timeoutId);
           resolve();
         };
+        const onSeeked = () => cleanup();
+        const timeoutId = setTimeout(cleanup, 75);
         video.addEventListener("seeked", onSeeked, { once: true });
-        video.currentTime = targetSec;
+        try {
+          video.currentTime = targetSec;
+        } catch {
+          cleanup();
+        }
       });
 
       ctx.drawImage(video, 0, 0, canvasWidth, canvasHeight);
@@ -216,9 +235,18 @@ export async function scanVideoElementForActivity(
       });
     }
   } finally {
-    video.currentTime = originalTime;
+    try {
+      video.currentTime = originalTime;
+    } catch {
+      // ignore
+    }
     canvas.remove();
   }
 
-  return detectActivityEventsFromFrames(frames, canvasWidth, canvasHeight, options);
+  return detectActivityEventsFromFrames(frames, canvasWidth, canvasHeight, {
+    differenceThreshold: 12,
+    minEnergyThreshold: 20,
+    maxSpreadThreshold: 0.16,
+    ...options,
+  });
 }

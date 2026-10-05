@@ -110,7 +110,9 @@ export interface ProjectLooks {
   /** Shadow preset. */
   shadow: "none" | "soft" | "lift" | "glow";
   /** Cursor style to render. */
-  cursorStyle: "default" | "mac" | "dot" | "ring";
+  cursorStyle: "default" | "mac" | "dot" | "ring" | "hidden";
+  /** Show artificial cursor pointer overlay (defaults to false). */
+  showCursor?: boolean;
   /** Show expanding ripple effect on clicks. */
   showClickRipples: boolean;
   /** Inset border color. */
@@ -251,7 +253,8 @@ export const DEFAULT_LOOKS: ProjectLooks = {
   padding: 32,
   borderRadius: 16,
   shadow: "lift",
-  cursorStyle: "mac",
+  cursorStyle: "hidden",
+  showCursor: false,
   showClickRipples: true,
   cursorSize: 1.4,
   cursorSmoothing: "smooth",

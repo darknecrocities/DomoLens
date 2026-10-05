@@ -1325,6 +1325,7 @@ export function ToolsSidebar() {
               <label className="text-[11px] text-fg-muted block">Cursor Pointer Style</label>
               <div className="grid grid-cols-2 gap-2">
                 {[
+                  { id: "hidden", label: "Hidden (Native)" },
                   { id: "mac", label: "Mac Studio" },
                   { id: "default", label: "Default OS" },
                   { id: "dot", label: "Focus Dot" },

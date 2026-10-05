@@ -389,46 +389,48 @@ export function VideoCanvas({ project, currentTimeMs: propTimeMs }: VideoCanvasP
             </div>
           )}
 
-          {/* Real-Time Tracked Mouse Cursor Pointer: zero latency */}
-          <div
-            className="pointer-events-none absolute will-change-transform z-30"
-            style={{
-              left: `${camera.cursorX * 100}%`,
-              top: `${camera.cursorY * 100}%`,
-              transform: `translate3d(-50%, -50%, 0) scale(${looks.cursorSize || 1.4})`,
-            }}
-          >
-            {looks.cursorStyle === "dot" ? (
-              <div className="size-3.5 rounded-full bg-white shadow-sm ring-1 ring-black/40" />
-            ) : looks.cursorStyle === "ring" ? (
-              <div className="size-6 rounded-full border-2 border-white bg-white/10 shadow-sm" />
-            ) : looks.cursorStyle === "default" ? (
-              <svg
-                className="size-5.5 fill-white stroke-black stroke-[1.5] drop-shadow-md"
-                viewBox="0 0 24 24"
-              >
-                <path d="M4 2l12 12-5.5 1 4.5 7-3 1.5-4.5-7L4 20V2z" />
-              </svg>
-            ) : (
-              /* Mac / OpenScreen Studio Pointer */
-              <svg
-                className="size-6 fill-white stroke-neutral-900 stroke-[1.2] drop-shadow-md"
-                viewBox="0 0 24 24"
-              >
-                <path d="M5.5 3.21a.5.5 0 0 1 .86-.29l12.43 12.06a.5.5 0 0 1-.36.85l-5.63.14-2.48 5.75a.5.5 0 0 1-.92-.04l-2.02-4.68-4.22 3.86a.5.5 0 0 1-.84-.37V3.21z" />
-              </svg>
-            )}
+          {/* Optional Tracked Mouse Cursor Pointer Overlay (Hidden by default to keep native video recording clean) */}
+          {looks.showCursor && looks.cursorStyle !== "hidden" && (
+            <div
+              className="pointer-events-none absolute will-change-transform z-30"
+              style={{
+                left: `${camera.cursorX * 100}%`,
+                top: `${camera.cursorY * 100}%`,
+                transform: `translate3d(-50%, -50%, 0) scale(${looks.cursorSize || 1.4})`,
+              }}
+            >
+              {looks.cursorStyle === "dot" ? (
+                <div className="size-3.5 rounded-full bg-white shadow-sm ring-1 ring-black/40" />
+              ) : looks.cursorStyle === "ring" ? (
+                <div className="size-6 rounded-full border-2 border-white bg-white/10 shadow-sm" />
+              ) : looks.cursorStyle === "default" ? (
+                <svg
+                  className="size-5.5 fill-white stroke-black stroke-[1.5] drop-shadow-md"
+                  viewBox="0 0 24 24"
+                >
+                  <path d="M4 2l12 12-5.5 1 4.5 7-3 1.5-4.5-7L4 20V2z" />
+                </svg>
+              ) : (
+                /* Mac / OpenScreen Studio Pointer */
+                <svg
+                  className="size-6 fill-white stroke-neutral-900 stroke-[1.2] drop-shadow-md"
+                  viewBox="0 0 24 24"
+                >
+                  <path d="M5.5 3.21a.5.5 0 0 1 .86-.29l12.43 12.06a.5.5 0 0 1-.36.85l-5.63.14-2.48 5.75a.5.5 0 0 1-.92-.04l-2.02-4.68-4.22 3.86a.5.5 0 0 1-.84-.37V3.21z" />
+                </svg>
+              )}
 
-            {/* Glowing Focus Reticle when camera is actively tracking during zoom */}
-            {camera.isZoomed && (
-              <div className="absolute -inset-3 rounded-full border border-white/50 animate-ping pointer-events-none" />
-            )}
+              {/* Glowing Focus Reticle when camera is actively tracking during zoom */}
+              {camera.isZoomed && (
+                <div className="absolute -inset-3 rounded-full border border-white/50 animate-ping pointer-events-none" />
+              )}
 
-            {/* Dynamic Cursor Glow Effect */}
-            {effectsState.glow && (
-              <div className="absolute -inset-4 rounded-full border border-cyan-400 bg-cyan-400/20 animate-pulse pointer-events-none shadow-[0_0_20px_rgba(34,211,238,0.7)]" />
-            )}
-          </div>
+              {/* Dynamic Cursor Glow Effect */}
+              {effectsState.glow && (
+                <div className="absolute -inset-4 rounded-full border border-cyan-400 bg-cyan-400/20 animate-pulse pointer-events-none shadow-[0_0_20px_rgba(34,211,238,0.7)]" />
+              )}
+            </div>
+          )}
         </div>
 
         {/* Dynamic Vignette Effect Overlay */}
