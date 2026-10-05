@@ -1,7 +1,11 @@
 import { useRef } from "react";
 import {
+  Diamond,
+  Film,
+  Keyboard,
   Maximize2,
   Minimize2,
+  MousePointer,
   Music,
   Pause,
   Play,
@@ -14,10 +18,7 @@ import {
   Undo2,
   Volume2,
   VolumeX,
-  Diamond,
   Wand2,
-  Keyboard,
-  MousePointer,
 } from "lucide-react";
 import { formatDuration, type ProjectData } from "@domolens/core";
 import { copy } from "../../copy/en";
@@ -289,19 +290,68 @@ export function Timeline({ project }: TimelineProps) {
       </div>
 
       {/* 2. Visual Tracks Container */}
-      <div className="relative px-3 sm:px-4 py-3">
+      <div className="relative px-3 sm:px-4 py-3 flex gap-2 sm:gap-3 items-stretch">
+        {/* Left Track Headers Sidebar Column */}
+        <div className="flex flex-col gap-1.5 shrink-0 w-24 sm:w-28 md:w-32 select-none py-2 pr-1 sm:pr-2 border-r border-ink-800/70">
+          {/* TRACK 1: KEYFRAMES HEADER */}
+          <div className="h-7 flex items-center gap-1.5 px-2 rounded-md bg-ink-900/60 text-[10px] font-semibold uppercase tracking-wider text-fg-muted">
+            <Diamond className="size-3 text-neutral-300 fill-neutral-300 shrink-0" />
+            <span className="truncate">Keyframes</span>
+          </div>
+
+          {/* TRACK 2: ZOOM BLOCKS HEADER */}
+          <div className="h-9 flex items-center gap-1.5 px-2 rounded-lg bg-ink-900/60 text-[10px] font-semibold uppercase tracking-wider text-fg-muted">
+            <Sparkles className="size-3 text-neutral-300 shrink-0" />
+            <span className="truncate">{copy.editor.autoZoomTrack}</span>
+          </div>
+
+          {/* TRACK: VIDEO EFFECTS HEADER */}
+          {project.effects && project.effects.length > 0 && (
+            <div className="h-8 flex items-center gap-1.5 px-2 rounded-lg bg-ink-900/60 text-[10px] font-semibold uppercase tracking-wider text-amber-300/80">
+              <Wand2 className="size-3 text-amber-400 shrink-0" />
+              <span className="truncate">Effects</span>
+            </div>
+          )}
+
+          {/* TRACK 3: VIDEO CLIPS HEADER */}
+          <div className="h-11 flex items-center gap-1.5 px-2 rounded-lg bg-ink-900/60 text-[10px] font-semibold uppercase tracking-wider text-fg-muted">
+            <Film className="size-3 text-neutral-300 shrink-0" />
+            <span className="truncate">{copy.editor.videoTrack}</span>
+          </div>
+
+          {/* TRACK 4: TEXT OVERLAYS TRACK HEADER */}
+          {project.textOverlays && project.textOverlays.length > 0 && (
+            <div className="h-7 flex items-center gap-1.5 px-2 rounded-md bg-ink-900/60 text-[10px] font-semibold uppercase tracking-wider text-purple-300/80">
+              <Type className="size-3 text-purple-400 shrink-0" />
+              <span className="truncate">Captions</span>
+            </div>
+          )}
+
+          {/* TRACK 5: AUDIO TRACK HEADER */}
+          {project.audioTracks && project.audioTracks.length > 0 && (
+            <div className="h-7 flex items-center gap-1.5 px-2 rounded-md bg-ink-900/60 text-[10px] font-semibold uppercase tracking-wider text-emerald-300/80">
+              <Music className="size-3 text-emerald-400 shrink-0" />
+              <span className="truncate">Music & SFX</span>
+            </div>
+          )}
+
+          {/* TRACK 6: MARKERS HEADER */}
+          <div className="h-3 flex items-center gap-1 px-2 text-[9px] font-semibold uppercase tracking-wider text-fg-faint">
+            <MousePointer className="size-2.5 text-neutral-500 shrink-0" />
+            <span className="truncate">Events</span>
+          </div>
+        </div>
+
+        {/* Right Scrubber and Lanes Container */}
         <div
           ref={trackContainerRef}
           onPointerDown={handlePointerDown}
           onPointerMove={handlePointerMove}
           onPointerUp={handlePointerUp}
-          className="relative flex flex-col gap-1.5 rounded-xl bg-ink-950 p-2 cursor-pointer shadow-inner touch-none"
+          className="relative flex-1 min-w-0 flex flex-col gap-1.5 rounded-xl bg-ink-950 p-2 cursor-pointer shadow-inner touch-none"
         >
           {/* TRACK 1: KEYFRAMES TRACK (Diamond Nodes) */}
           <div className="relative h-7 rounded-md bg-ink-900/90 border border-ink-800/80 flex items-center">
-            <span className="absolute left-2 text-[9px] font-semibold uppercase tracking-wider text-fg-faint pointer-events-none z-10">
-              Keyframes
-            </span>
 
             {project.keyframes &&
               project.keyframes.map((kf, idx) => {
@@ -380,10 +430,6 @@ export function Timeline({ project }: TimelineProps) {
 
           {/* TRACK 2: ZOOM BLOCKS TRACK */}
           <div className="relative h-9 rounded-lg bg-ink-900 border border-ink-800/80 overflow-hidden">
-            <span className="absolute left-2 top-1.5 text-[10px] font-semibold uppercase tracking-wider text-fg-faint pointer-events-none">
-              {copy.editor.autoZoomTrack}
-            </span>
-
             {project.zoomBlocks.map((block) => {
               const left = getPositionPercent(block.startTimeMs);
               const width = Math.max(2, getPositionPercent(block.endTimeMs) - left);
@@ -497,10 +543,6 @@ export function Timeline({ project }: TimelineProps) {
           {/* TRACK: VIDEO EFFECTS */}
           {project.effects && project.effects.length > 0 && (
             <div className="relative h-8 rounded-lg bg-ink-900 border border-ink-800/80 overflow-hidden">
-              <span className="absolute left-2 top-1.5 text-[9px] font-semibold uppercase tracking-wider text-fg-faint pointer-events-none">
-                Effects
-              </span>
-
               {project.effects.map((eff) => {
                 const left = getPositionPercent(eff.startTimeMs);
                 const width = Math.max(3, getPositionPercent(eff.startTimeMs + eff.durationMs) - left);
@@ -647,10 +689,6 @@ export function Timeline({ project }: TimelineProps) {
 
           {/* TRACK 3: VIDEO CLIPS */}
           <div className="relative h-11 rounded-lg bg-ink-900 border border-ink-800/80 overflow-hidden">
-            <span className="absolute left-2 top-1.5 text-[10px] font-semibold uppercase tracking-wider text-fg-faint pointer-events-none">
-              {copy.editor.videoTrack}
-            </span>
-
             {project.clips.map((clip) => {
               const left = getPositionPercent(clip.timelineStartMs);
               const width = Math.max(2, getPositionPercent(clip.timelineStartMs + clip.durationMs) - left);
@@ -673,8 +711,8 @@ export function Timeline({ project }: TimelineProps) {
                     width: `${width}%`,
                   }}
                 >
-                  <span className="truncate font-medium text-fg">{clip.name}</span>
-                  <div className="flex items-center gap-1.5 opacity-70">
+                  <span className="truncate font-medium text-fg min-w-0 mr-2">{clip.name}</span>
+                  <div className="flex items-center gap-1.5 opacity-70 shrink-0">
                     {clip.muted ? <VolumeX className="size-3" /> : <Volume2 className="size-3" />}
                     <span className="font-mono text-[10px]">{formatDuration(clip.durationMs)}</span>
                   </div>
@@ -686,10 +724,6 @@ export function Timeline({ project }: TimelineProps) {
           {/* TRACK 4: TEXT OVERLAYS TRACK */}
           {project.textOverlays && project.textOverlays.length > 0 && (
             <div className="relative h-7 rounded-md bg-ink-900/80 border border-ink-800/70 overflow-hidden">
-              <span className="absolute left-2 text-[9px] font-semibold uppercase tracking-wider text-fg-faint pointer-events-none">
-                Captions
-              </span>
-
               {project.textOverlays.map((t) => {
                 const left = getPositionPercent(t.startTimeMs);
                 const width = Math.max(3, getPositionPercent(t.startTimeMs + t.durationMs) - left);
@@ -720,10 +754,6 @@ export function Timeline({ project }: TimelineProps) {
           {/* TRACK 5: AUDIO TRACK */}
           {project.audioTracks && project.audioTracks.length > 0 && (
             <div className="relative h-7 rounded-md bg-ink-900/80 border border-ink-800/70 overflow-hidden">
-              <span className="absolute left-2 text-[9px] font-semibold uppercase tracking-wider text-fg-faint pointer-events-none">
-                Music & SFX
-              </span>
-
               {project.audioTracks.map((a) => {
                 const left = getPositionPercent(a.startTimeMs);
                 const width = Math.max(3, getPositionPercent(a.startTimeMs + a.durationMs) - left);

@@ -319,7 +319,7 @@ export const useEditor = create<EditorState>((set, get) => ({
           startTimeMs: 300,
           durationMs: 2800,
           x: 0.5,
-          y: 0.12,
+          y: 0.85,
           fontSize: 20,
           color: "#ffffff",
           bgColor: "rgba(15, 17, 23, 0.85)",
