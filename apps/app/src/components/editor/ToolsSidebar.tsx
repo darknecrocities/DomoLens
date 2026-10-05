@@ -31,9 +31,11 @@ export function ToolsSidebar() {
     plotInteractions,
     updateZoomBlock,
     deleteZoomBlock,
+    clearZoomBlocks,
     addKeyframeAtCurrentTime,
     updateKeyframe,
     deleteKeyframe,
+    clearKeyframes,
     addTextOverlay,
     updateTextOverlay,
     deleteTextOverlay,
@@ -125,9 +127,21 @@ export function ToolsSidebar() {
           <div className="space-y-4">
             {/* Auto-Plot Master Button */}
             <div className="rounded-xl border border-neutral-700 bg-neutral-900 p-3 shadow-sm">
-              <div className="flex items-center gap-2 mb-1.5">
-                <Sparkles className="size-4 text-white" />
-                <span className="font-semibold text-white text-xs">Auto-Zoom Generator</span>
+              <div className="flex items-center justify-between mb-1.5">
+                <div className="flex items-center gap-2">
+                  <Sparkles className="size-4 text-white" />
+                  <span className="font-semibold text-white text-xs">Auto-Zoom Generator</span>
+                </div>
+                {(project?.zoomBlocks?.length ?? 0) > 0 && (
+                  <button
+                    type="button"
+                    onClick={clearZoomBlocks}
+                    className="text-[10px] text-danger hover:underline font-medium"
+                    title="Clear all zoom blocks"
+                  >
+                    Clear Zooms
+                  </button>
+                )}
               </div>
               <p className="text-[11px] text-fg-muted leading-relaxed mb-3">
                 Translates every recorded mouse click and typing action into an iterative camera zoom that tracks the target, holds 2-3s, and returns to full screen.
@@ -184,13 +198,25 @@ export function ToolsSidebar() {
                 <span className="text-[11px] font-semibold uppercase tracking-wider text-fg-faint">
                   Keyframes ({project?.keyframes?.length ?? 0})
                 </span>
-                <button
-                  type="button"
-                  onClick={() => addKeyframeAtCurrentTime(zoomScale)}
-                  className="flex items-center gap-1 text-[11px] font-medium text-white hover:text-neutral-300"
-                >
-                  <Plus className="size-3" /> Add at {formatDuration(currentTimeMs)}
-                </button>
+                <div className="flex items-center gap-2">
+                  {(project?.keyframes?.length ?? 0) > 0 && (
+                    <button
+                      type="button"
+                      onClick={clearKeyframes}
+                      className="text-[10px] text-danger hover:underline font-medium"
+                      title="Clear all keyframes"
+                    >
+                      Clear All
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => addKeyframeAtCurrentTime(zoomScale)}
+                    className="flex items-center gap-1 text-[11px] font-medium text-white hover:text-neutral-300"
+                  >
+                    <Plus className="size-3" /> Add at {formatDuration(currentTimeMs)}
+                  </button>
+                </div>
               </div>
 
               {selectedBlock && (

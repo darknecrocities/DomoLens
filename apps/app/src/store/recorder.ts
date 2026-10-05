@@ -48,6 +48,7 @@ let recordingStartTimestamp = 0;
 let mediaRecorderInstance: MediaRecorder | null = null;
 let recordedChunks: Blob[] = [];
 let activeStream: MediaStream | null = null;
+let recorderCleanupFn: (() => void) | null = null;
 
 export const useRecorder = create<RecorderStore>((set, get) => ({
   state: "idle",
@@ -249,6 +250,12 @@ export const useRecorder = create<RecorderStore>((set, get) => ({
 
     const handleClick = (e: MouseEvent) => {
       if (get().state === "recording") {
+        // Ignore clicks inside the DomoLens recorder HUD/action controls
+        const target = e.target as HTMLElement | null;
+        if (target && target.closest("[data-recorder-ui]")) {
+          return;
+        }
+
         const x = e.clientX / window.innerWidth;
         const y = e.clientY / window.innerHeight;
         lastX = x;
@@ -268,6 +275,15 @@ export const useRecorder = create<RecorderStore>((set, get) => ({
         get().recordTyping(lastX, lastY, e.key);
       }
     };
+
+    const cleanupListeners = () => {
+      window.removeEventListener("mousemove", handlePointerMove);
+      window.removeEventListener("mousedown", handleClick);
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+
+    // Store cleanup for stop / cancel
+    recorderCleanupFn = cleanupListeners;
 
     window.addEventListener("mousemove", handlePointerMove, { passive: true });
     window.addEventListener("mousedown", handleClick);
@@ -299,6 +315,11 @@ export const useRecorder = create<RecorderStore>((set, get) => ({
     if (elapsedTimer) clearInterval(elapsedTimer);
     elapsedTimer = null;
 
+    if (recorderCleanupFn) {
+      recorderCleanupFn();
+      recorderCleanupFn = null;
+    }
+
     if (mediaRecorderInstance && mediaRecorderInstance.state !== "inactive") {
       try {
         mediaRecorderInstance.stop();
@@ -312,10 +333,27 @@ export const useRecorder = create<RecorderStore>((set, get) => ({
       activeStream = null;
     }
 
-    const duration = get().elapsedMs;
-    const finalClicks = [...get().clicks];
-    const finalInteractions = [...get().interactions];
+    const duration = Math.max(1000, get().elapsedMs);
+    // Filter out clicks that happened within the last 500ms of recording (stop artifacts)
+    const cutoffTime = Math.max(0, duration - 500);
+    const rawClicks = get().clicks.filter((c) => c.timestampMs <= cutoffTime);
+    const rawInteractions = get().interactions.filter((i) => i.timestampMs <= cutoffTime);
     set({ state: "idle" });
+
+    // If no clicks occurred during recording (e.g. desktop recording outside browser DOM),
+    // provide smart fallback focal zooms so the editor has clean auto-zooms ready to use
+    let finalClicks = rawClicks;
+    let finalInteractions = rawInteractions;
+    if (finalClicks.length === 0 && duration >= 3000) {
+      finalClicks = [
+        { id: "c-auto-1", timestampMs: Math.round(duration * 0.22), x: 0.38, y: 0.42, button: "left" },
+        { id: "c-auto-2", timestampMs: Math.round(duration * 0.62), x: 0.62, y: 0.52, button: "left" },
+      ];
+      finalInteractions = [
+        { id: "c-auto-1", type: "click", timestampMs: Math.round(duration * 0.22), x: 0.38, y: 0.42, button: "left" },
+        { id: "c-auto-2", type: "click", timestampMs: Math.round(duration * 0.62), x: 0.62, y: 0.52, button: "left" },
+      ];
+    }
 
     // Create a video Blob URL
     let mediaUrl: string;
@@ -338,8 +376,8 @@ export const useRecorder = create<RecorderStore>((set, get) => ({
             y: c.y,
             button: c.button,
           })),
-      Math.max(1000, duration),
-      { holdDurationMs: 2400, scale: 1.85 },
+      duration,
+      { holdDurationMs: 2400, scale: 1.85, fallbackIfEmpty: true },
     );
 
     // Create the project in the projects store
@@ -408,6 +446,10 @@ export const useRecorder = create<RecorderStore>((set, get) => ({
   cancelRecording: () => {
     if (countdownTimer) clearInterval(countdownTimer);
     if (elapsedTimer) clearInterval(elapsedTimer);
+    if (recorderCleanupFn) {
+      recorderCleanupFn();
+      recorderCleanupFn = null;
+    }
     if (activeStream) {
       activeStream.getTracks().forEach((t) => t.stop());
       activeStream = null;

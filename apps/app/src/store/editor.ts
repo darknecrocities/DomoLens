@@ -87,12 +87,14 @@ interface EditorState {
   updateZoomBlock: (id: string, updates: Partial<ZoomBlock>) => void;
   toggleZoomBlock: (id: string) => void;
   deleteZoomBlock: (id: string) => void;
+  clearZoomBlocks: () => void;
   addZoomBlockAtCurrentTime: () => void;
 
   // Keyframes
   addKeyframeAtCurrentTime: (scale?: number, targetX?: number, targetY?: number) => void;
   updateKeyframe: (id: string, updates: Partial<KeyframeNode>) => void;
   deleteKeyframe: (id: string) => void;
+  clearKeyframes: () => void;
 
   // Text Overlays
   addTextOverlay: (text?: string) => void;
@@ -342,10 +344,15 @@ export const useEditor = create<EditorState>((set, get) => ({
     const interactions = state.project.interactions ?? [];
     const clicks = state.project.clicks ?? [];
 
-    const eventsToUse: InteractionEvent[] =
-      interactions.length > 0
-        ? interactions
-        : clicks.map((c) => ({
+    // Filter out clicks or interactions that are within 400ms of recording end (stop artifacts)
+    const cutoff = Math.max(0, state.durationMs - 400);
+    const validInteractions = interactions.filter((i) => i.timestampMs <= cutoff);
+    const validClicks = clicks.filter((c) => c.timestampMs <= cutoff);
+
+    let eventsToUse: InteractionEvent[] =
+      validInteractions.length > 0
+        ? validInteractions
+        : validClicks.map((c) => ({
             id: c.id,
             type: "click" as const,
             timestampMs: c.timestampMs,
@@ -354,9 +361,14 @@ export const useEditor = create<EditorState>((set, get) => ({
             button: c.button,
           }));
 
+    let isFallback = false;
     if (eventsToUse.length === 0) {
-      toast.info("No clicks or typing recorded yet. Try clicking in the preview!");
-      return;
+      isFallback = true;
+      const dur = state.durationMs || 10000;
+      eventsToUse = [
+        { id: "c-auto-1", type: "click", timestampMs: Math.round(dur * 0.22), x: 0.38, y: 0.42, button: "left" },
+        { id: "c-auto-2", type: "click", timestampMs: Math.round(dur * 0.62), x: 0.62, y: 0.52, button: "left" },
+      ];
     }
 
     const { keyframes, zoomBlocks } = plotInteractionsToKeyframesAndZoomBlocks(
@@ -369,12 +381,20 @@ export const useEditor = create<EditorState>((set, get) => ({
       ...pushHistory(state),
       project: {
         ...state.project,
+        clicks: isFallback
+          ? eventsToUse.map((e) => ({ id: e.id, timestampMs: e.timestampMs, x: e.x, y: e.y, button: "left" as const }))
+          : state.project.clicks,
+        interactions: isFallback ? eventsToUse : state.project.interactions,
         keyframes,
         zoomBlocks,
       },
       selectedBlockId: zoomBlocks[0]?.id ?? null,
     });
-    toast.success(`Plotted ${zoomBlocks.length} zooms and ${keyframes.length} keyframes!`);
+    toast.success(
+      isFallback
+        ? `Auto-generated ${zoomBlocks.length} zooms and ${keyframes.length} keyframes across timeline!`
+        : `Plotted ${zoomBlocks.length} zooms and ${keyframes.length} keyframes!`,
+    );
   },
 
   updateZoomBlock: (id, updates) => {
@@ -413,6 +433,20 @@ export const useEditor = create<EditorState>((set, get) => ({
       selectedBlockId: null,
     });
     toast.info("Zoom block removed.");
+  },
+
+  clearZoomBlocks: () => {
+    const state = get();
+    if (!state.project) return;
+    set({
+      ...pushHistory(state),
+      project: {
+        ...state.project,
+        zoomBlocks: [],
+      },
+      selectedBlockId: null,
+    });
+    toast.info("Cleared all zoom blocks.");
   },
 
   addZoomBlockAtCurrentTime: () => {
@@ -487,6 +521,20 @@ export const useEditor = create<EditorState>((set, get) => ({
       selectedKeyframeId: null,
     });
     toast.info("Keyframe deleted.");
+  },
+
+  clearKeyframes: () => {
+    const state = get();
+    if (!state.project) return;
+    set({
+      ...pushHistory(state),
+      project: {
+        ...state.project,
+        keyframes: [],
+      },
+      selectedKeyframeId: null,
+    });
+    toast.info("Cleared all keyframes.");
   },
 
   addTextOverlay: (text = "New Caption") => {

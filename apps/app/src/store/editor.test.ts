@@ -89,14 +89,44 @@ describe("useEditor store", () => {
     expect(useEditor.getState().project!.looks.borderRadius).toBe(24);
   });
 
-  it("plots interactions into keyframes and zoom blocks with 2-3s hold", async () => {
+  it("plots interactions into keyframes and zoom blocks with 2-3s hold and no end bunching", async () => {
     await useEditor.getState().loadProject("proj-test");
+    // Add a phantom click at the tail end (e.g. at 8000ms in an 8000ms video)
+    useEditor.setState((s) => ({
+      project: s.project ? {
+        ...s.project,
+        clicks: [
+          { id: "c-mid", timestampMs: 2500, x: 0.3, y: 0.4, button: "left" },
+          { id: "c-stop", timestampMs: 8000, x: 0.9, y: 0.9, button: "left" },
+        ],
+        interactions: [
+          { id: "c-mid", type: "click", timestampMs: 2500, x: 0.3, y: 0.4, button: "left" },
+          { id: "c-stop", type: "click", timestampMs: 8000, x: 0.9, y: 0.9, button: "left" },
+        ],
+      } : null,
+    }));
+
     useEditor.getState().plotInteractions({ holdDurationMs: 2400, scale: 2.0 });
 
     const state = useEditor.getState();
     expect(state.project?.keyframes).toBeDefined();
     expect(state.project?.keyframes!.length).toBeGreaterThanOrEqual(4);
-    expect(state.project?.zoomBlocks.length).toBeGreaterThan(0);
+    expect(state.project?.zoomBlocks.length).toBe(1);
+
+    // Verify keyframes are strictly ordered and not clustered at 8000ms
+    const keyframes = state.project!.keyframes!;
+    for (let i = 0; i < keyframes.length - 1; i++) {
+      expect(keyframes[i]!.timeMs).toBeLessThan(keyframes[i + 1]!.timeMs);
+    }
+    // Zoom block starts around mid-click (2200ms)
+    expect(state.project?.zoomBlocks[0]?.startTimeMs).toBe(2200);
+
+    // Clear keyframes and zoom blocks
+    useEditor.getState().clearKeyframes();
+    expect(useEditor.getState().project?.keyframes).toHaveLength(0);
+
+    useEditor.getState().clearZoomBlocks();
+    expect(useEditor.getState().project?.zoomBlocks).toHaveLength(0);
   });
 
   it("adds, edits, and removes keyframes and text overlays", async () => {

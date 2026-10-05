@@ -240,6 +240,66 @@ describe("zoom algorithms", () => {
     expect(midState.scale).toBeGreaterThanOrEqual(1.15); // Stays comfortably zoomed above 1.15
     expect(midState.isZoomed).toBe(true);
   });
+
+  it("rejects tail boundary clicks occurring at or within 400ms of video duration to prevent bunching", () => {
+    const endClicks = [
+      { id: "c-finish", type: "click" as const, timestampMs: 24000, x: 0.5, y: 0.9 },
+    ];
+    // Video is 24 seconds, click is right at 24000ms
+    const result = plotInteractionsToKeyframesAndZoomBlocks(endClicks, 24000);
+    expect(result.zoomBlocks).toHaveLength(0);
+    expect(result.keyframes).toHaveLength(0);
+  });
+
+  it("guarantees strictly monotonic keyframe ordering for clicks near the boundary", () => {
+    const click = [
+      { id: "c-late", type: "click" as const, timestampMs: 22000, x: 0.4, y: 0.4 },
+    ];
+    const result = plotInteractionsToKeyframesAndZoomBlocks(click, 24000);
+    expect(result.zoomBlocks).toHaveLength(1);
+    expect(result.keyframes.length).toBeGreaterThanOrEqual(4);
+
+    // Verify keyframe timestamps are strictly increasing
+    for (let i = 0; i < result.keyframes.length - 1; i++) {
+      const kfCurrent = result.keyframes[i]!;
+      const kfNext = result.keyframes[i + 1]!;
+      expect(kfCurrent.timeMs).toBeLessThan(kfNext.timeMs);
+    }
+
+    const firstKf = result.keyframes[0]!;
+    const lastKf = result.keyframes[result.keyframes.length - 1]!;
+    expect(firstKf.timeMs).toBeLessThanOrEqual(22000);
+    expect(firstKf.scale).toBe(1.0);
+    expect(lastKf.timeMs).toBe(24000);
+    expect(lastKf.scale).toBe(1.0);
+  });
+
+  it("generates balanced focal auto-zooms across timeline when fallbackIfEmpty is enabled", () => {
+    const result = plotInteractionsToKeyframesAndZoomBlocks([], 24000, {
+      fallbackIfEmpty: true,
+    });
+    expect(result.zoomBlocks).toHaveLength(2);
+    expect(result.keyframes.length).toBeGreaterThanOrEqual(6);
+
+    // First block around 22% (approx 5s)
+    expect(result.zoomBlocks[0]?.startTimeMs).toBeGreaterThan(3000);
+    expect(result.zoomBlocks[0]?.startTimeMs).toBeLessThan(7000);
+
+    // Second block around 62% (approx 14s)
+    expect(result.zoomBlocks[1]?.startTimeMs).toBeGreaterThan(12000);
+    expect(result.zoomBlocks[1]?.startTimeMs).toBeLessThan(17000);
+  });
+
+  it("holds baseline 1.0x full-frame camera prior to the first zoomed keyframe", () => {
+    const keyframes = [
+      { id: "kf1", timeMs: 5000, scale: 1.85, targetX: 0.3, targetY: 0.4, easing: "cubic" as const },
+      { id: "kf2", timeMs: 8000, scale: 1.0, targetX: 0.5, targetY: 0.5, easing: "cubic" as const },
+    ];
+    // At t = 2000ms (before first zoomed keyframe at 5000ms), camera must be full frame (1.0x)
+    const cameraBefore = calculateCameraAtTime(2000, [], 350, 400, undefined, keyframes);
+    expect(cameraBefore.scale).toBe(1.0);
+    expect(cameraBefore.isZoomed).toBe(false);
+  });
 });
 
 describe("timeline operations", () => {

@@ -319,6 +319,18 @@ export function calculateCameraAtTime(
     const lastKf = sortedKf[sortedKf.length - 1]!;
 
     if (timeMs <= firstKf.timeMs) {
+      // If first keyframe has a scale > 1.05 and is not at time 0,
+      // playback before firstKf should be baseline 1.0x full-screen!
+      if (firstKf.timeMs > 0 && firstKf.scale > 1.05) {
+        return {
+          x: 0.5,
+          y: 0.5,
+          scale: 1.0,
+          isZoomed: false,
+          cursorX: defaultCursor.x,
+          cursorY: defaultCursor.y,
+        };
+      }
       return {
         x: firstKf.targetX,
         y: firstKf.targetY,
@@ -475,36 +487,77 @@ export function calculateCameraAtTime(
   };
 }
 
+export interface PlotInteractionsOptions {
+  holdDurationMs?: number;
+  scale?: number;
+  minBlockDurationMs?: number;
+  fallbackIfEmpty?: boolean;
+}
+
 /**
  * Translates recorded click and typing interactions into iterative 2-3 second auto-zooms
  * that track the mouse/cursor and smoothly return to full screen throughout the video.
  * Clusters rapid consecutive actions (e.g. typing or quick succession clicks) so they
  * continuously track the pointer instead of queuing up delayed jumps into the future.
+ * Enforces strictly monotonic keyframe timestamps and protects against edge boundary collapses.
  */
 export function plotInteractionsToKeyframesAndZoomBlocks(
   interactions: import("./project").InteractionEvent[],
   videoDurationMs: number,
-  options: { holdDurationMs?: number; scale?: number } = {},
+  options: PlotInteractionsOptions = {},
 ): { keyframes: import("./project").KeyframeNode[]; zoomBlocks: ZoomBlock[] } {
-  if (interactions.length === 0 || videoDurationMs <= 0) {
+  if (videoDurationMs <= 0) {
     return { keyframes: [], zoomBlocks: [] };
   }
 
-  const holdMs = options.holdDurationMs ?? 2400; // 2.4 seconds hold (within 2-3s range)
-  const scale = options.scale ?? 1.85;
+  let events = interactions ? [...interactions] : [];
+
+  // If no interactions were provided and fallback is requested, generate 2 smart focal zooms
+  if (events.length === 0 && options.fallbackIfEmpty && videoDurationMs >= 3000) {
+    events = [
+      {
+        id: "fallback-c1",
+        type: "click",
+        timestampMs: Math.round(videoDurationMs * 0.22),
+        x: 0.38,
+        y: 0.42,
+        button: "left",
+      },
+      {
+        id: "fallback-c2",
+        type: "click",
+        timestampMs: Math.round(videoDurationMs * 0.62),
+        x: 0.62,
+        y: 0.52,
+        button: "left",
+      },
+    ];
+  }
+
+  if (events.length === 0) {
+    return { keyframes: [], zoomBlocks: [] };
+  }
+
+  // Filter out negative timestamps and interactions within 400ms of video end (stop recording artifacts)
+  const validCutoff = Math.max(0, videoDurationMs - 400);
+  const validInteractions = events.filter((e) => e.timestampMs >= 0 && e.timestampMs <= validCutoff);
+
+  if (validInteractions.length === 0) {
+    return { keyframes: [], zoomBlocks: [] };
+  }
+
   const leadInMs = 300;
   const leadOutMs = 400;
+  const minDuration = options.minBlockDurationMs ?? 1400;
   const clusterGapMs = 2200; // actions within 2.2s are merged into a continuous zoom
 
-  const sorted = [...interactions].sort((a, b) => a.timestampMs - b.timestampMs);
+  const sorted = [...validInteractions].sort((a, b) => a.timestampMs - b.timestampMs);
 
   // Group events into clusters
   const clusters: import("./project").InteractionEvent[][] = [];
   let currentCluster: import("./project").InteractionEvent[] = [];
 
   for (const event of sorted) {
-    if (event.timestampMs < 0 || event.timestampMs > videoDurationMs) continue;
-
     if (currentCluster.length === 0) {
       currentCluster.push(event);
     } else {
@@ -535,16 +588,28 @@ export function plotInteractionsToKeyframesAndZoomBlocks(
     const clusterHoldMs = options.holdDurationMs ?? intent.holdMs;
 
     const rawStart = Math.max(0, firstEvt.timestampMs - leadInMs);
-    const startMs = Math.max(lastBlockEndTime, rawStart);
+    let startMs = Math.max(lastBlockEndTime, rawStart);
 
     const rawEnd = lastEvt.timestampMs + clusterHoldMs + leadOutMs;
-    const endMs = Math.min(videoDurationMs, Math.max(startMs + leadInMs + 600, rawEnd));
+    let endMs = Math.min(videoDurationMs, rawEnd);
 
-    if (endMs <= startMs) continue;
+    // If block is too short near video end, attempt to extend start backward to sustain the zoom
+    if (endMs - startMs < minDuration) {
+      const expandedStart = Math.max(lastBlockEndTime, endMs - minDuration);
+      if (endMs - expandedStart >= 900) {
+        startMs = expandedStart;
+      } else {
+        // Cannot fit a visible zoom block before video finishes; skip cluster
+        continue;
+      }
+    }
+
+    const span = endMs - startMs;
+    if (span < 800) continue;
 
     const clampedFirst = clampCameraToBounds(firstEvt.x, firstEvt.y + intent.offsetY, clusterScale);
 
-    // ZoomBlock for timeline
+    // Timeline ZoomBlock
     zoomBlocks.push({
       id: `zoom-auto-${i + 1}`,
       startTimeMs: startMs,
@@ -554,6 +619,11 @@ export function plotInteractionsToKeyframesAndZoomBlocks(
       scale: clusterScale,
       enabled: true,
     });
+
+    // Strictly monotonic keyframe calculations:
+    // startMs < peakTime <= trackTimes <= holdTime < endMs
+    const effLeadIn = Math.min(leadInMs, Math.round(span * 0.22));
+    const effLeadOut = Math.min(leadOutMs, Math.round(span * 0.22));
 
     // Keyframe 1: Start zoom lead-in (1.0x full frame)
     keyframes.push({
@@ -565,38 +635,50 @@ export function plotInteractionsToKeyframesAndZoomBlocks(
       easing: "cubic",
     });
 
-    // Keyframe 2: Peak zoom reached at first interaction
+    // Keyframe 2: Peak zoom reached
+    const minPeak = startMs + Math.max(80, effLeadIn);
+    const maxPeak = Math.max(minPeak, endMs - effLeadOut - 150);
+    const peakTime = Math.max(minPeak, Math.min(maxPeak, firstEvt.timestampMs));
+
     keyframes.push({
       id: `kf-peak-${firstEvt.id}`,
-      timeMs: Math.min(endMs - leadOutMs, Math.max(startMs, firstEvt.timestampMs)),
+      timeMs: peakTime,
       scale: clusterScale,
       targetX: clampedFirst.x,
       targetY: clampedFirst.y,
       easing: "spring",
     });
 
-    // Tracking keyframes for each subsequent action in the cluster
+    // Intermediate tracking keyframes for multiple actions in cluster
     for (let j = 1; j < cluster.length; j++) {
       const midEvt = cluster[j]!;
-      const clampedMid = clampCameraToBounds(midEvt.x, midEvt.y, scale);
+      const clampedMid = clampCameraToBounds(midEvt.x, midEvt.y, clusterScale);
+      const trackMin = peakTime + 60;
+      const trackMax = Math.max(trackMin, endMs - effLeadOut - 100);
+      const trackTime = Math.max(trackMin, Math.min(trackMax, midEvt.timestampMs));
+
       keyframes.push({
         id: `kf-track-${midEvt.id}`,
-        timeMs: Math.min(endMs - leadOutMs, midEvt.timestampMs),
-        scale,
+        timeMs: trackTime,
+        scale: clusterScale,
         targetX: clampedMid.x,
         targetY: clampedMid.y,
         easing: "spring",
       });
     }
 
-    // Keyframe 3: End of 2-3 second hold after last interaction
-    const holdEndTime = Math.min(endMs - leadOutMs, lastEvt.timestampMs + holdMs);
-    const clampedLast = clampCameraToBounds(lastEvt.x, lastEvt.y, scale);
-    if (holdEndTime > firstEvt.timestampMs) {
+    // Keyframe 3: End of hold before lead-out
+    const idealHoldEnd = lastEvt.timestampMs + clusterHoldMs;
+    const minHold = peakTime + 100;
+    const maxHold = Math.max(minHold, endMs - effLeadOut);
+    const holdTime = Math.max(minHold, Math.min(maxHold, idealHoldEnd));
+
+    if (holdTime > peakTime + 80) {
+      const clampedLast = clampCameraToBounds(lastEvt.x, lastEvt.y, clusterScale);
       keyframes.push({
         id: `kf-hold-${lastEvt.id}`,
-        timeMs: holdEndTime,
-        scale,
+        timeMs: holdTime,
+        scale: clusterScale,
         targetX: clampedLast.x,
         targetY: clampedLast.y,
         easing: "cubic",

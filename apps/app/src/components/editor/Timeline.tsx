@@ -265,7 +265,8 @@ export function Timeline({ project }: TimelineProps) {
 
             {project.keyframes &&
               project.keyframes.map((kf, idx) => {
-                const pos = getPositionPercent(kf.timeMs);
+                const rawPos = getPositionPercent(kf.timeMs);
+                const pos = Math.max(1.5, Math.min(98.5, rawPos));
                 const isSelected = selectedKeyframeId === kf.id;
                 return (
                   <div
