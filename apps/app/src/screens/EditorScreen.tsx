@@ -25,24 +25,22 @@ interface EditorScreenProps {
 
 export function EditorScreen({ id }: EditorScreenProps) {
   const { back } = useNav();
-  const {
-    project,
-    isPlaying,
-    isLeftSidebarOpen,
-    isRightSidebarOpen,
-    toggleLeftSidebar,
-    toggleRightSidebar,
-    loadProject,
-    setCurrentTime,
-    setPlaying,
-    togglePlay,
-    splitAtCurrentTime,
-    deleteSelected,
-    addKeyframeAtCurrentTime,
-    addEffectAtCurrentTime,
-    undo,
-    redo,
-  } = useEditor();
+  const project = useEditor((s) => s.project);
+  const isPlaying = useEditor((s) => s.isPlaying);
+  const isLeftSidebarOpen = useEditor((s) => s.isLeftSidebarOpen);
+  const isRightSidebarOpen = useEditor((s) => s.isRightSidebarOpen);
+  const toggleLeftSidebar = useEditor((s) => s.toggleLeftSidebar);
+  const toggleRightSidebar = useEditor((s) => s.toggleRightSidebar);
+  const loadProject = useEditor((s) => s.loadProject);
+  const setCurrentTime = useEditor((s) => s.setCurrentTime);
+  const setPlaying = useEditor((s) => s.setPlaying);
+  const togglePlay = useEditor((s) => s.togglePlay);
+  const splitAtCurrentTime = useEditor((s) => s.splitAtCurrentTime);
+  const deleteSelected = useEditor((s) => s.deleteSelected);
+  const addKeyframeAtCurrentTime = useEditor((s) => s.addKeyframeAtCurrentTime);
+  const addEffectAtCurrentTime = useEditor((s) => s.addEffectAtCurrentTime);
+  const undo = useEditor((s) => s.undo);
+  const redo = useEditor((s) => s.redo);
 
   const [exportOpen, setExportOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);

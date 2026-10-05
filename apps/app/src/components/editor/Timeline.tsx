@@ -51,43 +51,41 @@ function TimelinePlayhead({ durationMs }: { durationMs: number }) {
 }
 
 export function Timeline({ project }: TimelineProps) {
-  const {
-    durationMs,
-    isPlaying,
-    selectedBlockId,
-    selectedClipId,
-    selectedKeyframeId,
-    selectedEffectId,
-    selectedTextId,
-    selectedAudioId,
-    timelineZoom,
-    history,
-    future,
-    setCurrentTime,
-    togglePlay,
-    setTimelineZoom,
-    selectBlock,
-    selectClip,
-    selectKeyframe,
-    selectEffect,
-    selectText,
-    selectAudio,
-    splitAtCurrentTime,
-    deleteSelected,
-    addZoomBlockAtCurrentTime,
-    updateZoomBlock,
-    addKeyframeAtCurrentTime,
-    updateKeyframe,
-    deleteKeyframe,
-    addEffectAtCurrentTime,
-    updateEffect,
-    deleteEffect,
-    addTextOverlay,
-    addAudioTrack,
-    plotInteractions,
-    undo,
-    redo,
-  } = useEditor();
+  const durationMs = useEditor((s) => s.durationMs);
+  const isPlaying = useEditor((s) => s.isPlaying);
+  const selectedBlockId = useEditor((s) => s.selectedBlockId);
+  const selectedClipId = useEditor((s) => s.selectedClipId);
+  const selectedKeyframeId = useEditor((s) => s.selectedKeyframeId);
+  const selectedEffectId = useEditor((s) => s.selectedEffectId);
+  const selectedTextId = useEditor((s) => s.selectedTextId);
+  const selectedAudioId = useEditor((s) => s.selectedAudioId);
+  const timelineZoom = useEditor((s) => s.timelineZoom);
+  const history = useEditor((s) => s.history);
+  const future = useEditor((s) => s.future);
+  const setCurrentTime = useEditor((s) => s.setCurrentTime);
+  const togglePlay = useEditor((s) => s.togglePlay);
+  const setTimelineZoom = useEditor((s) => s.setTimelineZoom);
+  const selectBlock = useEditor((s) => s.selectBlock);
+  const selectClip = useEditor((s) => s.selectClip);
+  const selectKeyframe = useEditor((s) => s.selectKeyframe);
+  const selectEffect = useEditor((s) => s.selectEffect);
+  const selectText = useEditor((s) => s.selectText);
+  const selectAudio = useEditor((s) => s.selectAudio);
+  const splitAtCurrentTime = useEditor((s) => s.splitAtCurrentTime);
+  const deleteSelected = useEditor((s) => s.deleteSelected);
+  const addZoomBlockAtCurrentTime = useEditor((s) => s.addZoomBlockAtCurrentTime);
+  const updateZoomBlock = useEditor((s) => s.updateZoomBlock);
+  const addKeyframeAtCurrentTime = useEditor((s) => s.addKeyframeAtCurrentTime);
+  const updateKeyframe = useEditor((s) => s.updateKeyframe);
+  const deleteKeyframe = useEditor((s) => s.deleteKeyframe);
+  const addEffectAtCurrentTime = useEditor((s) => s.addEffectAtCurrentTime);
+  const updateEffect = useEditor((s) => s.updateEffect);
+  const deleteEffect = useEditor((s) => s.deleteEffect);
+  const addTextOverlay = useEditor((s) => s.addTextOverlay);
+  const addAudioTrack = useEditor((s) => s.addAudioTrack);
+  const plotInteractions = useEditor((s) => s.plotInteractions);
+  const undo = useEditor((s) => s.undo);
+  const redo = useEditor((s) => s.redo);
 
   const trackContainerRef = useRef<HTMLDivElement>(null);
 

@@ -65,9 +65,9 @@ export function Header() {
         {/* Quick Action Button: Quick Record */}
         <button
           type="button"
-          onClick={() => go({ name: "home" })}
+          onClick={() => go({ name: "record" })}
           className="flex min-h-[34px] items-center gap-1.5 rounded-full bg-white px-4 py-1.5 font-mono text-xs font-bold uppercase text-black hover:bg-neutral-100 active:scale-95 transition-all shadow-[0_0_20px_rgba(255,255,255,0.22)] touch-manipulation"
-          title="Open Studio Workspace"
+          title="Start New Recording"
         >
           <Zap className="size-3.5 fill-black" />
           <span className="hidden sm:inline">Quick Record</span>

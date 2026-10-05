@@ -38,42 +38,40 @@ function AddKeyframeButton({ zoomScale }: { zoomScale: number }) {
 }
 
 export function ToolsSidebar() {
-  const {
-    project,
-    isRightSidebarOpen,
-    toggleRightSidebar,
-    activeToolTab,
-    setActiveToolTab,
-    selectedBlockId,
-    selectedKeyframeId,
-    selectedEffectId,
-    selectedTextId,
-    plotInteractions,
-    updateZoomBlock,
-    deleteZoomBlock,
-    clearZoomBlocks,
-    updateKeyframe,
-    deleteKeyframe,
-    clearKeyframes,
-    addEffectAtCurrentTime,
-    updateEffect,
-    deleteEffect,
-    clearEffects,
-    addTextOverlay,
-    updateTextOverlay,
-    deleteTextOverlay,
-    addAudioTrack,
-    updateAudioTrack,
-    deleteAudioTrack,
-    updateAudioSettings,
-    playClickSoundPreview,
-    playTypingSoundPreview,
-    updateLooks,
-    setCurrentTime,
-    selectKeyframe,
-    selectEffect,
-    selectText,
-  } = useEditor();
+  const project = useEditor((s) => s.project);
+  const isRightSidebarOpen = useEditor((s) => s.isRightSidebarOpen);
+  const toggleRightSidebar = useEditor((s) => s.toggleRightSidebar);
+  const activeToolTab = useEditor((s) => s.activeToolTab);
+  const setActiveToolTab = useEditor((s) => s.setActiveToolTab);
+  const selectedBlockId = useEditor((s) => s.selectedBlockId);
+  const selectedKeyframeId = useEditor((s) => s.selectedKeyframeId);
+  const selectedEffectId = useEditor((s) => s.selectedEffectId);
+  const selectedTextId = useEditor((s) => s.selectedTextId);
+  const plotInteractions = useEditor((s) => s.plotInteractions);
+  const updateZoomBlock = useEditor((s) => s.updateZoomBlock);
+  const deleteZoomBlock = useEditor((s) => s.deleteZoomBlock);
+  const clearZoomBlocks = useEditor((s) => s.clearZoomBlocks);
+  const updateKeyframe = useEditor((s) => s.updateKeyframe);
+  const deleteKeyframe = useEditor((s) => s.deleteKeyframe);
+  const clearKeyframes = useEditor((s) => s.clearKeyframes);
+  const addEffectAtCurrentTime = useEditor((s) => s.addEffectAtCurrentTime);
+  const updateEffect = useEditor((s) => s.updateEffect);
+  const deleteEffect = useEditor((s) => s.deleteEffect);
+  const clearEffects = useEditor((s) => s.clearEffects);
+  const addTextOverlay = useEditor((s) => s.addTextOverlay);
+  const updateTextOverlay = useEditor((s) => s.updateTextOverlay);
+  const deleteTextOverlay = useEditor((s) => s.deleteTextOverlay);
+  const addAudioTrack = useEditor((s) => s.addAudioTrack);
+  const updateAudioTrack = useEditor((s) => s.updateAudioTrack);
+  const deleteAudioTrack = useEditor((s) => s.deleteAudioTrack);
+  const updateAudioSettings = useEditor((s) => s.updateAudioSettings);
+  const playClickSoundPreview = useEditor((s) => s.playClickSoundPreview);
+  const playTypingSoundPreview = useEditor((s) => s.playTypingSoundPreview);
+  const updateLooks = useEditor((s) => s.updateLooks);
+  const setCurrentTime = useEditor((s) => s.setCurrentTime);
+  const selectKeyframe = useEditor((s) => s.selectKeyframe);
+  const selectEffect = useEditor((s) => s.selectEffect);
+  const selectText = useEditor((s) => s.selectText);
 
   const [holdDurationSec, setHoldDurationSec] = useState(1.0);
   const [zoomScale, setZoomScale] = useState(1.85);

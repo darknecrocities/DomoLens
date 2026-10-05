@@ -16,14 +16,12 @@ import {
 import { useEditor } from "../../store/editor";
 
 export function LlmSidebar() {
-  const {
-    isLeftSidebarOpen,
-    toggleLeftSidebar,
-    llmMessages,
-    isLlmThinking,
-    sendLlmMessage,
-    executeLlmAction,
-  } = useEditor();
+  const isLeftSidebarOpen = useEditor((s) => s.isLeftSidebarOpen);
+  const toggleLeftSidebar = useEditor((s) => s.toggleLeftSidebar);
+  const llmMessages = useEditor((s) => s.llmMessages);
+  const isLlmThinking = useEditor((s) => s.isLlmThinking);
+  const sendLlmMessage = useEditor((s) => s.sendLlmMessage);
+  const executeLlmAction = useEditor((s) => s.executeLlmAction);
 
   const [input, setInput] = useState("");
   const messagesEndRef = useRef<HTMLDivElement>(null);

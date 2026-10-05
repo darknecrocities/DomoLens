@@ -591,6 +591,30 @@ describe("timeline operations", () => {
     expect(camera.x).toBeCloseTo(0.25, 1);
     expect(camera.y).toBeCloseTo(0.35, 1);
   });
+
+  it("applies video editor showcase arc with tight button focus followed by context zoom-out", () => {
+    const clickEvent = [{ id: "c-btn", type: "click" as const, timestampMs: 3000, x: 0.4, y: 0.5 }];
+    const plotted = plotInteractionsToKeyframesAndZoomBlocks(clickEvent, 10000, {
+      scale: 1.9,
+      holdDurationMs: 2000,
+    });
+
+    // Peak keyframe right on button click at tight macro scale (1.9x)
+    const peakKf = plotted.keyframes.find((k) => k.id === "kf-peak-c-btn");
+    expect(peakKf).toBeDefined();
+    expect(peakKf?.scale).toBe(1.9);
+
+    // Showcase reveal keyframe pulling back automatically to showcase scale (e.g. ~1.48x)
+    const revealKf = plotted.keyframes.find((k) => k.id === "kf-reveal-c-btn");
+    expect(revealKf).toBeDefined();
+    expect(revealKf?.scale).toBeLessThan(1.9);
+    expect(revealKf?.scale).toBeGreaterThanOrEqual(1.35);
+
+    // Hold keyframe stays at showcase scale to comfortably track cursor
+    const holdKf = plotted.keyframes.find((k) => k.id === "kf-hold-c-btn");
+    expect(holdKf).toBeDefined();
+    expect(holdKf?.scale).toBeLessThan(1.9);
+  });
 });
 
 describe("looks presets", () => {

@@ -977,6 +977,22 @@ export function plotInteractionsToKeyframesAndZoomBlocks(
           ? { sound: "typing", soundPreset: "mechanical", soundVolume: 0.65 }
           : { sound: "click", soundPreset: "bop", soundVolume: 0.70 }),
       });
+
+      // Video Editor Showcase Arc: after focusing tightly on the button click,
+      // automatically zoom out a little (showcase context reveal) to show what changed on screen,
+      // then smoothly track cursor movement during the hold.
+      const showcaseScale = Math.max(1.32, Math.round(clusterScale * 0.78 * 100) / 100);
+      const revealTime = peakTime + 420;
+      if (revealTime < endMs - effLeadOut - 100) {
+        keyframes.push({
+          id: `kf-reveal-${firstEvt.id}`,
+          timeMs: revealTime,
+          scale: showcaseScale,
+          targetX: clampedFirst.x,
+          targetY: clampedFirst.y,
+          easing: "cubic",
+        });
+      }
     }
 
     // If first interaction is a continuous typing session with durationMs > 600ms,
@@ -1029,12 +1045,13 @@ export function plotInteractionsToKeyframesAndZoomBlocks(
     const maxHold = Math.max(minHold, endMs - effLeadOut);
     const holdTime = Math.max(minHold, Math.min(maxHold, idealHoldEnd));
     const clampedLast = clampCameraToBounds(lastEvt.x, lastEvt.y, clusterScale);
+    const effectiveHoldScale = Math.max(1.32, Math.round(clusterScale * 0.78 * 100) / 100);
 
     if (holdTime > firstEvt.timestampMs + 80) {
       keyframes.push({
         id: `kf-hold-${lastEvt.id}`,
         timeMs: holdTime,
-        scale: clusterScale,
+        scale: effectiveHoldScale,
         targetX: clampedLast.x,
         targetY: clampedLast.y,
         easing: "cubic",

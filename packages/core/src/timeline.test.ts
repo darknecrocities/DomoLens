@@ -33,9 +33,9 @@ describe("timeline keyframe and effect operations", () => {
 
     const result = insertKeyframe(kfs, newKf);
     expect(result).toHaveLength(3);
-    expect(result[1].id).toBe("kf-3");
-    expect(result[1].timeMs).toBe(2500);
-    expect(result[1].effect).toBe("spotlight");
+    expect(result[1]!.id).toBe("kf-3");
+    expect(result[1]!.timeMs).toBe(2500);
+    expect(result[1]!.effect).toBe("spotlight");
   });
 
   it("removes and updates keyframes cleanly", () => {
@@ -46,11 +46,11 @@ describe("timeline keyframe and effect operations", () => {
 
     const afterDelete = removeKeyframe(kfs, "kf-1");
     expect(afterDelete).toHaveLength(1);
-    expect(afterDelete[0].id).toBe("kf-2");
+    expect(afterDelete[0]!.id).toBe("kf-2");
 
     const afterUpdate = updateKeyframeNode(afterDelete, "kf-2", { scale: 2.5, effect: "blur" });
-    expect(afterUpdate[0].scale).toBe(2.5);
-    expect(afterUpdate[0].effect).toBe("blur");
+    expect(afterUpdate[0]!.scale).toBe(2.5);
+    expect(afterUpdate[0]!.effect).toBe("blur");
   });
 
   it("inserts, updates, and removes video effects", () => {
@@ -78,21 +78,21 @@ describe("timeline keyframe and effect operations", () => {
 
     const inserted = insertVideoEffect(effects, newEffect);
     expect(inserted).toHaveLength(2);
-    expect(inserted[0].id).toBe("eff-2"); // sorted by startTimeMs
+    expect(inserted[0]!.id).toBe("eff-2"); // sorted by startTimeMs
 
     const activeAt1500 = getActiveVideoEffects(inserted, 1500);
     expect(activeAt1500).toHaveLength(2);
 
     const activeAt3200 = getActiveVideoEffects(inserted, 3200);
     expect(activeAt3200).toHaveLength(1);
-    expect(activeAt3200[0].id).toBe("eff-2");
+    expect(activeAt3200[0]!.id).toBe("eff-2");
 
     const updated = updateVideoEffect(inserted, "eff-1", { intensity: 0.95 });
     expect(updated.find((e) => e.id === "eff-1")?.intensity).toBe(0.95);
 
     const removed = removeVideoEffect(updated, "eff-1");
     expect(removed).toHaveLength(1);
-    expect(removed[0].id).toBe("eff-2");
+    expect(removed[0]!.id).toBe("eff-2");
   });
 
   it("computes active effects styles and parameters accurately", () => {
@@ -182,7 +182,7 @@ describe("timeline keyframe and effect operations", () => {
 
     const rippled = removeClipAndRipple([split![0], split![1]], split![0].id);
     expect(rippled).toHaveLength(1);
-    expect(rippled[0].timelineStartMs).toBe(0);
+    expect(rippled[0]!.timelineStartMs).toBe(0);
   });
 
   it("splits zoom block correctly", () => {

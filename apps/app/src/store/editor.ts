@@ -251,8 +251,30 @@ export const useEditor = create<EditorState>((set, get) => ({
       }
     }
 
-    // 2. Fall back to useProjects summary
-    const summary = useProjects.getState().projects.find((p) => p.id === id);
+    // 2. Fall back to useProjects summary or built-in demo templates
+    let summary = useProjects.getState().projects.find((p) => p.id === id);
+    if (!summary && (id.startsWith("demo-") || id === "sample-demo" || id === "proj-test")) {
+      const now = Date.now();
+      const demoTitles: Record<string, string> = {
+        "demo-saas": "SaaS Product Walkthrough",
+        "demo-code": "Developer Code Tour",
+        "demo-mobile": "App Workflow Showcase",
+        "sample-demo": "Wikipedia Article Demo",
+        "proj-test": "Test Project",
+      };
+      summary = {
+        id,
+        name: demoTitles[id] || "Product Showcase Demo",
+        source: "recording",
+        createdAt: now,
+        updatedAt: now,
+        durationMs: 14000,
+        width: 1920,
+        height: 1080,
+        thumbnail: null,
+        media: "/domolens_smooth_autozoom_demo.mp4",
+      };
+    }
     if (!summary) return false;
 
     const duration = summary.durationMs || 12000;
@@ -627,6 +649,8 @@ export const useEditor = create<EditorState>((set, get) => ({
       ? Math.max(time + 400, nextBlock.startTimeMs - leadOutMs - 50)
       : rawHoldEnd;
     const outMs = Math.min(state.durationMs, holdEndMs + leadOutMs);
+    const showcaseScale = Math.max(1.32, Math.round(activeScale * 0.78 * 100) / 100);
+    const revealTime = Math.min(time + 400, holdEndMs - 200);
 
     const clusterKfs: KeyframeNode[] = [
       {
@@ -649,9 +673,17 @@ export const useEditor = create<EditorState>((set, get) => ({
         soundVolume: 0.70,
       },
       {
+        id: `kf-reveal-${now}`,
+        timeMs: revealTime,
+        scale: showcaseScale,
+        targetX: clamped.x,
+        targetY: clamped.y,
+        easing: "cubic",
+      },
+      {
         id: `kf-hold-${now}`,
         timeMs: holdEndMs,
-        scale: activeScale,
+        scale: showcaseScale,
         targetX: clamped.x,
         targetY: clamped.y,
         easing: "cubic",
