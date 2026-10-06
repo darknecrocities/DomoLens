@@ -4,8 +4,7 @@ export type Screen =
   | { name: "home" }
   | { name: "record" }
   | { name: "project"; id: string }
-  | { name: "editor"; id: string }
-  | { name: "landing" };
+  | { name: "editor"; id: string };
 
 interface NavState {
   screen: Screen;

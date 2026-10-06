@@ -258,7 +258,7 @@ export const useEditor = create<EditorState>((set, get) => ({
 
     // 2. Fall back to useProjects summary or built-in demo templates
     let summary = useProjects.getState().projects.find((p) => p.id === id);
-    if (!summary && (id.startsWith("demo-") || id === "sample-demo" || id === "proj-test")) {
+    if (!summary) {
       const now = Date.now();
       const demoTitles: Record<string, string> = {
         "demo-saas": "SaaS Product Walkthrough",
@@ -266,10 +266,12 @@ export const useEditor = create<EditorState>((set, get) => ({
         "demo-mobile": "App Workflow Showcase",
         "sample-demo": "Wikipedia Article Demo",
         "proj-test": "Test Project",
+        "studio-main": "Studio Workspace",
+        "blank": "New Studio Project",
       };
       summary = {
         id,
-        name: demoTitles[id] || "Product Showcase Demo",
+        name: demoTitles[id] || "Studio Workspace",
         source: "recording",
         createdAt: now,
         updatedAt: now,
@@ -277,10 +279,9 @@ export const useEditor = create<EditorState>((set, get) => ({
         width: 1920,
         height: 1080,
         thumbnail: null,
-        media: "/domolens_smooth_autozoom_demo.mp4",
+        media: id === "blank" ? null : "/domolens_smooth_autozoom_demo.mp4",
       };
     }
-    if (!summary) return false;
 
     const duration = summary.durationMs || 12000;
     // Generate starter interactions

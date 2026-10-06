@@ -316,7 +316,7 @@ export function RecordScreen() {
             </div>
 
             {/* Start Button */}
-            <div className="flex justify-center">
+            <div className="flex flex-col items-center gap-4">
               <Button
                 variant="primary"
                 size="xl"
@@ -326,6 +326,14 @@ export function RecordScreen() {
               >
                 {copy.record.startBtn}
               </Button>
+
+              {/* Hardware Permission Criteria Note */}
+              <div className="flex items-center gap-2 font-mono text-[11px] text-neutral-400">
+                <span className="size-1.5 rounded-full bg-white animate-pulse" />
+                <span>
+                  Hardware capture ready: macOS ScreenCaptureKit, Windows Graphics Capture, Linux PipeWire
+                </span>
+              </div>
             </div>
           </motion.div>
         )}

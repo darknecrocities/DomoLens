@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Film, Sparkles, Wand2 } from "lucide-react";
+import { Film, FolderOpen, Sparkles, Video, Wand2 } from "lucide-react";
 import {
   calculateActiveEffectsState,
   calculateCameraAtTime,
@@ -10,6 +10,8 @@ import {
 import { sfx } from "../../lib/sound-effects";
 import { platform } from "../../platform";
 import { useEditor } from "../../store/editor";
+import { useNav } from "../../store/nav";
+import { useProjects } from "../../store/projects";
 
 interface VideoCanvasProps {
   project: ProjectData;
@@ -357,9 +359,41 @@ export function VideoCanvas({ project, currentTimeMs: propTimeMs }: VideoCanvasP
               className="size-full object-contain pointer-events-none"
             />
           ) : (
-            <div className="flex size-full flex-col items-center justify-center bg-ink-900 text-fg-muted">
-              <Film className="size-16 stroke-1 opacity-40" />
-              <span className="mt-2 text-sm text-fg-faint">Video preview</span>
+            <div className="flex size-full flex-col items-center justify-center bg-ink-950 p-6 text-center text-fg-muted">
+              <div className="flex size-14 items-center justify-center rounded-2xl border border-white/10 bg-white/5 text-white mb-3 shadow-inner">
+                <Film className="size-7 stroke-1" />
+              </div>
+              <h3 className="text-sm font-bold text-white">Studio Canvas Ready</h3>
+              <p className="mt-1 max-w-sm text-xs text-neutral-400 leading-relaxed">
+                Import an existing video clip or record your screen to edit with auto-zoom and cursor tracking.
+              </p>
+              <div className="mt-4 flex flex-wrap items-center justify-center gap-2.5">
+                <button
+                  type="button"
+                  onClick={async (e) => {
+                    e.stopPropagation();
+                    const newProj = await useProjects.getState().pickAndImport();
+                    if (newProj) {
+                      void useEditor.getState().loadProject(newProj.id);
+                    }
+                  }}
+                  className="flex items-center gap-1.5 rounded-lg bg-white px-3.5 py-1.5 font-mono text-xs font-bold uppercase text-black hover:bg-neutral-200 active:scale-95 transition-all shadow-md"
+                >
+                  <FolderOpen className="size-3.5" />
+                  Import Video
+                </button>
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    useNav.getState().go({ name: "record" });
+                  }}
+                  className="flex items-center gap-1.5 rounded-lg border border-white/20 bg-white/10 px-3.5 py-1.5 font-mono text-xs font-semibold uppercase text-white hover:bg-white/20 active:scale-95 transition-all"
+                >
+                  <Video className="size-3.5" />
+                  Record Screen
+                </button>
+              </div>
             </div>
           )}
 

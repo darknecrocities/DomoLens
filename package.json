@@ -22,6 +22,7 @@
     "build": "npm run build -w @domolens/app",
     "build:all": "npm run build && npm run landing:build",
     "package": "npm run tauri -w @domolens/app -- build",
+    "package:dmg": "npm run tauri -w @domolens/app -- build --bundles app,dmg",
     "test": "npm run test --workspaces --if-present",
     "typecheck": "npm run typecheck --workspaces --if-present",
     "check:all": "npm run typecheck && npm run test && npm run engine:test",

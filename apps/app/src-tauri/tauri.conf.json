@@ -12,6 +12,7 @@
   "app": {
     "windows": [
       {
+        "label": "main",
         "title": "DomoLens",
         "width": 1100,
         "height": 750,
@@ -24,18 +25,47 @@
       }
     ],
     "security": {
+      "capabilities": ["default"],
       "csp": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' asset: https: data: blob:; media-src 'self' asset: blob:; connect-src 'self' http://127.0.0.1:* ws://127.0.0.1:*;"
     }
   },
   "bundle": {
     "active": true,
     "targets": "all",
+    "category": "Video",
+    "shortDescription": "Record your screen with automatic camera zoom and motion tracking",
     "icon": [
       "icons/32x32.png",
+      "icons/64x64.png",
       "icons/128x128.png",
       "icons/128x128@2x.png",
       "icons/icon.icns",
-      "icons/icon.ico"
-    ]
+      "icons/icon.ico",
+      "icons/icon.png"
+    ],
+    "macOS": {
+      "frameworks": [],
+      "minimumSystemVersion": "10.13",
+      "infoPlist": "Info.plist",
+      "entitlements": "Entitlements.plist"
+    },
+    "windows": {
+      "certificateThumbprint": null,
+      "digestAlgorithm": "sha256",
+      "timestampUrl": ""
+    },
+    "linux": {
+      "deb": {
+        "depends": [
+          "libwebkit2gtk-4.1-0 | libwebkit2gtk-4.0-37",
+          "libssl3 | libssl1.1",
+          "libayatana-appindicator3-1"
+        ],
+        "section": "video"
+      },
+      "appimage": {
+        "bundleMediaFramework": false
+      }
+    }
   }
 }

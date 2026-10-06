@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>NSScreenCaptureUsageDescription</key>
+    <string>DomoLens requires screen capture access to record display output and detect interactions for automatic zoom.</string>
+    <key>NSMicrophoneUsageDescription</key>
+    <string>DomoLens requires microphone access to record voice audio narration during screen recordings.</string>
+    <key>NSCameraUsageDescription</key>
+    <string>DomoLens requires camera access to display presenter webcam feeds during recordings.</string>
+</dict>
+</plist>

@@ -7,7 +7,6 @@ import { HomeScreen } from "./screens/HomeScreen";
 import { RecordScreen } from "./screens/RecordScreen";
 import { ProjectScreen } from "./screens/ProjectScreen";
 import { EditorScreen } from "./screens/EditorScreen";
-import { LandingView } from "./screens/LandingView";
 import { platform } from "./platform";
 import { screenKey, useNav } from "./store/nav";
 import { useProjects } from "./store/projects";
@@ -48,11 +47,7 @@ export function App() {
     <div className="flex h-screen w-screen flex-col overflow-hidden bg-ink-900 text-fg">
       <Header />
 
-      <main
-        className={`flex flex-1 flex-col ${
-          screen.name === "landing" ? "overflow-hidden" : "overflow-y-auto pt-14"
-        }`}
-      >
+      <main className="flex flex-1 flex-col overflow-y-auto pt-14">
         <AnimatePresence mode="wait">
           {screen.name === "home" && (
             <motion.div
@@ -103,19 +98,6 @@ export function App() {
               className="flex flex-1 flex-col overflow-hidden"
             >
               <EditorScreen id={screen.id} />
-            </motion.div>
-          )}
-
-          {screen.name === "landing" && (
-            <motion.div
-              key="landing"
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -10 }}
-              transition={{ duration: 0.2 }}
-              className="flex flex-1 flex-col overflow-hidden"
-            >
-              <LandingView />
             </motion.div>
           )}
         </AnimatePresence>

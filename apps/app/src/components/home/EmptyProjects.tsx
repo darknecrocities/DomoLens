@@ -36,7 +36,7 @@ const SHOWCASE_TEMPLATES: ShowcaseTemplate[] = [
     zoomsCount: "3 Zooms",
     soundType: "Click Bops",
     icon: LayoutDashboard,
-    gradient: "from-blue-600/20 via-indigo-600/10 to-transparent",
+    gradient: "from-white/[0.08] via-white/[0.03] to-transparent",
   },
   {
     id: "demo-code",
@@ -47,7 +47,7 @@ const SHOWCASE_TEMPLATES: ShowcaseTemplate[] = [
     zoomsCount: "4 Zooms",
     soundType: "Typing Bursts",
     icon: Terminal,
-    gradient: "from-emerald-600/20 via-teal-600/10 to-transparent",
+    gradient: "from-white/[0.08] via-white/[0.03] to-transparent",
   },
   {
     id: "demo-mobile",
@@ -58,7 +58,7 @@ const SHOWCASE_TEMPLATES: ShowcaseTemplate[] = [
     zoomsCount: "3 Zooms",
     soundType: "Spatial Crane",
     icon: Film,
-    gradient: "from-purple-600/20 via-pink-600/10 to-transparent",
+    gradient: "from-white/[0.08] via-white/[0.03] to-transparent",
   },
 ];
 
@@ -166,7 +166,7 @@ export function EmptyProjects() {
                     </div>
                   </div>
 
-                  <h4 className="text-sm font-bold text-white group-hover:text-blue-200 transition-colors">
+                  <h4 className="text-sm font-bold text-white group-hover:text-neutral-200 transition-colors">
                     {tpl.title}
                   </h4>
                   <p className="text-[11px] font-medium text-neutral-400 mt-0.5">
