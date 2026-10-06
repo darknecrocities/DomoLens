@@ -16,7 +16,7 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: npm
 
       - name: Install Node dependencies
@@ -57,3 +57,36 @@ jobs:
 
       - name: Test production frontend builds
         run: npm run build:all
+
+  verify-macos:
+    runs-on: macos-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install Node dependencies
+        run: npm ci
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Verify Tauri macOS Configuration Integrity
+        shell: bash
+        run: |
+          node -e "
+            const conf = require('./apps/app/src-tauri/tauri.conf.json');
+            if (!conf.bundle || !conf.bundle.macOS || !conf.bundle.macOS.signingIdentity) {
+              console.error('Error: bundle.macOS.signingIdentity is missing from tauri.conf.json');
+              process.exit(1);
+            }
+            console.log('Tauri macOS signing identity verified:', conf.bundle.macOS.signingIdentity);
+          "
+
+      - name: Run Cargo check on Tauri shell (macOS)
+        run: cargo check --manifest-path apps/app/src-tauri/Cargo.toml

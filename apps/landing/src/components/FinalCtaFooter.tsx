@@ -94,12 +94,19 @@ export function FinalCtaFooter() {
               </div>
               <div className="mt-6 flex flex-wrap gap-3">
                 <a
-                  href="/DomoLens-Universal.dmg"
+                  href="https://github.com/darknecrocities/DomoLens/releases/latest/download/DomoLens-Universal.dmg"
                   download="DomoLens-Universal.dmg"
                   className="inline-flex items-center gap-2 rounded-lg bg-white px-5 py-2.5 font-mono text-xs font-bold text-black uppercase hover:bg-neutral-200"
                 >
                   <Download className="size-4" />
                   <span>Download .DMG (Universal)</span>
+                </a>
+                <a
+                  href="/DomoLens-Universal.dmg"
+                  download="DomoLens-Universal.dmg"
+                  className="flex items-center rounded-lg border border-neutral-800 bg-black px-4 py-2 font-mono text-xs text-neutral-300 hover:text-white"
+                >
+                  <span>Direct Mirror</span>
                 </a>
                 <a
                   href="https://github.com/darknecrocities/DomoLens/releases/latest"
@@ -109,6 +116,12 @@ export function FinalCtaFooter() {
                 >
                   <span>GitHub Release</span>
                 </a>
+              </div>
+              <div className="mt-4 rounded-lg border border-neutral-800/80 bg-neutral-950/60 p-3.5 text-xs text-neutral-400">
+                <p className="font-semibold text-neutral-300">macOS Installation Note:</p>
+                <p className="mt-1 leading-relaxed">
+                  Open the DMG and drag DomoLens into Applications. If macOS displays an unidentified developer prompt on first launch, right-click (or Control-click) DomoLens in Applications and select <span className="text-neutral-200 font-medium">Open</span>, or run <code className="rounded bg-neutral-800 px-1.5 py-0.5 text-neutral-200 font-mono text-[11px]">xattr -cr /Applications/DomoLens.app</code> in Terminal.
+                </p>
               </div>
             </div>
           )}
@@ -126,13 +139,19 @@ export function FinalCtaFooter() {
               </div>
               <div className="mt-6 flex flex-wrap gap-3">
                 <a
-                  href="https://github.com/darknecrocities/DomoLens/releases/latest"
-                  target="_blank"
-                  rel="noreferrer"
+                  href="https://github.com/darknecrocities/DomoLens/releases/latest/download/DomoLens-Windows-Setup.exe"
                   className="inline-flex items-center gap-2 rounded-lg bg-white px-5 py-2.5 font-mono text-xs font-bold text-black uppercase hover:bg-neutral-200"
                 >
                   <Download className="size-4" />
-                  <span>Download Windows Installer (.EXE / .MSI)</span>
+                  <span>Download Windows Installer (.EXE)</span>
+                </a>
+                <a
+                  href="https://github.com/darknecrocities/DomoLens/releases/latest"
+                  target="_blank"
+                  rel="noreferrer"
+                  className="flex items-center rounded-lg border border-neutral-800 bg-black px-4 py-2 font-mono text-xs text-neutral-300 hover:text-white"
+                >
+                  <span>GitHub Release</span>
                 </a>
               </div>
             </div>
@@ -151,13 +170,19 @@ export function FinalCtaFooter() {
               </div>
               <div className="mt-6 flex flex-wrap gap-3">
                 <a
-                  href="https://github.com/darknecrocities/DomoLens/releases/latest"
-                  target="_blank"
-                  rel="noreferrer"
+                  href="https://github.com/darknecrocities/DomoLens/releases/latest/download/DomoLens-Linux.AppImage"
                   className="inline-flex items-center gap-2 rounded-lg bg-white px-5 py-2.5 font-mono text-xs font-bold text-black uppercase hover:bg-neutral-200"
                 >
                   <Download className="size-4" />
-                  <span>Download Linux (.AppImage / .DEB)</span>
+                  <span>Download Linux (.AppImage)</span>
+                </a>
+                <a
+                  href="https://github.com/darknecrocities/DomoLens/releases/latest"
+                  target="_blank"
+                  rel="noreferrer"
+                  className="flex items-center rounded-lg border border-neutral-800 bg-black px-4 py-2 font-mono text-xs text-neutral-300 hover:text-white"
+                >
+                  <span>GitHub Release (.DEB)</span>
                 </a>
               </div>
             </div>

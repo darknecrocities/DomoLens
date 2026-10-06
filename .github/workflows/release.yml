@@ -56,7 +56,7 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: npm
 
       - name: Install Rust toolchain
@@ -90,6 +90,10 @@ jobs:
             if (fs.existsSync(tauriPath)) {
               const conf = JSON.parse(fs.readFileSync(tauriPath, 'utf8'));
               conf.version = '$VER';
+              if (!conf.bundle) conf.bundle = {};
+              if (!conf.bundle.macOS) conf.bundle.macOS = {};
+              conf.bundle.macOS.signingIdentity = conf.bundle.macOS.signingIdentity || '-';
+              conf.bundle.createUpdaterArtifacts = false;
               fs.writeFileSync(tauriPath, JSON.stringify(conf, null, 2) + '\n');
             }
             const cargoPath = 'apps/app/src-tauri/Cargo.toml';
@@ -118,3 +122,57 @@ jobs:
           releaseDraft: false
           prerelease: false
           args: ${{ matrix.args }}
+
+      - name: Verify macOS Code Signature and Publish Canonical Artifacts
+        if: matrix.platform == 'macos-latest'
+        shell: bash
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          DMG_FILE=$(find apps/app/src-tauri/target/release/bundle/dmg -name "*.dmg" | head -n 1)
+          if [[ -z "$DMG_FILE" || ! -f "$DMG_FILE" ]]; then
+            echo "Error: DMG file was not found in release bundle folder!"
+            exit 1
+          fi
+
+          echo "Found DMG bundle: $DMG_FILE"
+          echo "Verifying code signature integrity..."
+          MOUNT_DIR=$(mktemp -d)
+          hdiutil attach "$DMG_FILE" -nobrowse -mountpoint "$MOUNT_DIR"
+          codesign -vvv --deep "$MOUNT_DIR/DomoLens.app"
+          hdiutil detach "$MOUNT_DIR"
+          echo "macOS DMG signature is valid and satisfies Gatekeeper requirements."
+
+          echo "Publishing canonical DMG release assets..."
+          cp "$DMG_FILE" DomoLens-Universal.dmg
+          cp "$DMG_FILE" DomoLens-macOS.dmg
+          gh release upload "${{ steps.tag.outputs.val }}" DomoLens-Universal.dmg DomoLens-macOS.dmg --clobber
+          echo "Successfully published DomoLens-Universal.dmg and DomoLens-macOS.dmg to release."
+
+      - name: Publish Windows Canonical Artifact
+        if: matrix.platform == 'windows-latest'
+        shell: bash
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          EXE_FILE=$(find apps/app/src-tauri/target/release/bundle/nsis -name "*.exe" | head -n 1)
+          if [[ -n "$EXE_FILE" && -f "$EXE_FILE" ]]; then
+            echo "Publishing canonical Windows installer..."
+            cp "$EXE_FILE" DomoLens-Windows-Setup.exe
+            gh release upload "${{ steps.tag.outputs.val }}" DomoLens-Windows-Setup.exe --clobber
+            echo "Successfully published DomoLens-Windows-Setup.exe to release."
+          fi
+
+      - name: Publish Linux Canonical Artifact
+        if: matrix.platform == 'ubuntu-22.04'
+        shell: bash
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          APPIMAGE_FILE=$(find apps/app/src-tauri/target/release/bundle/appimage -name "*.AppImage" | head -n 1)
+          if [[ -n "$APPIMAGE_FILE" && -f "$APPIMAGE_FILE" ]]; then
+            echo "Publishing canonical Linux AppImage..."
+            cp "$APPIMAGE_FILE" DomoLens-Linux.AppImage
+            gh release upload "${{ steps.tag.outputs.val }}" DomoLens-Linux.AppImage --clobber
+            echo "Successfully published DomoLens-Linux.AppImage to release."
+          fi

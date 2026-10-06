@@ -73,6 +73,7 @@
     "macOS": {
       "frameworks": [],
       "minimumSystemVersion": "10.13",
+      "signingIdentity": "-",
       "infoPlist": "Info.plist",
       "entitlements": "Entitlements.plist"
     },
