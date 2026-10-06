@@ -85,7 +85,7 @@ export function Modal({ open, onClose, title, description, children, footer, ini
             aria-modal="true"
             aria-labelledby={titleId}
             aria-describedby={description ? descId : undefined}
-            className="relative w-full rounded-t-3xl border border-ink-700 bg-ink-800 p-6 pb-[calc(1.5rem+var(--safe-bottom))] shadow-lift sm:max-w-md sm:rounded-2xl sm:pb-6"
+            className="relative w-full rounded-t-3xl border border-white/15 bg-neutral-900/95 backdrop-blur-2xl p-6 pb-[calc(1.5rem+var(--safe-bottom))] shadow-[0_20px_60px_rgba(0,0,0,0.8),inset_0_1px_0_rgba(255,255,255,0.15)] sm:max-w-md sm:rounded-2xl sm:pb-6"
             initial={{ opacity: 0, y: 28, scale: 0.98 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 20, scale: 0.98 }}

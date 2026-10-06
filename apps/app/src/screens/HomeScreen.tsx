@@ -116,22 +116,23 @@ export function HomeScreen() {
             <button
               type="button"
               onClick={() => go({ name: "record" })}
-              className="group relative flex flex-col items-start justify-between rounded-2xl border border-white/20 bg-white p-5 text-left text-black transition-all hover:bg-neutral-100 hover:shadow-[0_0_30px_rgba(255,255,255,0.3)] active:scale-[0.98]"
+              className="group relative flex flex-col items-start justify-between rounded-2xl border border-white/20 bg-gradient-to-b from-white/[0.10] to-white/[0.04] p-5 text-left text-white backdrop-blur-xl shadow-[0_10px_30px_rgba(0,0,0,0.4),inset_0_1px_0_rgba(255,255,255,0.2)] hover:border-white/40 hover:from-white/[0.14] hover:to-white/[0.06] hover:shadow-[0_16px_40px_rgba(0,0,0,0.6),inset_0_1px_0_rgba(255,255,255,0.3)] active:scale-[0.98] transition-all"
             >
               <div className="flex w-full items-center justify-between mb-4">
-                <div className="flex size-11 items-center justify-center rounded-xl bg-black text-white shadow-md group-hover:scale-105 transition-transform">
+                <div className="flex size-11 items-center justify-center rounded-xl bg-white text-black shadow-[0_0_20px_rgba(255,255,255,0.2)] group-hover:scale-105 transition-transform">
                   <Video className="size-5" strokeWidth={2.5} />
                 </div>
-                <span className="rounded-md bg-neutral-200 px-2 py-0.5 font-mono text-[10px] font-bold uppercase tracking-wider text-neutral-800">
-                  Shortcut R
-                </span>
+                <div className="flex items-center gap-1.5 rounded-full border border-white/20 bg-white/10 px-2.5 py-0.5 font-mono text-[10px] font-bold uppercase tracking-wider text-white">
+                  <span className="size-1.5 rounded-full bg-white animate-pulse" />
+                  <span>Shortcut R</span>
+                </div>
               </div>
               <div>
-                <h3 className="text-base font-bold tracking-tight text-black flex items-center gap-1.5">
+                <h3 className="text-base font-bold tracking-tight text-white flex items-center gap-1.5">
                   Record Screen
-                  <Zap className="size-3.5 fill-black" />
+                  <Zap className="size-3.5 fill-white text-white" />
                 </h3>
-                <p className="mt-1 text-xs text-neutral-600 leading-relaxed">
+                <p className="mt-1 text-xs text-neutral-300 leading-relaxed">
                   Capture display or app window with zero-lag interaction auto-zooms.
                 </p>
               </div>
@@ -141,13 +142,13 @@ export function HomeScreen() {
             <button
               type="button"
               onClick={() => void handleImportAndOpen()}
-              className="group relative flex flex-col items-start justify-between rounded-2xl border border-white/15 bg-white/[0.06] p-5 text-left text-white transition-all hover:border-white/30 hover:bg-white/[0.12] hover:shadow-xl active:scale-[0.98]"
+              className="group relative flex flex-col items-start justify-between rounded-2xl border border-white/10 bg-white/[0.04] p-5 text-left text-white backdrop-blur-xl shadow-[0_10px_24px_rgba(0,0,0,0.3),inset_0_1px_0_rgba(255,255,255,0.08)] hover:border-white/25 hover:bg-white/[0.08] hover:shadow-xl active:scale-[0.98] transition-all"
             >
               <div className="flex w-full items-center justify-between mb-4">
-                <div className="flex size-11 items-center justify-center rounded-xl border border-white/20 bg-white/10 text-white shadow-sm group-hover:bg-white group-hover:text-black transition-all">
+                <div className="flex size-11 items-center justify-center rounded-xl border border-white/15 bg-white/5 text-white shadow-sm group-hover:bg-white group-hover:text-black transition-all">
                   <FolderOpen className="size-5" />
                 </div>
-                <span className="rounded-md border border-white/10 bg-black/40 px-2 py-0.5 font-mono text-[10px] font-medium text-neutral-400">
+                <span className="rounded-full border border-white/10 bg-white/5 px-2.5 py-0.5 font-mono text-[10px] font-medium text-neutral-400">
                   Shortcut I
                 </span>
               </div>
@@ -165,13 +166,13 @@ export function HomeScreen() {
             <button
               type="button"
               onClick={handleOpenEditorDirectly}
-              className="group relative flex flex-col items-start justify-between rounded-2xl border border-white/15 bg-white/[0.06] p-5 text-left text-white transition-all hover:border-white/30 hover:bg-white/[0.12] hover:shadow-xl active:scale-[0.98]"
+              className="group relative flex flex-col items-start justify-between rounded-2xl border border-white/10 bg-white/[0.04] p-5 text-left text-white backdrop-blur-xl shadow-[0_10px_24px_rgba(0,0,0,0.3),inset_0_1px_0_rgba(255,255,255,0.08)] hover:border-white/25 hover:bg-white/[0.08] hover:shadow-xl active:scale-[0.98] transition-all"
             >
               <div className="flex w-full items-center justify-between mb-4">
-                <div className="flex size-11 items-center justify-center rounded-xl border border-white/20 bg-white/10 text-white shadow-sm group-hover:bg-white group-hover:text-black transition-all">
+                <div className="flex size-11 items-center justify-center rounded-xl border border-white/15 bg-white/5 text-white shadow-sm group-hover:bg-white group-hover:text-black transition-all">
                   <Sliders className="size-5" />
                 </div>
-                <span className="rounded-md border border-white/10 bg-black/40 px-2 py-0.5 font-mono text-[10px] font-medium text-neutral-400">
+                <span className="rounded-full border border-white/10 bg-white/5 px-2.5 py-0.5 font-mono text-[10px] font-medium text-neutral-400">
                   Shortcut E
                 </span>
               </div>
