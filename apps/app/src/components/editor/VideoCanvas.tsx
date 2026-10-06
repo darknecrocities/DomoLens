@@ -347,11 +347,18 @@ export function VideoCanvas({ project, currentTimeMs: propTimeMs }: VideoCanvasP
             <video
               ref={videoRef}
               src={mediaSrc}
+              poster={thumbnailSrc || undefined}
               playsInline
               muted
               preload="auto"
               style={{ filter: effectsState.filterStyle || undefined }}
               className="size-full object-contain pointer-events-none"
+              onLoadedMetadata={(e) => {
+                const v = e.currentTarget;
+                if (!isPlaying && v.currentTime === 0) {
+                  v.currentTime = 0.001;
+                }
+              }}
             />
           ) : thumbnailSrc ? (
             <img

@@ -55,6 +55,23 @@ let audioContextInstance: AudioContext | null = null;
 let micStreamInstance: MediaStream | null = null;
 let recorderCleanupFn: (() => void) | null = null;
 
+let activeRecordingMime = "";
+
+function getBestSupportedMimeType(): string {
+  if (typeof MediaRecorder === "undefined") return "";
+  const candidateTypes = [
+    "video/mp4;codecs=avc1,mp4a.40.2",
+    "video/mp4",
+    "video/webm;codecs=vp9,opus",
+    "video/webm;codecs=vp8,opus",
+    "video/webm",
+  ];
+  for (const c of candidateTypes) {
+    if (MediaRecorder.isTypeSupported(c)) return c;
+  }
+  return "";
+}
+
 const displaySurfaceMap: Record<RecordingSource, "monitor" | "window" | "browser"> = {
   screen: "monitor",
   window: "window",
@@ -359,11 +376,12 @@ export const useRecorder = create<RecorderStore>((set, get) => ({
     // If activeStream exists, begin MediaRecorder
     if (activeStream) {
       try {
-        const mimeType = MediaRecorder.isTypeSupported("video/webm;codecs=vp9,opus")
-          ? "video/webm;codecs=vp9,opus"
-          : "video/webm";
+        const mimeType = getBestSupportedMimeType();
+        activeRecordingMime = mimeType;
 
-        const recorder = new MediaRecorder(activeStream, { mimeType });
+        const recorder = mimeType
+          ? new MediaRecorder(activeStream, { mimeType })
+          : new MediaRecorder(activeStream);
         mediaRecorderInstance = recorder;
 
         recorder.ondataavailable = (event) => {
@@ -383,6 +401,25 @@ export const useRecorder = create<RecorderStore>((set, get) => ({
     let lastY = 0.5;
     let lastTypingTime = 0;
     let lastCursorSampleTime = 0;
+
+    // Attach native OS-level global mouse & typing listeners for full screen capture outside the app
+    void platform.startGlobalInputCapture?.();
+    const offClick = platform.onGlobalClick?.((payload) => {
+      if (get().state !== "recording") return;
+      lastX = payload.norm_x;
+      lastY = payload.norm_y;
+      get().recordClick(payload.norm_x, payload.norm_y, (payload.button as "left" | "right" | "middle") || "left");
+    });
+    const offMove = platform.onGlobalMouseMove?.((payload) => {
+      if (get().state !== "recording") return;
+      lastX = payload.norm_x;
+      lastY = payload.norm_y;
+      get().recordCursorPoint(payload.norm_x, payload.norm_y);
+    });
+    const offTyping = platform.onGlobalTyping?.((payload) => {
+      if (get().state !== "recording") return;
+      get().recordTyping(payload.norm_x, payload.norm_y);
+    });
 
     // Attach live optical stream tracker to capture smooth cursor movement across the shared display
     let stopMotionTracker: (() => void) | null = null;
@@ -465,6 +502,10 @@ export const useRecorder = create<RecorderStore>((set, get) => ({
       window.removeEventListener("mousemove", handlePointerMove);
       window.removeEventListener("mousedown", handleClick);
       window.removeEventListener("keydown", handleKeyDown);
+      void platform.stopGlobalInputCapture?.();
+      offClick?.();
+      offMove?.();
+      offTyping?.();
       if (stopMotionTracker) {
         stopMotionTracker();
         stopMotionTracker = null;
@@ -555,18 +596,38 @@ export const useRecorder = create<RecorderStore>((set, get) => ({
     const finalInteractions = rawInteractions;
     const finalTrajectory = get().cursorTrajectory;
 
-    // Create a video Blob URL
+    const id = `rec-${Date.now()}`;
+    const name = `Recording ${new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`;
+    const now = Date.now();
+
+    // Create a video Blob URL and persist to disk in desktop app
     let mediaUrl = "";
+    const chosenBlobType = activeRecordingMime || "video/mp4";
     if (recordedChunks.length > 0) {
-      const blob = new Blob(recordedChunks, { type: "video/webm" });
+      const blob = new Blob(recordedChunks, { type: chosenBlobType });
       mediaUrl = URL.createObjectURL(blob);
+
+      // In native desktop app, save video directly to local disk
+      if (platform.isApp && platform.saveRecordingFile) {
+        try {
+          const buffer = await blob.arrayBuffer();
+          const bytes = Array.from(new Uint8Array(buffer));
+          const ext = chosenBlobType.includes("webm") ? "webm" : "mp4";
+          const diskPath = await platform.saveRecordingFile(id, bytes, ext);
+          if (diskPath) {
+            mediaUrl = diskPath;
+          }
+        } catch (saveErr) {
+          console.warn("Could not save recording file to disk:", saveErr);
+        }
+      }
     }
 
     // Capture real video frame thumbnail from the recorded video
     let thumbnail: string | null = null;
     if (mediaUrl) {
       try {
-        thumbnail = await captureVideoThumbnail(mediaUrl, 480, 270);
+        thumbnail = await captureVideoThumbnail(platform.mediaUrl(mediaUrl), 480, 270);
       } catch {
         thumbnail = null;
       }
@@ -618,11 +679,6 @@ export const useRecorder = create<RecorderStore>((set, get) => ({
           : `Step ${idx + 1}: Action Focus`,
       };
     });
-
-    // Create the project in the projects store
-    const id = `rec-${Date.now()}`;
-    const name = `Recording ${new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`;
-    const now = Date.now();
 
     const summary: ProjectSummary = {
       id,
@@ -680,10 +736,10 @@ export const useRecorder = create<RecorderStore>((set, get) => ({
       },
     };
 
-    // Register project in projects store and on platform
+    // Register project in projects store and on platform with duplicate removal
     const projectsStore = useProjects.getState();
     useProjects.setState({
-      projects: [summary, ...projectsStore.projects],
+      projects: [summary, ...projectsStore.projects.filter((p) => p.id !== summary.id && p.name !== summary.name)],
     });
     await platform.saveProject?.(summary);
 

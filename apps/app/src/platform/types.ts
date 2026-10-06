@@ -47,4 +47,16 @@ export interface Platform {
   setAlwaysOnTop?(alwaysOnTop: boolean): Promise<void>;
   /** Saves or registers a project summary on the platform. */
   saveProject?(project: ProjectSummary): Promise<void>;
+  /** Starts native OS-level global mouse/keyboard capture across entire computer. */
+  startGlobalInputCapture?(): Promise<void>;
+  /** Stops native OS-level global mouse/keyboard capture. */
+  stopGlobalInputCapture?(): Promise<void>;
+  /** Subscribes to global mouse clicks outside the app anywhere on screen. */
+  onGlobalClick?(callback: (payload: { x: number; y: number; norm_x: number; norm_y: number; button: string }) => void): Off;
+  /** Subscribes to global mouse moves outside the app anywhere on screen. */
+  onGlobalMouseMove?(callback: (payload: { x: number; y: number; norm_x: number; norm_y: number }) => void): Off;
+  /** Subscribes to global keystrokes outside the app anywhere on screen. */
+  onGlobalTyping?(callback: (payload: { x: number; y: number; norm_x: number; norm_y: number }) => void): Off;
+  /** Saves recorded video data to permanent storage on disk. */
+  saveRecordingFile?(id: string, data: number[], ext: string): Promise<string>;
 }

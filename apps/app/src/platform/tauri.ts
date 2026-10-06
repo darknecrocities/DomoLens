@@ -48,7 +48,41 @@ export function createTauriPlatform(opts: { isMobile: boolean; isTouch: boolean;
     renameProject: (id, name) => invoke<ProjectSummary>("rename_project", { id, name }),
     deleteProject: (id) => invoke<void>("delete_project", { id }),
 
-    mediaUrl: (path) => convertFileSrc(path),
+    saveProject: async (project: ProjectSummary) => {
+      await invoke<ProjectSummary>("save_project", { project });
+    },
+
+    saveRecordingFile: async (id: string, data: number[], ext: string) => {
+      return invoke<string>("save_recording_file", { id, data, ext });
+    },
+
+    mediaUrl: (path) => {
+      if (!path) return "";
+      if (
+        path.startsWith("blob:") ||
+        path.startsWith("data:") ||
+        path.startsWith("http://") ||
+        path.startsWith("https://")
+      ) {
+        return path;
+      }
+      return convertFileSrc(path);
+    },
+
+    startGlobalInputCapture: () => invoke<void>("start_global_input_capture"),
+    stopGlobalInputCapture: () => invoke<void>("stop_global_input_capture"),
+
+    onGlobalClick(callback) {
+      return lazyOff(listen<{ x: number; y: number; norm_x: number; norm_y: number; button: string }>("global-click", (ev) => callback(ev.payload)));
+    },
+
+    onGlobalMouseMove(callback) {
+      return lazyOff(listen<{ x: number; y: number; norm_x: number; norm_y: number }>("global-mouse-move", (ev) => callback(ev.payload)));
+    },
+
+    onGlobalTyping(callback) {
+      return lazyOff(listen<{ x: number; y: number; norm_x: number; norm_y: number }>("global-typing", (ev) => callback(ev.payload)));
+    },
 
     onProjectsChanged(callback) {
       return lazyOff(listen("projects://changed", () => callback()));

@@ -1,8 +1,9 @@
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
-use tauri::State;
+use tauri::{Emitter, Manager, State};
 use uuid::Uuid;
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
@@ -22,10 +23,51 @@ pub struct ProjectSummary {
     pub media: Option<String>,
 }
 
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct GlobalClickPayload {
+    pub x: f64,
+    pub y: f64,
+    pub norm_x: f64,
+    pub norm_y: f64,
+    pub screen_width: f64,
+    pub screen_height: f64,
+    pub button: String,
+    pub timestamp_ms: i64,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct GlobalMouseMovePayload {
+    pub x: f64,
+    pub y: f64,
+    pub norm_x: f64,
+    pub norm_y: f64,
+    pub timestamp_ms: i64,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct GlobalTypingPayload {
+    pub x: f64,
+    pub y: f64,
+    pub norm_x: f64,
+    pub norm_y: f64,
+    pub timestamp_ms: i64,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct ScreenDimensions {
+    pub width: f64,
+    pub height: f64,
+    pub scale_factor: f64,
+}
+
 #[derive(Default)]
 pub struct AppState {
     pub projects: Mutex<Vec<ProjectSummary>>,
 }
+
+static RECORDING_ACTIVE: AtomicBool = AtomicBool::new(false);
+static LAST_MOUSE_POS: Mutex<(f64, f64)> = Mutex::new((0.5, 0.5));
+static LAST_MOVE_EMIT_MS: Mutex<i64> = Mutex::new(0);
 
 fn get_data_dir() -> PathBuf {
     if let Some(dirs) = directories::ProjectDirs::from("com", "domolens", "desktop") {
@@ -64,6 +106,89 @@ fn save_projects_to_disk(projects: &[ProjectSummary]) {
     }
 }
 
+fn get_screen_size(app_handle: &tauri::AppHandle) -> (f64, f64) {
+    if let Ok(Some(monitor)) = app_handle.primary_monitor() {
+        let scale = monitor.scale_factor();
+        let size = monitor.size();
+        #[cfg(target_os = "macos")]
+        {
+            let w = size.width as f64 / scale;
+            let h = size.height as f64 / scale;
+            (w.max(1.0), h.max(1.0))
+        }
+        #[cfg(not(target_os = "macos"))]
+        {
+            (size.width as f64, size.height as f64)
+        }
+    } else {
+        (1920.0, 1080.0)
+    }
+}
+
+#[cfg(unix)]
+fn kill_pid(pid: u32) {
+    unsafe {
+        libc::kill(pid as i32, libc::SIGTERM);
+    }
+    for _ in 0..5 {
+        std::thread::sleep(std::time::Duration::from_millis(40));
+        let is_alive = unsafe { libc::kill(pid as i32, 0) == 0 };
+        if !is_alive {
+            return;
+        }
+    }
+    unsafe {
+        libc::kill(pid as i32, libc::SIGKILL);
+    }
+}
+
+#[cfg(not(unix))]
+fn kill_pid(pid: u32) {
+    let _ = std::process::Command::new("taskkill")
+        .args(&["/F", "/PID", &pid.to_string()])
+        .output();
+}
+
+/// Ensures only a single instance of DomoLens runs at any time.
+/// If an existing instance is running, terminates it immediately so the new instance takes over.
+fn ensure_single_instance_and_replace_previous() {
+    let my_pid = std::process::id();
+    let pid_file = get_data_dir().join("domolens.pid");
+
+    if let Ok(content) = fs::read_to_string(&pid_file) {
+        if let Ok(old_pid) = content.trim().parse::<u32>() {
+            if old_pid != my_pid {
+                kill_pid(old_pid);
+            }
+        }
+    }
+
+    #[cfg(unix)]
+    {
+        for proc_name in &["domolens", "DomoLens"] {
+            if let Ok(output) = std::process::Command::new("pgrep").arg("-x").arg(proc_name).output() {
+                let stdout = String::from_utf8_lossy(&output.stdout);
+                for line in stdout.lines() {
+                    if let Ok(pid) = line.trim().parse::<u32>() {
+                        if pid != my_pid {
+                            kill_pid(pid);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    #[cfg(windows)]
+    {
+        let _ = std::process::Command::new("taskkill")
+            .args(&["/F", "/FI", &format!("PID ne {}", my_pid), "/IM", "domolens.exe"])
+            .output();
+    }
+
+    let _ = fs::write(&pid_file, my_pid.to_string());
+}
+
 #[tauri::command]
 fn list_projects(state: State<'_, AppState>) -> Result<Vec<ProjectSummary>, String> {
     let mut list = state.projects.lock().map_err(|e| e.to_string())?;
@@ -72,6 +197,32 @@ fn list_projects(state: State<'_, AppState>) -> Result<Vec<ProjectSummary>, Stri
     }
     list.sort_by(|a, b| b.updated_at.cmp(&a.updated_at));
     Ok(list.clone())
+}
+
+#[tauri::command]
+fn save_project(
+    project: ProjectSummary,
+    state: State<'_, AppState>,
+) -> Result<ProjectSummary, String> {
+    let mut list = state.projects.lock().map_err(|e| e.to_string())?;
+    list.retain(|p| p.id != project.id && p.name != project.name);
+    list.insert(0, project.clone());
+    save_projects_to_disk(&list);
+    Ok(project)
+}
+
+#[tauri::command]
+fn save_recording_file(
+    id: String,
+    data: Vec<u8>,
+    ext: String,
+) -> Result<String, String> {
+    let rec_dir = get_data_dir().join("recordings");
+    let _ = fs::create_dir_all(&rec_dir);
+    let safe_ext = if ext.is_empty() { "mp4".to_string() } else { ext };
+    let file_path = rec_dir.join(format!("{}.{}", id, safe_ext));
+    fs::write(&file_path, data).map_err(|e| e.to_string())?;
+    Ok(file_path.to_string_lossy().to_string())
 }
 
 #[tauri::command]
@@ -94,7 +245,7 @@ fn import_video(
 
     let project = ProjectSummary {
         id: id.clone(),
-        name,
+        name: name.clone(),
         source: "import".to_string(),
         created_at: now,
         updated_at: now,
@@ -102,12 +253,12 @@ fn import_video(
         width: None,
         height: None,
         thumbnail: None,
-        media: Some(path),
+        media: Some(path.clone()),
     };
 
     let mut list = state.projects.lock().map_err(|e| e.to_string())?;
-    list.retain(|p| p.id != id);
-    list.push(project.clone());
+    list.retain(|p| p.media.as_deref() != Some(&path) && p.name != name);
+    list.insert(0, project.clone());
     save_projects_to_disk(&list);
 
     Ok(project)
@@ -141,14 +292,46 @@ fn delete_project(id: String, state: State<'_, AppState>) -> Result<(), String> 
 
 #[tauri::command]
 fn set_recording_hud_mode(app_handle: tauri::AppHandle, floating: bool) -> Result<(), String> {
-    use tauri::Manager;
     if let Some(window) = app_handle.get_webview_window("main") {
         let _ = window.set_always_on_top(floating);
     }
     Ok(())
 }
 
+#[tauri::command]
+fn start_global_input_capture() -> Result<(), String> {
+    RECORDING_ACTIVE.store(true, Ordering::Relaxed);
+    Ok(())
+}
+
+#[tauri::command]
+fn stop_global_input_capture() -> Result<(), String> {
+    RECORDING_ACTIVE.store(false, Ordering::Relaxed);
+    Ok(())
+}
+
+#[tauri::command]
+fn get_screen_dimensions(app_handle: tauri::AppHandle) -> Result<ScreenDimensions, String> {
+    if let Ok(Some(monitor)) = app_handle.primary_monitor() {
+        let scale = monitor.scale_factor();
+        let size = monitor.size();
+        Ok(ScreenDimensions {
+            width: size.width as f64,
+            height: size.height as f64,
+            scale_factor: scale,
+        })
+    } else {
+        Ok(ScreenDimensions {
+            width: 1920.0,
+            height: 1080.0,
+            scale_factor: 1.0,
+        })
+    }
+}
+
 pub fn run() {
+    ensure_single_instance_and_replace_previous();
+
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
@@ -156,12 +339,104 @@ pub fn run() {
         .manage(AppState {
             projects: Mutex::new(load_projects_from_disk()),
         })
+        .setup(|app| {
+            let handle_clone = app.handle().clone();
+            std::thread::spawn(move || {
+                let _ = rdev::listen(move |event| {
+                    if !RECORDING_ACTIVE.load(Ordering::Relaxed) {
+                        return;
+                    }
+                    let now_ms = chrono::Utc::now().timestamp_millis();
+                    match event.event_type {
+                        rdev::EventType::MouseMove { x, y } => {
+                            if let Ok(mut pos) = LAST_MOUSE_POS.lock() {
+                                *pos = (x, y);
+                            }
+                            let should_emit = if let Ok(mut last_emit) = LAST_MOVE_EMIT_MS.lock() {
+                                if now_ms - *last_emit >= 25 {
+                                    *last_emit = now_ms;
+                                    true
+                                } else {
+                                    false
+                                }
+                            } else {
+                                false
+                            };
+
+                            if should_emit {
+                                let (screen_w, screen_h) = get_screen_size(&handle_clone);
+                                let norm_x = (x / screen_w).clamp(0.0, 1.0);
+                                let norm_y = (y / screen_h).clamp(0.0, 1.0);
+                                let _ = handle_clone.emit(
+                                    "global-mouse-move",
+                                    GlobalMouseMovePayload {
+                                        x,
+                                        y,
+                                        norm_x,
+                                        norm_y,
+                                        timestamp_ms: now_ms,
+                                    },
+                                );
+                            }
+                        }
+                        rdev::EventType::ButtonPress(button) => {
+                            let (x, y) = LAST_MOUSE_POS.lock().map(|p| *p).unwrap_or((0.5, 0.5));
+                            let (screen_w, screen_h) = get_screen_size(&handle_clone);
+                            let norm_x = (x / screen_w).clamp(0.0, 1.0);
+                            let norm_y = (y / screen_h).clamp(0.0, 1.0);
+                            let btn_str = match button {
+                                rdev::Button::Left => "left",
+                                rdev::Button::Right => "right",
+                                rdev::Button::Middle => "middle",
+                                _ => "left",
+                            };
+                            let _ = handle_clone.emit(
+                                "global-click",
+                                GlobalClickPayload {
+                                    x,
+                                    y,
+                                    norm_x,
+                                    norm_y,
+                                    screen_width: screen_w,
+                                    screen_height: screen_h,
+                                    button: btn_str.to_string(),
+                                    timestamp_ms: now_ms,
+                                },
+                            );
+                        }
+                        rdev::EventType::KeyPress(_) => {
+                            let (x, y) = LAST_MOUSE_POS.lock().map(|p| *p).unwrap_or((0.5, 0.5));
+                            let (screen_w, screen_h) = get_screen_size(&handle_clone);
+                            let norm_x = (x / screen_w).clamp(0.0, 1.0);
+                            let norm_y = (y / screen_h).clamp(0.0, 1.0);
+                            let _ = handle_clone.emit(
+                                "global-typing",
+                                GlobalTypingPayload {
+                                    x,
+                                    y,
+                                    norm_x,
+                                    norm_y,
+                                    timestamp_ms: now_ms,
+                                },
+                            );
+                        }
+                        _ => {}
+                    }
+                });
+            });
+            Ok(())
+        })
         .invoke_handler(tauri::generate_handler![
             list_projects,
+            save_project,
+            save_recording_file,
             import_video,
             rename_project,
             delete_project,
-            set_recording_hud_mode
+            set_recording_hud_mode,
+            start_global_input_capture,
+            stop_global_input_capture,
+            get_screen_dimensions
         ])
         .run(tauri::generate_context!())
         .expect("error while running DomoLens");

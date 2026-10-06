@@ -48,7 +48,14 @@ export const useProjects = create<ProjectsState>((set, get) => ({
     set({ importing: get().importing + 1 });
     try {
       const project = await platform.importVideo(first);
-      set({ projects: [project, ...get().projects.filter((p) => p.id !== project.id)] });
+      set({
+        projects: [
+          project,
+          ...get().projects.filter(
+            (p) => p.id !== project.id && p.name !== project.name && (!p.media || p.media !== project.media),
+          ),
+        ],
+      });
       toast.success(copy.import.done);
       return project;
     } catch (err) {
