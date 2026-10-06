@@ -1,7 +1,7 @@
 {
   "name": "domolens",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.1.8",
   "description": "Record your screen. DomoLens zooms in on every click for you.",
   "homepage": "https://github.com/darknecrocities/DomoLens",
   "repository": {

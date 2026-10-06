@@ -5,6 +5,7 @@ import {
   Mic,
   Monitor,
   Play,
+  RefreshCw,
   Sliders,
   UploadCloud,
   Video,
@@ -18,6 +19,7 @@ import { RenameModal } from "../components/home/RenameModal";
 import { DeleteModal } from "../components/home/DeleteModal";
 import { useNav } from "../store/nav";
 import { useProjects } from "../store/projects";
+import { checkForAppUpdates } from "../lib/updater";
 
 export function HomeScreen() {
   const { go } = useNav();
@@ -106,6 +108,16 @@ export function HomeScreen() {
               >
                 <Mic className="size-3 text-white" />
                 <span>{micActive ? "Mic Active" : "Mic Muted"}</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => void checkForAppUpdates({ silent: false })}
+                className="flex items-center gap-1.5 rounded-full border border-white/15 bg-white/5 px-3 py-1 font-mono text-[11px] text-neutral-300 hover:bg-white/15 hover:text-white transition-all shadow-sm active:scale-95"
+                title="Check for DomoLens updates"
+              >
+                <RefreshCw className="size-3 text-white" />
+                <span>Check Updates</span>
               </button>
             </div>
           </div>

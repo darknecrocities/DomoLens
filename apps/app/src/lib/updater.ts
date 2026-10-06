@@ -25,7 +25,7 @@ export async function checkForAppUpdates(options?: UpdateCheckOptions): Promise<
     const { check } = await import("@tauri-apps/plugin-updater");
     const update = await check();
 
-    if (!update || !update.available) {
+    if (!update) {
       if (!silent) {
         toast.info("DomoLens is up to date.");
       }
@@ -33,17 +33,23 @@ export async function checkForAppUpdates(options?: UpdateCheckOptions): Promise<
     }
 
     const version = update.version;
+    const currentVersion = update.currentVersion;
     if (!silent) {
-      toast.info(`DomoLens v${version} update found. Downloading...`);
+      toast.info(`Updating DomoLens from v${currentVersion} to v${version}...`);
     }
 
     if (autoInstall) {
-      await update.downloadAndInstall();
+      let downloadedBytes = 0;
+      await update.downloadAndInstall((event) => {
+        if (event.event === "Progress") {
+          downloadedBytes += event.data.chunkLength;
+        }
+      });
 
       const { relaunch } = await import("@tauri-apps/plugin-process");
       useToasts.getState().show(`DomoLens v${version} downloaded. Relaunch to apply.`, {
         tone: "success",
-        durationMs: 12000,
+        durationMs: 20000,
         action: {
           label: "Relaunch Now",
           run: () => {
@@ -71,15 +77,15 @@ export async function checkForAppUpdates(options?: UpdateCheckOptions): Promise<
 export function initBackgroundAutoUpdater(): () => void {
   if (!platform.isApp) return () => {};
 
-  // Check 4 seconds after app launch
+  // Check 3 seconds after app launch
   const initialTimer = setTimeout(() => {
     void checkForAppUpdates({ silent: true, autoInstall: true });
-  }, 4000);
+  }, 3000);
 
-  // Periodic check every 2 hours while open
+  // Periodic check every 30 minutes while open
   const periodicInterval = setInterval(() => {
     void checkForAppUpdates({ silent: true, autoInstall: true });
-  }, 2 * 60 * 60 * 1000);
+  }, 30 * 60 * 1000);
 
   return () => {
     clearTimeout(initialTimer);

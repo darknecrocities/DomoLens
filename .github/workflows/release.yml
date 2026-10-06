@@ -38,17 +38,20 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Determine Release Tag
+      - name: Determine Release Tag and Version
         id: tag
         shell: bash
         run: |
           if [[ "${{ github.ref_type }}" == "tag" ]]; then
-            echo "val=${{ github.ref_name }}" >> $GITHUB_OUTPUT
+            TAG="${{ github.ref_name }}"
           elif [[ -n "${{ inputs.version }}" ]]; then
-            echo "val=${{ inputs.version }}" >> $GITHUB_OUTPUT
+            TAG="${{ inputs.version }}"
           else
-            echo "val=v0.1.${{ github.run_number }}" >> $GITHUB_OUTPUT
+            TAG="v0.1.${{ github.run_number }}"
           fi
+          VER="${TAG#v}"
+          echo "val=$TAG" >> $GITHUB_OUTPUT
+          echo "ver=$VER" >> $GITHUB_OUTPUT
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
@@ -67,6 +70,35 @@ jobs:
 
       - name: Install Node dependencies
         run: npm ci
+
+      - name: Synchronize Version Across Project and Tauri Config
+        shell: bash
+        run: |
+          VER="${{ steps.tag.outputs.ver }}"
+          echo "Synchronizing project files to release version $VER"
+          node -e "
+            const fs = require('fs');
+            const files = ['package.json', 'apps/app/package.json', 'packages/core/package.json', 'apps/landing/package.json'];
+            for (const f of files) {
+              if (fs.existsSync(f)) {
+                const pkg = JSON.parse(fs.readFileSync(f, 'utf8'));
+                pkg.version = '$VER';
+                fs.writeFileSync(f, JSON.stringify(pkg, null, 2) + '\n');
+              }
+            }
+            const tauriPath = 'apps/app/src-tauri/tauri.conf.json';
+            if (fs.existsSync(tauriPath)) {
+              const conf = JSON.parse(fs.readFileSync(tauriPath, 'utf8'));
+              conf.version = '$VER';
+              fs.writeFileSync(tauriPath, JSON.stringify(conf, null, 2) + '\n');
+            }
+            const cargoPath = 'apps/app/src-tauri/Cargo.toml';
+            if (fs.existsSync(cargoPath)) {
+              let cargo = fs.readFileSync(cargoPath, 'utf8');
+              cargo = cargo.replace(/^version = \".*\"/m, 'version = \"$VER\"');
+              fs.writeFileSync(cargoPath, cargo);
+            }
+          "
 
       - name: Build Desktop Application via Tauri Action
         uses: tauri-apps/tauri-action@v0
