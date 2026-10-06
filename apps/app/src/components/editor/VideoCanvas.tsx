@@ -301,11 +301,25 @@ export function VideoCanvas({ project, currentTimeMs: propTimeMs }: VideoCanvasP
 
   const rawMedia = summary.media;
   const isExplicitSample = Boolean(rawMedia && (rawMedia.startsWith("sample://") || rawMedia.startsWith("mock://")));
-  const mediaSrc = !rawMedia
-    ? null
-    : isExplicitSample
-    ? "/domolens_smooth_autozoom_demo.mp4"
-    : platform.mediaUrl(rawMedia);
+  const [resolvedMediaSrc, setResolvedMediaSrc] = useState<string | null>(() => {
+    if (!rawMedia) return null;
+    if (isExplicitSample) return "/domolens_smooth_autozoom_demo.mp4";
+    return platform.mediaUrl(rawMedia);
+  });
+
+  useEffect(() => {
+    if (!rawMedia) {
+      setResolvedMediaSrc(null);
+      return;
+    }
+    if (isExplicitSample) {
+      setResolvedMediaSrc("/domolens_smooth_autozoom_demo.mp4");
+      return;
+    }
+    const primaryUrl = platform.mediaUrl(rawMedia);
+    setResolvedMediaSrc(primaryUrl);
+  }, [rawMedia, isExplicitSample]);
+
   const thumbnailSrc = summary.thumbnail ? platform.mediaUrl(summary.thumbnail) : null;
 
   // Shadow styling lookup
@@ -343,10 +357,10 @@ export function VideoCanvas({ project, currentTimeMs: propTimeMs }: VideoCanvasP
             transition: isPlaying ? "none" : "transform 0.35s cubic-bezier(0.16, 1, 0.3, 1)",
           }}
         >
-          {mediaSrc ? (
+          {resolvedMediaSrc ? (
             <video
               ref={videoRef}
-              src={mediaSrc}
+              src={resolvedMediaSrc}
               poster={thumbnailSrc || undefined}
               playsInline
               muted
@@ -357,6 +371,18 @@ export function VideoCanvas({ project, currentTimeMs: propTimeMs }: VideoCanvasP
                 const v = e.currentTarget;
                 if (!isPlaying && v.currentTime === 0) {
                   v.currentTime = 0.001;
+                }
+              }}
+              onError={async () => {
+                if (rawMedia && platform.readMediaBlob && !rawMedia.startsWith("blob:") && !rawMedia.startsWith("data:")) {
+                  try {
+                    const fallbackBlob = await platform.readMediaBlob(rawMedia);
+                    if (fallbackBlob && fallbackBlob !== resolvedMediaSrc) {
+                      setResolvedMediaSrc(fallbackBlob);
+                    }
+                  } catch (err) {
+                    console.warn("Media blob fallback error:", err);
+                  }
                 }
               }}
             />

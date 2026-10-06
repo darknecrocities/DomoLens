@@ -214,6 +214,7 @@ export function createWebPlatform(opts: { isTouch: boolean; isMac: boolean }): P
     },
 
     mediaUrl: (url) => url,
+    registerBlobUrl: () => {},
 
     onProjectsChanged(callback) {
       listeners.add(callback);

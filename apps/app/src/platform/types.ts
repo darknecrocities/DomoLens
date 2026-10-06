@@ -59,4 +59,22 @@ export interface Platform {
   onGlobalTyping?(callback: (payload: { x: number; y: number; norm_x: number; norm_y: number }) => void): Off;
   /** Saves recorded video data to permanent storage on disk. */
   saveRecordingFile?(id: string, data: number[], ext: string): Promise<string>;
+  /** Shows OS-level global floating recording HUD window and minimizes studio. */
+  showRecordingHud?(): Promise<void>;
+  /** Hides OS-level global floating recording HUD window and restores studio. */
+  hideRecordingHud?(): Promise<void>;
+  /** Syncs recording state to the global HUD window. */
+  syncHudState?(state: { state: string; elapsedMs: number; clicksCount: number; micEnabled: boolean }): Promise<void>;
+  /** Subscribes to commands emitted from the global HUD window. */
+  onHudCommand?(callback: (action: string) => void): Off;
+  /** Subscribes to recording state updates inside the HUD window. */
+  onHudStateSync?(callback: (state: { state: string; elapsedMs: number; clicksCount: number; micEnabled: boolean }) => void): Off;
+  /** Emits a command from the HUD window to the main app. */
+  sendHudCommand?(action: string): Promise<void>;
+  /** Reads local media file bytes from disk into memory for infallible video playback. */
+  readMediaFile?(path: string): Promise<number[]>;
+  /** Returns an in-memory blob URL for a local media path. */
+  readMediaBlob?(path: string): Promise<string>;
+  /** Associates an in-memory blob URL with a disk path. */
+  registerBlobUrl?(path: string, url: string): void;
 }

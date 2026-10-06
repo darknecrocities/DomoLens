@@ -13,9 +13,16 @@ import { screenKey, useNav } from "./store/nav";
 import { useProjects } from "./store/projects";
 import { useRecorder } from "./store/recorder";
 import { FloatingQuickBar } from "./components/recording/FloatingQuickBar";
+import { GlobalHudWindow } from "./components/recording/GlobalHudWindow";
 import { initBackgroundAutoUpdater } from "./lib/updater";
 
 export function App() {
+  const isHudWindow = typeof window !== "undefined" && (window.location.search.includes("hud=true") || window.location.hash.includes("hud"));
+
+  if (isHudWindow) {
+    return <GlobalHudWindow />;
+  }
+
   const { screen } = useNav();
   const { load, importFiles } = useProjects();
   const recorderState = useRecorder((s) => s.state);

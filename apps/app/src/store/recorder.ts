@@ -154,7 +154,17 @@ export const useRecorder = create<RecorderStore>((set, get) => ({
   cursorTrajectory: [],
 
   setSource: (source) => set({ source }),
-  toggleMic: () => set((s) => ({ micEnabled: !s.micEnabled })),
+  toggleMic: () =>
+    set((s) => {
+      const nextMic = !s.micEnabled;
+      void platform.syncHudState?.({
+        state: s.state,
+        elapsedMs: s.elapsedMs,
+        clicksCount: s.clicks.length,
+        micEnabled: nextMic,
+      });
+      return { micEnabled: nextMic };
+    }),
   toggleSystemAudio: () => set((s) => ({ systemAudioEnabled: !s.systemAudioEnabled })),
 
   recordCursorPoint: (x, y) => {
@@ -370,7 +380,14 @@ export const useRecorder = create<RecorderStore>((set, get) => ({
     // Start elapsed counter
     if (elapsedTimer) clearInterval(elapsedTimer);
     elapsedTimer = setInterval(() => {
-      set({ elapsedMs: Date.now() - recordingStartTimestamp });
+      const elapsed = Date.now() - recordingStartTimestamp;
+      set({ elapsedMs: elapsed });
+      void platform.syncHudState?.({
+        state: get().state,
+        elapsedMs: elapsed,
+        clicksCount: get().clicks.length,
+        micEnabled: get().micEnabled,
+      });
     }, 200);
 
     // If activeStream exists, begin MediaRecorder
@@ -438,8 +455,31 @@ export const useRecorder = create<RecorderStore>((set, get) => ({
       }
     }
 
-    // Enable floating HUD mode (always on top) while recording
+    // Enable floating HUD mode and display native OS floating quickaction HUD bar
     void platform.setAlwaysOnTop?.(true);
+    void platform.showRecordingHud?.();
+    void platform.syncHudState?.({
+      state: "recording",
+      elapsedMs: 0,
+      clicksCount: 0,
+      micEnabled: get().micEnabled,
+    });
+
+    const offHud = platform.onHudCommand?.((action) => {
+      if (action === "finish" || action === "stop") {
+        void get().stopRecording();
+      } else if (action === "pause") {
+        get().pauseRecording();
+      } else if (action === "resume") {
+        get().resumeRecording();
+      } else if (action === "cancel") {
+        get().cancelRecording();
+      } else if (action === "add_zoom") {
+        get().recordClick(0.5, 0.5, "left");
+      } else if (action === "toggle_mic") {
+        get().toggleMic();
+      }
+    });
 
     const handlePointerMove = (e: MouseEvent | TouchEvent) => {
       if (get().state !== "recording") return;
@@ -503,6 +543,7 @@ export const useRecorder = create<RecorderStore>((set, get) => ({
       window.removeEventListener("mousedown", handleClick);
       window.removeEventListener("keydown", handleKeyDown);
       void platform.stopGlobalInputCapture?.();
+      offHud?.();
       offClick?.();
       offMove?.();
       offTyping?.();
@@ -528,6 +569,12 @@ export const useRecorder = create<RecorderStore>((set, get) => ({
     if (elapsedTimer) clearInterval(elapsedTimer);
     elapsedTimer = null;
     set({ state: "paused" });
+    void platform.syncHudState?.({
+      state: "paused",
+      elapsedMs: get().elapsedMs,
+      clicksCount: get().clicks.length,
+      micEnabled: get().micEnabled,
+    });
   },
 
   resumeRecording: () => {
@@ -536,9 +583,22 @@ export const useRecorder = create<RecorderStore>((set, get) => ({
       mediaRecorderInstance.resume();
     }
     elapsedTimer = setInterval(() => {
-      set({ elapsedMs: Date.now() - recordingStartTimestamp });
+      const elapsed = Date.now() - recordingStartTimestamp;
+      set({ elapsedMs: elapsed });
+      void platform.syncHudState?.({
+        state: "recording",
+        elapsedMs: elapsed,
+        clicksCount: get().clicks.length,
+        micEnabled: get().micEnabled,
+      });
     }, 200);
     set({ state: "recording" });
+    void platform.syncHudState?.({
+      state: "recording",
+      elapsedMs: get().elapsedMs,
+      clicksCount: get().clicks.length,
+      micEnabled: get().micEnabled,
+    });
   },
 
   stopRecording: async () => {
@@ -589,6 +649,7 @@ export const useRecorder = create<RecorderStore>((set, get) => ({
     const rawClicks = get().clicks.filter((c) => c.timestampMs <= cutoffTime);
     const rawInteractions = get().interactions.filter((i) => i.timestampMs <= cutoffTime);
     void platform.setAlwaysOnTop?.(false);
+    void platform.hideRecordingHud?.();
     set({ state: "idle" });
 
     // Strictly preserve real user clicks without synthetic filler
@@ -615,6 +676,7 @@ export const useRecorder = create<RecorderStore>((set, get) => ({
           const ext = chosenBlobType.includes("webm") ? "webm" : "mp4";
           const diskPath = await platform.saveRecordingFile(id, bytes, ext);
           if (diskPath) {
+            platform.registerBlobUrl?.(diskPath, mediaUrl);
             mediaUrl = diskPath;
           }
         } catch (saveErr) {
@@ -783,6 +845,7 @@ export const useRecorder = create<RecorderStore>((set, get) => ({
     recordedChunks = [];
     cursorTrajectoryBuffer = [];
     void platform.setAlwaysOnTop?.(false);
+    void platform.hideRecordingHud?.();
     set({ state: "idle", elapsedMs: 0, clicks: [], interactions: [], cursorTrajectory: [] });
     useNav.getState().go({ name: "home" });
   },

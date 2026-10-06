@@ -291,6 +291,52 @@ fn delete_project(id: String, state: State<'_, AppState>) -> Result<(), String> 
 }
 
 #[tauri::command]
+fn read_media_file(path: String) -> Result<Vec<u8>, String> {
+    fs::read(&path).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn show_recording_hud(app_handle: tauri::AppHandle) -> Result<(), String> {
+    if let Some(main_win) = app_handle.get_webview_window("main") {
+        let _ = main_win.minimize();
+    }
+    if let Some(hud_win) = app_handle.get_webview_window("hud") {
+        if let Ok(Some(monitor)) = app_handle.primary_monitor() {
+            let scale = monitor.scale_factor();
+            let size = monitor.size();
+            let screen_w = size.width as f64 / scale;
+            let screen_h = size.height as f64 / scale;
+            let hud_w = 560.0;
+            let hud_h = 76.0;
+            let x = ((screen_w - hud_w) / 2.0).max(0.0);
+            let y = (screen_h - hud_h - 36.0).max(0.0);
+            let _ = hud_win.set_position(tauri::Position::Logical(tauri::LogicalPosition { x, y }));
+        }
+        let _ = hud_win.set_always_on_top(true);
+        #[cfg(target_os = "macos")]
+        {
+            let _ = hud_win.set_visible_on_all_workspaces(true);
+        }
+        let _ = hud_win.show();
+        let _ = hud_win.set_focus();
+    }
+    Ok(())
+}
+
+#[tauri::command]
+fn hide_recording_hud(app_handle: tauri::AppHandle) -> Result<(), String> {
+    if let Some(hud_win) = app_handle.get_webview_window("hud") {
+        let _ = hud_win.hide();
+    }
+    if let Some(main_win) = app_handle.get_webview_window("main") {
+        let _ = main_win.unminimize();
+        let _ = main_win.show();
+        let _ = main_win.set_focus();
+    }
+    Ok(())
+}
+
+#[tauri::command]
 fn set_recording_hud_mode(app_handle: tauri::AppHandle, floating: bool) -> Result<(), String> {
     if let Some(window) = app_handle.get_webview_window("main") {
         let _ = window.set_always_on_top(floating);
@@ -559,6 +605,9 @@ pub fn run() {
             import_video,
             rename_project,
             delete_project,
+            read_media_file,
+            show_recording_hud,
+            hide_recording_hud,
             set_recording_hud_mode,
             start_global_input_capture,
             stop_global_input_capture,

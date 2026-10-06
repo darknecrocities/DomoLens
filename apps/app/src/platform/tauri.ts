@@ -1,10 +1,17 @@
 import { convertFileSrc, invoke } from "@tauri-apps/api/core";
-import { listen } from "@tauri-apps/api/event";
+import { emit, listen } from "@tauri-apps/api/event";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { open } from "@tauri-apps/plugin-dialog";
 import { SUPPORTED_VIDEO_EXTENSIONS, baseName, type ProjectSummary } from "@domolens/core";
 import { copy } from "../copy/en";
 import type { FileDropHandlers, IncomingFile, Off, Platform } from "./types";
+
+const blobCache = new Map<string, string>();
+
+/** Registers an in-memory blob URL for a file path */
+export function registerLocalBlobUrl(path: string, url: string): void {
+  blobCache.set(path, url);
+}
 
 /** Wraps a listener that resolves its unsubscribe function later. */
 function lazyOff(pending: Promise<() => void>): Off {
@@ -53,7 +60,12 @@ export function createTauriPlatform(opts: { isMobile: boolean; isTouch: boolean;
     },
 
     saveRecordingFile: async (id: string, data: number[], ext: string) => {
-      return invoke<string>("save_recording_file", { id, data, ext });
+      const savedPath = await invoke<string>("save_recording_file", { id, data, ext });
+      return savedPath;
+    },
+
+    registerBlobUrl: (path: string, url: string) => {
+      blobCache.set(path, url);
     },
 
     mediaUrl: (path) => {
@@ -66,7 +78,29 @@ export function createTauriPlatform(opts: { isMobile: boolean; isTouch: boolean;
       ) {
         return path;
       }
+      if (blobCache.has(path)) {
+        return blobCache.get(path)!;
+      }
       return convertFileSrc(path);
+    },
+
+    readMediaFile: (path: string) => invoke<number[]>("read_media_file", { path }),
+
+    readMediaBlob: async (path: string) => {
+      if (!path) return "";
+      if (path.startsWith("blob:") || path.startsWith("data:")) return path;
+      if (blobCache.has(path)) return blobCache.get(path)!;
+      try {
+        const bytes = await invoke<number[]>("read_media_file", { path });
+        const mime = path.endsWith(".webm") ? "video/webm" : "video/mp4";
+        const blob = new Blob([new Uint8Array(bytes)], { type: mime });
+        const url = URL.createObjectURL(blob);
+        blobCache.set(path, url);
+        return url;
+      } catch (err) {
+        console.warn("Falling back to convertFileSrc for media:", err);
+        return convertFileSrc(path);
+      }
     },
 
     startGlobalInputCapture: () => invoke<void>("start_global_input_capture"),
@@ -103,6 +137,21 @@ export function createTauriPlatform(opts: { isMobile: boolean; isTouch: boolean;
 
     setAlwaysOnTop(alwaysOnTop: boolean) {
       return invoke<void>("set_recording_hud_mode", { floating: alwaysOnTop });
+    },
+
+    showRecordingHud: () => invoke<void>("show_recording_hud"),
+    hideRecordingHud: () => invoke<void>("hide_recording_hud"),
+
+    syncHudState: (state) => emit("domolens://hud-state", state),
+
+    onHudStateSync(callback) {
+      return lazyOff(listen<{ state: string; elapsedMs: number; clicksCount: number; micEnabled: boolean }>("domolens://hud-state", (ev) => callback(ev.payload)));
+    },
+
+    sendHudCommand: (action) => emit("domolens://hud-command", { action }),
+
+    onHudCommand(callback) {
+      return lazyOff(listen<{ action: string }>("domolens://hud-command", (ev) => callback(ev.payload.action)));
     },
   };
 }
