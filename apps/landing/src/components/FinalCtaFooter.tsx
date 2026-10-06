@@ -94,16 +94,21 @@ export function FinalCtaFooter() {
               </div>
               <div className="mt-6 flex flex-wrap gap-3">
                 <a
-                  href="/domolens_smooth_autozoom_demo.mp4"
+                  href="/DomoLens-Universal.dmg"
                   download="DomoLens-Universal.dmg"
                   className="inline-flex items-center gap-2 rounded-lg bg-white px-5 py-2.5 font-mono text-xs font-bold text-black uppercase hover:bg-neutral-200"
                 >
                   <Download className="size-4" />
                   <span>Download .DMG (Universal)</span>
                 </a>
-                <div className="flex items-center rounded-lg border border-neutral-800 bg-black px-4 py-2 font-mono text-xs text-neutral-300">
-                  <code>brew install domolens</code>
-                </div>
+                <a
+                  href="https://github.com/darknecrocities/DomoLens/releases/latest"
+                  target="_blank"
+                  rel="noreferrer"
+                  className="flex items-center rounded-lg border border-neutral-800 bg-black px-4 py-2 font-mono text-xs text-neutral-300 hover:text-white"
+                >
+                  <span>GitHub Release</span>
+                </a>
               </div>
             </div>
           )}
@@ -121,16 +126,14 @@ export function FinalCtaFooter() {
               </div>
               <div className="mt-6 flex flex-wrap gap-3">
                 <a
-                  href="/domolens_smooth_autozoom_demo.mp4"
-                  download="DomoLens-Setup-x64.exe"
+                  href="https://github.com/darknecrocities/DomoLens/releases/latest"
+                  target="_blank"
+                  rel="noreferrer"
                   className="inline-flex items-center gap-2 rounded-lg bg-white px-5 py-2.5 font-mono text-xs font-bold text-black uppercase hover:bg-neutral-200"
                 >
                   <Download className="size-4" />
-                  <span>Download .EXE Setup</span>
+                  <span>Download Windows Installer (.EXE / .MSI)</span>
                 </a>
-                <div className="flex items-center rounded-lg border border-neutral-800 bg-black px-4 py-2 font-mono text-xs text-neutral-300">
-                  <code>winget install domolens</code>
-                </div>
               </div>
             </div>
           )}
@@ -148,20 +151,13 @@ export function FinalCtaFooter() {
               </div>
               <div className="mt-6 flex flex-wrap gap-3">
                 <a
-                  href="/domolens_smooth_autozoom_demo.mp4"
-                  download="DomoLens.AppImage"
+                  href="https://github.com/darknecrocities/DomoLens/releases/latest"
+                  target="_blank"
+                  rel="noreferrer"
                   className="inline-flex items-center gap-2 rounded-lg bg-white px-5 py-2.5 font-mono text-xs font-bold text-black uppercase hover:bg-neutral-200"
                 >
                   <Download className="size-4" />
-                  <span>Download .AppImage</span>
-                </a>
-                <a
-                  href="/domolens_smooth_autozoom_demo.mp4"
-                  download="domolens_amd64.deb"
-                  className="inline-flex items-center gap-2 rounded-lg border border-neutral-700 bg-neutral-800 px-5 py-2.5 font-mono text-xs font-bold text-white uppercase hover:bg-neutral-700"
-                >
-                  <Download className="size-4" />
-                  <span>Download .DEB</span>
+                  <span>Download Linux (.AppImage / .DEB)</span>
                 </a>
               </div>
             </div>

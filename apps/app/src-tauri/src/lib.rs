@@ -341,17 +341,90 @@ pub fn run() {
         })
         .setup(|app| {
             let handle_clone = app.handle().clone();
-            std::thread::spawn(move || {
-                let _ = rdev::listen(move |event| {
+
+            #[cfg(target_os = "macos")]
+            {
+                use std::ptr;
+
+                #[repr(C)]
+                #[derive(Copy, Clone, Debug)]
+                struct CGPoint {
+                    x: f64,
+                    y: f64,
+                }
+
+                extern "C" {
+                    fn CGEventTapCreate(
+                        tap: u32,
+                        place: u32,
+                        options: u32,
+                        events_of_interest: u64,
+                        callback: extern "C" fn(
+                            proxy: *mut std::ffi::c_void,
+                            event_type: u32,
+                            event: *mut std::ffi::c_void,
+                            user_info: *mut std::ffi::c_void,
+                        ) -> *mut std::ffi::c_void,
+                        user_info: *mut std::ffi::c_void,
+                    ) -> *mut std::ffi::c_void;
+                    fn CGEventGetLocation(event: *mut std::ffi::c_void) -> CGPoint;
+                    fn CFMachPortCreateRunLoopSource(
+                        allocator: *mut std::ffi::c_void,
+                        port: *mut std::ffi::c_void,
+                        order: isize,
+                    ) -> *mut std::ffi::c_void;
+                    fn CFRunLoopAddSource(
+                        rl: *mut std::ffi::c_void,
+                        source: *mut std::ffi::c_void,
+                        mode: *mut std::ffi::c_void,
+                    );
+                    fn CFRunLoopGetCurrent() -> *mut std::ffi::c_void;
+                    fn CFRunLoopRun();
+                    static kCFRunLoopCommonModes: *mut std::ffi::c_void;
+                }
+
+                extern "C" fn event_tap_cb(
+                    _proxy: *mut std::ffi::c_void,
+                    event_type: u32,
+                    event: *mut std::ffi::c_void,
+                    user_info: *mut std::ffi::c_void,
+                ) -> *mut std::ffi::c_void {
                     if !RECORDING_ACTIVE.load(Ordering::Relaxed) {
-                        return;
+                        return event;
                     }
-                    let now_ms = chrono::Utc::now().timestamp_millis();
-                    match event.event_type {
-                        rdev::EventType::MouseMove { x, y } => {
-                            if let Ok(mut pos) = LAST_MOUSE_POS.lock() {
-                                *pos = (x, y);
-                            }
+                    unsafe {
+                        let loc = CGEventGetLocation(event);
+                        if let Ok(mut pos) = LAST_MOUSE_POS.lock() {
+                            *pos = (loc.x, loc.y);
+                        }
+                        let now_ms = chrono::Utc::now().timestamp_millis();
+                        let handle = &*(user_info as *const tauri::AppHandle);
+                        let (screen_w, screen_h) = get_screen_size(handle);
+                        let norm_x = (loc.x / screen_w).clamp(0.0, 1.0);
+                        let norm_y = (loc.y / screen_h).clamp(0.0, 1.0);
+
+                        if event_type == 1 || event_type == 3 || event_type == 25 {
+                            let btn = if event_type == 3 {
+                                "right"
+                            } else if event_type == 25 {
+                                "middle"
+                            } else {
+                                "left"
+                            };
+                            let _ = handle.emit(
+                                "global-click",
+                                GlobalClickPayload {
+                                    x: loc.x,
+                                    y: loc.y,
+                                    norm_x,
+                                    norm_y,
+                                    screen_width: screen_w,
+                                    screen_height: screen_h,
+                                    button: btn.to_string(),
+                                    timestamp_ms: now_ms,
+                                },
+                            );
+                        } else if event_type == 5 || event_type == 6 || event_type == 7 {
                             let should_emit = if let Ok(mut last_emit) = LAST_MOVE_EMIT_MS.lock() {
                                 if now_ms - *last_emit >= 25 {
                                     *last_emit = now_ms;
@@ -364,14 +437,11 @@ pub fn run() {
                             };
 
                             if should_emit {
-                                let (screen_w, screen_h) = get_screen_size(&handle_clone);
-                                let norm_x = (x / screen_w).clamp(0.0, 1.0);
-                                let norm_y = (y / screen_h).clamp(0.0, 1.0);
-                                let _ = handle_clone.emit(
+                                let _ = handle.emit(
                                     "global-mouse-move",
                                     GlobalMouseMovePayload {
-                                        x,
-                                        y,
+                                        x: loc.x,
+                                        y: loc.y,
                                         norm_x,
                                         norm_y,
                                         timestamp_ms: now_ms,
@@ -379,51 +449,107 @@ pub fn run() {
                                 );
                             }
                         }
-                        rdev::EventType::ButtonPress(button) => {
-                            let (x, y) = LAST_MOUSE_POS.lock().map(|p| *p).unwrap_or((0.5, 0.5));
-                            let (screen_w, screen_h) = get_screen_size(&handle_clone);
-                            let norm_x = (x / screen_w).clamp(0.0, 1.0);
-                            let norm_y = (y / screen_h).clamp(0.0, 1.0);
-                            let btn_str = match button {
-                                rdev::Button::Left => "left",
-                                rdev::Button::Right => "right",
-                                rdev::Button::Middle => "middle",
-                                _ => "left",
-                            };
-                            let _ = handle_clone.emit(
-                                "global-click",
-                                GlobalClickPayload {
-                                    x,
-                                    y,
-                                    norm_x,
-                                    norm_y,
-                                    screen_width: screen_w,
-                                    screen_height: screen_h,
-                                    button: btn_str.to_string(),
-                                    timestamp_ms: now_ms,
-                                },
-                            );
+                    }
+                    event
+                }
+
+                std::thread::spawn(move || {
+                    unsafe {
+                        let mouse_mask: u64 =
+                            (1 << 1) | (1 << 3) | (1 << 5) | (1 << 6) | (1 << 7) | (1 << 25);
+                        let handle_box = Box::new(handle_clone);
+                        let handle_ptr = Box::into_raw(handle_box);
+
+                        let port = CGEventTapCreate(
+                            1,
+                            0,
+                            1,
+                            mouse_mask,
+                            event_tap_cb,
+                            handle_ptr as *mut std::ffi::c_void,
+                        );
+                        if !port.is_null() {
+                            let source = CFMachPortCreateRunLoopSource(ptr::null_mut(), port, 0);
+                            if !source.is_null() {
+                                let run_loop = CFRunLoopGetCurrent();
+                                CFRunLoopAddSource(run_loop, source, kCFRunLoopCommonModes);
+                                CFRunLoopRun();
+                            }
                         }
-                        rdev::EventType::KeyPress(_) => {
-                            let (x, y) = LAST_MOUSE_POS.lock().map(|p| *p).unwrap_or((0.5, 0.5));
-                            let (screen_w, screen_h) = get_screen_size(&handle_clone);
-                            let norm_x = (x / screen_w).clamp(0.0, 1.0);
-                            let norm_y = (y / screen_h).clamp(0.0, 1.0);
-                            let _ = handle_clone.emit(
-                                "global-typing",
-                                GlobalTypingPayload {
-                                    x,
-                                    y,
-                                    norm_x,
-                                    norm_y,
-                                    timestamp_ms: now_ms,
-                                },
-                            );
-                        }
-                        _ => {}
                     }
                 });
-            });
+            }
+
+            #[cfg(not(target_os = "macos"))]
+            {
+                std::thread::spawn(move || {
+                    let _ = rdev::listen(move |event| {
+                        if !RECORDING_ACTIVE.load(Ordering::Relaxed) {
+                            return;
+                        }
+                        let now_ms = chrono::Utc::now().timestamp_millis();
+                        match event.event_type {
+                            rdev::EventType::MouseMove { x, y } => {
+                                if let Ok(mut pos) = LAST_MOUSE_POS.lock() {
+                                    *pos = (x, y);
+                                }
+                                let should_emit = if let Ok(mut last_emit) = LAST_MOVE_EMIT_MS.lock() {
+                                    if now_ms - *last_emit >= 25 {
+                                        *last_emit = now_ms;
+                                        true
+                                    } else {
+                                        false
+                                    }
+                                } else {
+                                    false
+                                };
+
+                                if should_emit {
+                                    let (screen_w, screen_h) = get_screen_size(&handle_clone);
+                                    let norm_x = (x / screen_w).clamp(0.0, 1.0);
+                                    let norm_y = (y / screen_h).clamp(0.0, 1.0);
+                                    let _ = handle_clone.emit(
+                                        "global-mouse-move",
+                                        GlobalMouseMovePayload {
+                                            x,
+                                            y,
+                                            norm_x,
+                                            norm_y,
+                                            timestamp_ms: now_ms,
+                                        },
+                                    );
+                                }
+                            }
+                            rdev::EventType::ButtonPress(button) => {
+                                let (x, y) = LAST_MOUSE_POS.lock().map(|p| *p).unwrap_or((0.5, 0.5));
+                                let (screen_w, screen_h) = get_screen_size(&handle_clone);
+                                let norm_x = (x / screen_w).clamp(0.0, 1.0);
+                                let norm_y = (y / screen_h).clamp(0.0, 1.0);
+                                let btn_str = match button {
+                                    rdev::Button::Left => "left",
+                                    rdev::Button::Right => "right",
+                                    rdev::Button::Middle => "middle",
+                                    _ => "left",
+                                };
+                                let _ = handle_clone.emit(
+                                    "global-click",
+                                    GlobalClickPayload {
+                                        x,
+                                        y,
+                                        norm_x,
+                                        norm_y,
+                                        screen_width: screen_w,
+                                        screen_height: screen_h,
+                                        button: btn_str.to_string(),
+                                        timestamp_ms: now_ms,
+                                    },
+                                );
+                            }
+                            _ => {}
+                        }
+                    });
+                });
+            }
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![

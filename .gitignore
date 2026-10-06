@@ -68,3 +68,11 @@ tauri-updater.key*
 *.swp
 *.swo
 *~
+
+# Installer binaries
+*.dmg
+*.exe
+*.msi
+*.AppImage
+*.deb
+*.tar.gz
