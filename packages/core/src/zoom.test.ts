@@ -14,6 +14,7 @@ import {
   smoothCursorTrajectory,
   videoToScreenCoordinates,
   zoomBlocksToKeyframes,
+  generateTourShiftSequence,
 } from "./zoom";
 import type { ClickEvent, TimelineClip } from "./project";
 import { removeClipAndRipple, splitClip, splitZoomBlock } from "./timeline";
@@ -397,6 +398,39 @@ describe("zoom algorithms", () => {
     const after = calculateCameraAtTime(10000, result.zoomBlocks, 350, 400, undefined, result.keyframes);
     expect(after.scale).toBe(1.0);
     expect(after.isZoomed).toBe(false);
+  });
+
+  it("generateTourShiftSequence produces smooth camera glide tour across sequential UI steps", () => {
+    const steps = [
+      { id: "step-1", type: "click" as const, timestampMs: 1500, x: 0.25, y: 0.3, button: "left" as const },
+      { id: "step-2", type: "typing" as const, timestampMs: 3800, x: 0.75, y: 0.65, snippet: "Input", durationMs: 1000 },
+      { id: "step-3", type: "click" as const, timestampMs: 6500, x: 0.5, y: 0.8, button: "left" as const },
+    ];
+
+    const tour = generateTourShiftSequence(steps, 10000);
+    expect(tour.zoomBlocks.length).toBe(3);
+    expect(tour.keyframes.length).toBeGreaterThanOrEqual(6);
+
+    // Initial lead-in
+    const startCam = calculateCameraAtTime(1000, tour.zoomBlocks, 350, 400, undefined, tour.keyframes);
+    expect(startCam.isZoomed).toBe(false);
+
+    // Focused on step 1
+    const step1Cam = calculateCameraAtTime(1600, tour.zoomBlocks, 350, 400, undefined, tour.keyframes);
+    expect(step1Cam.isZoomed).toBe(true);
+    expect(step1Cam.scale).toBeGreaterThanOrEqual(1.6);
+    expect(step1Cam.x).toBeLessThan(0.4);
+
+    // During camera shift glide from step 1 to step 2, camera smoothly pans across and stays zoomed
+    const shiftCam = calculateCameraAtTime(3600, tour.zoomBlocks, 350, 400, undefined, tour.keyframes);
+    expect(shiftCam.isZoomed).toBe(true);
+    expect(shiftCam.scale).toBeGreaterThan(1.2);
+
+    // Focused on step 2 (typing has 2.1x adaptive scale)
+    const step2Cam = calculateCameraAtTime(4200, tour.zoomBlocks, 350, 400, undefined, tour.keyframes);
+    expect(step2Cam.isZoomed).toBe(true);
+    expect(step2Cam.scale).toBeGreaterThanOrEqual(2.0);
+    expect(step2Cam.x).toBeGreaterThan(0.6);
   });
 
   it("smoothCursorTrajectory handles none, smooth, and cinematic modes with click anchoring", () => {

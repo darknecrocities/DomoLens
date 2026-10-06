@@ -28,6 +28,8 @@ export function GlobalHudWindow() {
   });
 
   useEffect(() => {
+    document.documentElement.classList.add("hud-window-mode");
+    document.body.classList.add("hud-window-mode");
     const off = platform.onHudStateSync?.((sync) => {
       setHudState({
         state: (sync.state as any) || "recording",
@@ -37,9 +39,22 @@ export function GlobalHudWindow() {
       });
     });
     return () => {
+      document.documentElement.classList.remove("hud-window-mode");
+      document.body.classList.remove("hud-window-mode");
       off?.();
     };
   }, []);
+
+  const handleStartDrag = async (e: React.MouseEvent) => {
+    const target = e.target as HTMLElement | null;
+    if (target?.closest("button")) return;
+    try {
+      const { getCurrentWebviewWindow } = await import("@tauri-apps/api/webviewWindow");
+      await getCurrentWebviewWindow().startDragging();
+    } catch {
+      // web fallback
+    }
+  };
 
   const handleTogglePlay = () => {
     const nextAction = hudState.state === "recording" ? "pause" : "resume";
@@ -71,29 +86,42 @@ export function GlobalHudWindow() {
   const isRecording = hudState.state === "recording";
 
   return (
-    <div className="size-full flex items-center justify-center p-1 bg-transparent select-none overflow-hidden">
+    <div
+      onMouseDown={handleStartDrag}
+      className="size-full flex items-center justify-center p-1 bg-transparent select-none overflow-hidden cursor-grab active:cursor-grabbing"
+    >
       <div
         data-tauri-drag-region
-        className="flex items-center gap-3 rounded-full border border-neutral-700/80 bg-neutral-950/95 px-3 py-2 shadow-2xl backdrop-blur-2xl cursor-move"
+        onMouseDown={handleStartDrag}
+        className="flex items-center gap-3 rounded-full border border-white/20 bg-neutral-950/45 backdrop-blur-2xl px-3.5 py-2 shadow-[0_20px_50px_rgba(0,0,0,0.7),inset_0_1px_1px_rgba(255,255,255,0.25)] ring-1 ring-black/50"
       >
         {/* Drag Handle */}
-        <div data-tauri-drag-region className="flex items-center text-neutral-500 hover:text-neutral-300 transition-colors pl-1 cursor-grab">
+        <div
+          data-tauri-drag-region
+          onMouseDown={handleStartDrag}
+          className="flex items-center text-neutral-400 hover:text-white transition-colors pl-1 cursor-grab active:cursor-grabbing"
+          title="Drag quickbar"
+        >
           <GripHorizontal className="size-4 pointer-events-none" />
         </div>
 
         {/* Status & Timer */}
-        <div data-tauri-drag-region className="flex items-center gap-2 pr-2 border-r border-neutral-800">
+        <div
+          data-tauri-drag-region
+          onMouseDown={handleStartDrag}
+          className="flex items-center gap-2 pr-2.5 border-r border-white/10"
+        >
           <span
             className={`size-2.5 rounded-full transition-all ${
               isRecording
-                ? "bg-white animate-pulse shadow-[0_0_8px_rgba(255,255,255,0.8)]"
-                : "bg-neutral-600"
+                ? "bg-white animate-pulse shadow-[0_0_8px_rgba(255,255,255,0.9)]"
+                : "bg-neutral-500"
             }`}
           />
           <span className="font-mono text-sm font-bold text-white tabular tracking-wide pointer-events-none">
             {formatDuration(hudState.elapsedMs)}
           </span>
-          <span className="font-mono text-[9px] uppercase px-1.5 py-0.5 rounded bg-neutral-800 text-neutral-300 font-semibold pointer-events-none">
+          <span className="font-mono text-[9px] uppercase px-1.5 py-0.5 rounded bg-white/10 border border-white/10 text-neutral-200 font-semibold pointer-events-none">
             {isRecording ? "REC" : "PAUSED"}
           </span>
         </div>
@@ -103,9 +131,9 @@ export function GlobalHudWindow() {
           type="button"
           onClick={handleAddZoom}
           title="Click to log camera zoom at center"
-          className="flex items-center gap-1 rounded-full border border-neutral-800 bg-neutral-900/90 px-2.5 py-1 text-xs font-mono font-medium text-neutral-200 hover:border-neutral-600 hover:text-white transition-all active:scale-95 cursor-pointer"
+          className="flex items-center gap-1 rounded-full border border-white/10 bg-white/5 hover:bg-white/10 hover:border-white/20 px-2.5 py-1 text-xs font-mono font-medium text-neutral-200 hover:text-white transition-all active:scale-95 cursor-pointer backdrop-blur-md"
         >
-          <Crosshair className="size-3 text-neutral-400" />
+          <Crosshair className="size-3 text-neutral-300" />
           <span>{hudState.clicksCount} zooms</span>
         </button>
 
@@ -114,10 +142,10 @@ export function GlobalHudWindow() {
           type="button"
           onClick={handleToggleMic}
           title={hudState.micEnabled ? "Microphone active" : "Microphone muted"}
-          className={`flex size-7 items-center justify-center rounded-full border transition-all active:scale-95 cursor-pointer ${
+          className={`flex size-7 items-center justify-center rounded-full border transition-all active:scale-95 cursor-pointer backdrop-blur-md ${
             hudState.micEnabled
-              ? "border-neutral-700 bg-neutral-900 text-white"
-              : "border-neutral-800 bg-neutral-950 text-neutral-600"
+              ? "border-white/20 bg-white/10 text-white hover:bg-white/20"
+              : "border-white/5 bg-black/40 text-neutral-500 hover:text-neutral-300"
           }`}
         >
           {hudState.micEnabled ? <Mic className="size-3.5" /> : <MicOff className="size-3.5" />}
@@ -128,11 +156,11 @@ export function GlobalHudWindow() {
           type="button"
           onClick={handleTogglePlay}
           title={isRecording ? "Pause recording" : "Resume recording"}
-          className="flex items-center gap-1.5 rounded-full border border-neutral-700 bg-neutral-800 px-3 py-1 font-mono text-xs font-semibold text-white hover:bg-neutral-700 transition-all active:scale-95 cursor-pointer"
+          className="flex items-center gap-1.5 rounded-full border border-white/15 bg-white/10 hover:bg-white/20 px-3 py-1 font-mono text-xs font-semibold text-white transition-all active:scale-95 cursor-pointer backdrop-blur-md"
         >
           {isRecording ? (
             <>
-              <Pause className="size-3 text-neutral-300" />
+              <Pause className="size-3 text-neutral-200" />
               <span>Pause</span>
             </>
           ) : (
@@ -159,7 +187,7 @@ export function GlobalHudWindow() {
           type="button"
           onClick={handleCancel}
           title="Discard recording"
-          className="flex size-7 items-center justify-center rounded-full border border-neutral-800 bg-neutral-950 text-neutral-400 hover:border-neutral-600 hover:text-white transition-all active:scale-95 cursor-pointer"
+          className="flex size-7 items-center justify-center rounded-full border border-white/10 bg-white/5 hover:bg-white/15 text-neutral-400 hover:text-white transition-all active:scale-95 cursor-pointer backdrop-blur-md"
         >
           <X className="size-3.5" />
         </button>

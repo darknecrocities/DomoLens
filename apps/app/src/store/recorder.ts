@@ -12,6 +12,7 @@ import { useProjects } from "./projects";
 import { useNav } from "./nav";
 import { platform } from "../platform";
 import { createLiveStreamMotionTracker } from "../lib/video-activity-detector";
+import { sfx } from "../lib/sound-effects";
 
 let cursorTrajectoryBuffer: import("@domolens/core").CursorTrajectoryPoint[] = [];
 
@@ -433,9 +434,21 @@ export const useRecorder = create<RecorderStore>((set, get) => ({
       lastY = payload.norm_y;
       get().recordCursorPoint(payload.norm_x, payload.norm_y);
     });
+    let activeGlobalTypingId: string | null = null;
+    let lastGlobalTypingTime = 0;
+
     const offTyping = platform.onGlobalTyping?.((payload) => {
       if (get().state !== "recording") return;
-      get().recordTyping(payload.norm_x, payload.norm_y);
+      const now = Date.now();
+      const isNewSession = now - lastGlobalTypingTime > 1600 || !activeGlobalTypingId;
+      lastGlobalTypingTime = now;
+      if (isNewSession) {
+        activeGlobalTypingId = `type-${now}-${Math.random().toString(36).slice(2, 7)}`;
+        get().recordTyping(payload.norm_x, payload.norm_y, "Input", activeGlobalTypingId);
+      } else {
+        get().recordTyping(payload.norm_x, payload.norm_y, undefined, activeGlobalTypingId ?? undefined);
+      }
+      sfx.playKeystroke("mechanical", 0.45);
     });
 
     // Attach live optical stream tracker to capture smooth cursor movement across the shared display
@@ -536,6 +549,7 @@ export const useRecorder = create<RecorderStore>((set, get) => ({
         }
         get().recordTyping(lastX, lastY, typingBuffer, activeTypingId ?? undefined);
       }
+      sfx.playKeystroke("mechanical", 0.45, e.key === " " || e.key === "Enter");
     };
 
     const cleanupListeners = () => {

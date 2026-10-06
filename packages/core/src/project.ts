@@ -257,7 +257,7 @@ export const DEFAULT_LOOKS: ProjectLooks = {
   shadow: "lift",
   cursorStyle: "hidden",
   showCursor: false,
-  showClickRipples: true,
+  showClickRipples: false,
   cursorSize: 1.4,
   cursorSmoothing: "smooth",
   autoTrackCursor: true,

@@ -4,6 +4,7 @@ import {
   DEFAULT_LOOKS,
   clampCameraToBounds,
   detectActivityEventsFromFrames,
+  generateTourShiftSequence,
   insertKeyframe,
   insertVideoEffect,
   interpolateCursorAtTime,
@@ -110,6 +111,13 @@ interface EditorState {
     scale?: number;
     continuousGlide?: boolean;
     maxGlideGapMs?: number;
+  }) => void;
+
+  // Cinematic camera tour shift walkthrough across focal elements
+  createTourCameraShift: (options?: {
+    stepHoldMs?: number;
+    scale?: number;
+    shiftDurationMs?: number;
   }) => void;
 
   // Optical video activity detection & camera shifting
@@ -586,6 +594,67 @@ export const useEditor = create<EditorState>((set, get) => ({
         ? `Auto-generated ${zoomBlocks.length} zooms applied across timeline!`
         : `Plotted ${zoomBlocks.length} zooms and applied to current moment!`,
     );
+  },
+
+  createTourCameraShift: (options) => {
+    const state = get();
+    if (!state.project) return;
+    let eventsToUse: InteractionEvent[] = (state.project.interactions && state.project.interactions.length > 0)
+      ? [...state.project.interactions]
+      : (state.project.clicks && state.project.clicks.length > 0)
+        ? state.project.clicks.map((c) => ({
+            id: c.id,
+            type: "click" as const,
+            timestampMs: c.timestampMs,
+            x: c.x,
+            y: c.y,
+            button: c.button,
+          }))
+        : [];
+
+    if (eventsToUse.length === 0) {
+      const dur = state.durationMs || 10000;
+      const stepMs = Math.max(2600, Math.min(4200, Math.round(dur / 5)));
+      const tourPoints = [
+        { x: 0.38, y: 0.35, type: "click" as const },
+        { x: 0.62, y: 0.45, type: "typing" as const },
+        { x: 0.44, y: 0.60, type: "click" as const },
+        { x: 0.58, y: 0.38, type: "click" as const },
+      ];
+      let pIdx = 0;
+      for (let t = 1800; t < dur - 1000; t += stepMs) {
+        const pt = tourPoints[pIdx % tourPoints.length]!;
+        pIdx++;
+        eventsToUse.push({
+          id: `tour-pt-${t}`,
+          type: pt.type,
+          timestampMs: t,
+          x: pt.x,
+          y: pt.y,
+          button: "left",
+          ...(pt.type === "typing" ? { snippet: "Input", durationMs: 1200 } : {}),
+        });
+      }
+    }
+
+    const { keyframes, zoomBlocks } = generateTourShiftSequence(
+      eventsToUse,
+      state.durationMs,
+      options,
+    );
+
+    set({
+      ...pushHistory(state),
+      project: {
+        ...state.project,
+        keyframes,
+        zoomBlocks,
+      },
+      selectedBlockId: zoomBlocks[0]?.id ?? null,
+    });
+
+    sfx.playClickBop(state.project.audioSettings?.clickSoundPreset || "bop", 0.75);
+    toast.success(`Cinematic Camera Shift Tour applied across ${zoomBlocks.length} steps!`);
   },
 
   shiftCameraTarget: (targetX, targetY, options) => {
@@ -1375,7 +1444,11 @@ export const useEditor = create<EditorState>((set, get) => ({
     let reply = "I analyzed your recording timeline.";
     let actions: Array<{ label: string; actionKey: string }> = [];
 
-    if (lower.includes("zoom") || lower.includes("plot") || lower.includes("click") || lower.includes("type")) {
+    if (lower.includes("tour") || lower.includes("walkthrough") || lower.includes("shift")) {
+      reply =
+        "I can generate a cinematic Camera Shift Tour across your recorded UI interactions. The camera will smoothly glide between elements with organic crane pullbacks without dropping to full frame.";
+      actions = [{ label: "Generate Camera Shift Tour", actionKey: "tour_shift" }];
+    } else if (lower.includes("zoom") || lower.includes("plot") || lower.includes("click") || lower.includes("type")) {
       reply =
         "I can automatically plot camera zooms for every button click and typing action. Each zoom tracks the mouse/target, holds for 2.4 seconds, and smoothly glides back to full screen.";
       actions = [{ label: "Run Auto-Plot Zooms", actionKey: "plot_zooms" }];
@@ -1393,6 +1466,7 @@ export const useEditor = create<EditorState>((set, get) => ({
       reply = `Got it! I can help you adjust zooms, keyframes, captions, or styling for "${state.project?.summary.name || "your video"}". What would you like to tweak next?`;
       actions = [
         { label: "Auto-Plot Zooms", actionKey: "plot_zooms" },
+        { label: "Camera Shift Tour", actionKey: "tour_shift" },
         { label: "Add Subtitle", actionKey: "add_subtitle" },
       ];
     }
@@ -1415,6 +1489,8 @@ export const useEditor = create<EditorState>((set, get) => ({
     const state = get();
     if (actionKey === "plot_zooms") {
       state.plotInteractions();
+    } else if (actionKey === "tour_shift") {
+      state.createTourCameraShift();
     } else if (actionKey === "suggest_chapters") {
       if (state.project) {
         state.addTextOverlay("Chapter: Key Interaction");

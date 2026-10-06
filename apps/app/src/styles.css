@@ -68,6 +68,13 @@
     font-variant-numeric: tabular-nums;
   }
 
+  html.hud-window-mode,
+  body.hud-window-mode,
+  body.hud-window-mode #root {
+    background: transparent !important;
+    background-color: transparent !important;
+  }
+
   @media (prefers-reduced-motion: reduce) {
     *,
     *::before,

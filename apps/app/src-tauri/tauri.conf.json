@@ -58,7 +58,7 @@
   "bundle": {
     "active": true,
     "targets": "all",
-    "createUpdaterArtifacts": true,
+    "createUpdaterArtifacts": false,
     "category": "Video",
     "shortDescription": "Record your screen with automatic camera zoom and motion tracking",
     "icon": [

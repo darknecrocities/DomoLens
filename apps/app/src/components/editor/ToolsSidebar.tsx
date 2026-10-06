@@ -18,6 +18,7 @@ import {
   Wand2,
   Zap,
   Circle,
+  Crosshair,
   SunMedium,
 } from "lucide-react";
 import { formatDuration, type ProjectLooks } from "@domolens/core";
@@ -48,6 +49,7 @@ export function ToolsSidebar() {
   const selectedEffectId = useEditor((s) => s.selectedEffectId);
   const selectedTextId = useEditor((s) => s.selectedTextId);
   const plotInteractions = useEditor((s) => s.plotInteractions);
+  const createTourCameraShift = useEditor((s) => s.createTourCameraShift);
   const updateZoomBlock = useEditor((s) => s.updateZoomBlock);
   const deleteZoomBlock = useEditor((s) => s.deleteZoomBlock);
   const clearZoomBlocks = useEditor((s) => s.clearZoomBlocks);
@@ -215,19 +217,35 @@ export function ToolsSidebar() {
                 </div>
               </div>
 
-              <button
-                type="button"
-                onClick={() =>
-                  plotInteractions({
-                    holdDurationMs: Math.round(holdDurationSec * 1000),
-                    scale: zoomScale,
-                  })
-                }
-                className="w-full rounded-lg bg-white py-2 text-center text-xs font-bold text-black hover:bg-neutral-200 transition-colors shadow-sm flex items-center justify-center gap-1.5"
-              >
-                <Sparkles className="size-3.5 fill-black" />
-                Auto-Plot Clicks & Typing
-              </button>
+              <div className="flex flex-col gap-2">
+                <button
+                  type="button"
+                  onClick={() =>
+                    plotInteractions({
+                      holdDurationMs: Math.round(holdDurationSec * 1000),
+                      scale: zoomScale,
+                    })
+                  }
+                  className="w-full rounded-lg bg-white py-2 text-center text-xs font-bold text-black hover:bg-neutral-200 transition-colors shadow-sm flex items-center justify-center gap-1.5"
+                >
+                  <Sparkles className="size-3.5 fill-black" />
+                  Auto-Plot Clicks & Typing
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() =>
+                    createTourCameraShift({
+                      stepHoldMs: Math.round(holdDurationSec * 1000),
+                      scale: zoomScale,
+                    })
+                  }
+                  className="w-full rounded-lg border border-neutral-700 bg-neutral-800 hover:bg-neutral-700 py-2 text-center text-xs font-semibold text-white transition-colors shadow-sm flex items-center justify-center gap-1.5"
+                >
+                  <Crosshair className="size-3.5 text-neutral-300" />
+                  Create Camera Shift Tour
+                </button>
+              </div>
             </div>
 
             {/* Manual Keyframe Controls */}

@@ -494,6 +494,17 @@ pub fn run() {
                                     },
                                 );
                             }
+                        } else if event_type == 10 {
+                            let _ = handle.emit(
+                                "global-typing",
+                                GlobalTypingPayload {
+                                    x: loc.x,
+                                    y: loc.y,
+                                    norm_x,
+                                    norm_y,
+                                    timestamp_ms: now_ms,
+                                },
+                            );
                         }
                     }
                     event
@@ -501,8 +512,8 @@ pub fn run() {
 
                 std::thread::spawn(move || {
                     unsafe {
-                        let mouse_mask: u64 =
-                            (1 << 1) | (1 << 3) | (1 << 5) | (1 << 6) | (1 << 7) | (1 << 25);
+                        let input_mask: u64 =
+                            (1 << 1) | (1 << 3) | (1 << 5) | (1 << 6) | (1 << 7) | (1 << 10) | (1 << 25);
                         let handle_box = Box::new(handle_clone);
                         let handle_ptr = Box::into_raw(handle_box);
 
@@ -510,7 +521,7 @@ pub fn run() {
                             1,
                             0,
                             1,
-                            mouse_mask,
+                            input_mask,
                             event_tap_cb,
                             handle_ptr as *mut std::ffi::c_void,
                         );
@@ -587,6 +598,22 @@ pub fn run() {
                                         screen_width: screen_w,
                                         screen_height: screen_h,
                                         button: btn_str.to_string(),
+                                        timestamp_ms: now_ms,
+                                    },
+                                );
+                            }
+                            rdev::EventType::KeyPress(_) => {
+                                let (x, y) = LAST_MOUSE_POS.lock().map(|p| *p).unwrap_or((0.5, 0.5));
+                                let (screen_w, screen_h) = get_screen_size(&handle_clone);
+                                let norm_x = (x / screen_w).clamp(0.0, 1.0);
+                                let norm_y = (y / screen_h).clamp(0.0, 1.0);
+                                let _ = handle_clone.emit(
+                                    "global-typing",
+                                    GlobalTypingPayload {
+                                        x,
+                                        y,
+                                        norm_x,
+                                        norm_y,
                                         timestamp_ms: now_ms,
                                     },
                                 );

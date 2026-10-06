@@ -521,7 +521,7 @@ export function calculateCameraAtTime(
       if (timeMs >= k1.timeMs && timeMs <= k2.timeMs) {
         const span = k2.timeMs - k1.timeMs;
         const progress = span > 0 ? easeInOutCubic((timeMs - k1.timeMs) / span) : 1;
-        const scale = k1.scale + (k2.scale - k1.scale) * progress;
+        let scale = k1.scale + (k2.scale - k1.scale) * progress;
         const baseTargetX = k1.targetX + (k2.targetX - k1.targetX) * progress;
         const baseTargetY = k1.targetY + (k2.targetY - k1.targetY) * progress;
         const cursor = interpolateCursorAtTime(timeMs, effectiveTrajectory, baseTargetX, baseTargetY);
@@ -547,22 +547,35 @@ export function calculateCameraAtTime(
             finalX = tracked.x + (0.5 - tracked.x) * progress;
             finalY = tracked.y + (0.5 - tracked.y) * progress;
           } else {
-            // Actively zoomed in: responsive cursor tracking with spatial glide between keyframe points
-            finalX = tracked.x;
-            finalY = tracked.y;
+            // Actively zoomed in: Camera Shift Tour Effect!
+            // When transitioning between different UI focal targets (a tour or workflow shift),
+            // glide the camera focal center smoothly along the path with organic crane pullback.
+            const shiftDist = Math.hypot(k2.targetX - k1.targetX, k2.targetY - k1.targetY);
+            if (shiftDist > 0.04) {
+              if (shiftDist > 0.25 && k1.scale > 1.35 && k2.scale > 1.35 && Math.abs(k1.scale - k2.scale) < 0.15) {
+                // Cinematic crane dip: slight scale pullback mid-shift when holding high scale
+                const craneDip = Math.min(0.20, shiftDist * 0.30) * Math.sin(progress * Math.PI);
+                scale = Math.max(1.25, scale - craneDip);
+              }
+              finalX = baseTargetX + (tracked.x - baseTargetX) * 0.30;
+              finalY = baseTargetY + (tracked.y - baseTargetY) * 0.30;
+            } else {
+              finalX = tracked.x;
+              finalY = tracked.y;
+            }
           }
         } else if (scale > 1.0) {
-          const clamped = clampCameraToBounds(baseTargetX, baseTargetY, scale);
-          finalX = clamped.x;
-          finalY = clamped.y;
+          finalX = baseTargetX;
+          finalY = baseTargetY;
         } else {
           finalX = 0.5;
           finalY = 0.5;
         }
 
+        const clamped = clampCameraToBounds(finalX, finalY, scale);
         return {
-          x: finalX,
-          y: finalY,
+          x: clamped.x,
+          y: clamped.y,
           scale,
           isZoomed: scale > 1.05,
           cursorX: cursor.x,
@@ -1242,6 +1255,142 @@ export function zoomBlocksToKeyframes(
   return keyframes
     .filter((kf, index, arr) => arr.findIndex((k) => k.id === kf.id) === index)
     .sort((a, b) => a.timeMs - b.timeMs);
+}
+
+export interface TourShiftOptions {
+  stepHoldMs?: number;
+  scale?: number;
+  shiftDurationMs?: number;
+}
+
+/**
+ * Generates a cinematic walkthrough / tour sequence across focal elements.
+ * Rather than zooming out to 1.0x between steps, the camera smoothly glides and shifts
+ * between each UI element with an organic crane dip and synchronized audio effects.
+ */
+export function generateTourShiftSequence(
+  events: import("./project").InteractionEvent[],
+  videoDurationMs: number,
+  options?: TourShiftOptions,
+): { keyframes: import("./project").KeyframeNode[]; zoomBlocks: ZoomBlock[] } {
+  if (!events || events.length === 0 || videoDurationMs <= 0) {
+    return { keyframes: [], zoomBlocks: [] };
+  }
+
+  const sorted = [...events].sort((a, b) => a.timestampMs - b.timestampMs);
+  const keyframes: import("./project").KeyframeNode[] = [];
+  const zoomBlocks: ZoomBlock[] = [];
+
+  const defaultScale = options?.scale ?? 1.85;
+  const holdMs = options?.stepHoldMs ?? 1600;
+  const leadInMs = 450;
+  const leadOutMs = 400;
+
+  // Initial lead-in zoom from 1.0x full frame into first element
+  const first = sorted[0]!;
+  const firstStartMs = Math.max(0, first.timestampMs - leadInMs);
+
+  keyframes.push({
+    id: `tour-kf-start`,
+    timeMs: firstStartMs,
+    scale: 1.0,
+    targetX: 0.5,
+    targetY: 0.5,
+    easing: "cubic",
+  });
+
+  let prevHoldEndMs = firstStartMs;
+
+  for (let i = 0; i < sorted.length; i++) {
+    const cur = sorted[i]!;
+    const next = sorted[i + 1];
+    const isTyping = cur.type === "typing";
+    const curScale = isTyping ? 2.1 : defaultScale;
+    const clampedCur = clampCameraToBounds(cur.x, cur.y, curScale);
+
+    // Peak focal arrival on element
+    const arriveMs = Math.max(prevHoldEndMs, cur.timestampMs);
+    keyframes.push({
+      id: `tour-arrive-${cur.id}`,
+      timeMs: arriveMs,
+      scale: curScale,
+      targetX: clampedCur.x,
+      targetY: clampedCur.y,
+      easing: "spring",
+      ...(isTyping
+        ? { sound: "typing", soundPreset: "mechanical", soundVolume: 0.65 }
+        : { sound: "click", soundPreset: "bop", soundVolume: 0.70 }),
+    });
+
+    // Hold steady on element
+    const elementDuration = cur.durationMs ?? 0;
+    const holdEndMs = Math.min(
+      videoDurationMs - leadOutMs,
+      arriveMs + Math.max(holdMs, elementDuration),
+    );
+
+    keyframes.push({
+      id: `tour-hold-${cur.id}`,
+      timeMs: holdEndMs,
+      scale: curScale,
+      targetX: clampedCur.x,
+      targetY: clampedCur.y,
+      easing: "cubic",
+    });
+
+    // Camera shift to next element if available
+    if (next) {
+      const nextTime = next.timestampMs;
+      const shiftSpan = Math.max(400, Math.min(900, nextTime - holdEndMs));
+      const shiftMid = holdEndMs + Math.round(shiftSpan / 2);
+      const nextScale = next.type === "typing" ? 2.1 : defaultScale;
+      const clampedNext = clampCameraToBounds(next.x, next.y, nextScale);
+      const shiftDist = Math.hypot(clampedNext.x - clampedCur.x, clampedNext.y - clampedCur.y);
+
+      if (shiftDist > 0.20) {
+        // Crane dip midway through camera glide
+        const craneScale = Math.max(1.25, Math.min(curScale, nextScale) - 0.25);
+        keyframes.push({
+          id: `tour-crane-${cur.id}`,
+          timeMs: shiftMid,
+          scale: craneScale,
+          targetX: (clampedCur.x + clampedNext.x) / 2,
+          targetY: (clampedCur.y + clampedNext.y) / 2,
+          easing: "cubic",
+        });
+      }
+      prevHoldEndMs = holdEndMs + shiftSpan;
+    } else {
+      // Final return to full frame
+      const endMs = Math.min(videoDurationMs, holdEndMs + leadOutMs);
+      keyframes.push({
+        id: `tour-kf-out`,
+        timeMs: endMs,
+        scale: 1.0,
+        targetX: 0.5,
+        targetY: 0.5,
+        easing: "cubic",
+      });
+      prevHoldEndMs = endMs;
+    }
+
+    // Add continuous ZoomBlock spanning this tour step
+    zoomBlocks.push({
+      id: `tour-block-${i + 1}`,
+      startTimeMs: arriveMs,
+      endTimeMs: next ? next.timestampMs : holdEndMs,
+      targetX: clampedCur.x,
+      targetY: clampedCur.y,
+      scale: curScale,
+      enabled: true,
+    });
+  }
+
+  const uniqueKeyframes = keyframes
+    .filter((kf, index, arr) => arr.findIndex((k) => k.id === kf.id) === index)
+    .sort((a, b) => a.timeMs - b.timeMs);
+
+  return { keyframes: uniqueKeyframes, zoomBlocks };
 }
 
 

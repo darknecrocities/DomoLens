@@ -291,13 +291,6 @@ export function VideoCanvas({ project, currentTimeMs: propTimeMs }: VideoCanvasP
     };
   }, [isPlaying, project.audioTracks]);
 
-  // Check if a click ripple should trigger right now (within 320ms after click)
-  const activeRipple = useMemo(() => {
-    if (!looks.showClickRipples) return null;
-    return clicks.find(
-      (c) => currentTimeMs >= c.timestampMs && currentTimeMs <= c.timestampMs + 320,
-    );
-  }, [currentTimeMs, clicks, looks.showClickRipples]);
 
   const rawMedia = summary.media;
   const isExplicitSample = Boolean(rawMedia && (rawMedia.startsWith("sample://") || rawMedia.startsWith("mock://")));
@@ -432,35 +425,7 @@ export function VideoCanvas({ project, currentTimeMs: propTimeMs }: VideoCanvasP
             </div>
           )}
 
-          {/* Frame-accurate Zero-latency Click Ripple Indicator */}
-          {activeRipple && (
-            <div
-              key={activeRipple.id}
-              className="pointer-events-none absolute -translate-x-1/2 -translate-y-1/2 z-20 will-change-transform"
-              style={{
-                left: `${activeRipple.x * 100}%`,
-                top: `${activeRipple.y * 100}%`,
-              }}
-            >
-              {(() => {
-                const elapsed = currentTimeMs - activeRipple.timestampMs;
-                const progress = Math.min(1, Math.max(0, elapsed / 320));
-                const scale = 0.3 + progress * 1.5;
-                const opacity = 1 - progress;
-                return (
-                  <div
-                    className="size-10 rounded-full border-2 border-white bg-white/30 shadow-sm"
-                    style={{
-                      transform: `scale(${scale})`,
-                      opacity,
-                    }}
-                  />
-                );
-              })()}
-            </div>
-          )}
-
-          {/* Optional Tracked Mouse Cursor Pointer Overlay (Hidden by default to keep native video recording clean) */}
+          {/* Tracked Mouse Cursor Pointer Overlay (Clean, no harsh pressing/ping effects) */}
           {looks.showCursor && looks.cursorStyle !== "hidden" && (
             <div
               className="pointer-events-none absolute will-change-transform z-30"
@@ -491,14 +456,9 @@ export function VideoCanvas({ project, currentTimeMs: propTimeMs }: VideoCanvasP
                 </svg>
               )}
 
-              {/* Glowing Focus Reticle when camera is actively tracking during zoom */}
-              {camera.isZoomed && (
-                <div className="absolute -inset-3 rounded-full border border-white/50 animate-ping pointer-events-none" />
-              )}
-
               {/* Dynamic Cursor Glow Effect */}
               {effectsState.glow && (
-                <div className="absolute -inset-4 rounded-full border border-white/60 bg-white/20 animate-pulse pointer-events-none shadow-[0_0_20px_rgba(255,255,255,0.6)]" />
+                <div className="absolute -inset-3 rounded-full border border-white/60 bg-white/20 animate-pulse pointer-events-none shadow-[0_0_16px_rgba(255,255,255,0.5)]" />
               )}
             </div>
           )}
@@ -524,17 +484,17 @@ export function VideoCanvas({ project, currentTimeMs: propTimeMs }: VideoCanvasP
           />
         )}
 
-        {/* Tactile Click-to-Shift Focal Target Reticle */}
+        {/* Tactile Click-to-Shift Focal Target Reticle (Clean and subtle) */}
         {clickShiftMarker && (
           <div
             key={clickShiftMarker.id}
-            className="pointer-events-none absolute -translate-x-1/2 -translate-y-1/2 z-40 animate-ping"
+            className="pointer-events-none absolute -translate-x-1/2 -translate-y-1/2 z-40 transition-opacity duration-300"
             style={{
               left: `${clickShiftMarker.x}px`,
               top: `${clickShiftMarker.y}px`,
             }}
           >
-            <div className="size-8 rounded-full border-2 border-white bg-white/30 shadow-lg" />
+            <div className="size-6 rounded-full border border-white/80 bg-white/20 shadow-md" />
           </div>
         )}
 

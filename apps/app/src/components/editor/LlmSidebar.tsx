@@ -10,6 +10,7 @@ import {
   HelpCircle,
   Wand2,
   Bookmark,
+  Crosshair,
   MessageSquare,
   Music,
 } from "lucide-react";
@@ -62,6 +63,11 @@ export function LlmSidebar() {
       label: "Auto-Plot Zooms",
       prompt: "Auto-plot camera zooms on all clicks and typing with 2.4s hold",
       icon: <Sparkles className="size-3 text-white shrink-0" />,
+    },
+    {
+      label: "Camera Shift Tour",
+      prompt: "Create a cinematic camera shift tour gliding across all UI actions",
+      icon: <Crosshair className="size-3 text-white shrink-0" />,
     },
     {
       label: "Suggest Chapters",
