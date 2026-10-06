@@ -66,5 +66,9 @@ export function createTauriPlatform(opts: { isMobile: boolean; isTouch: boolean;
         }),
       );
     },
+
+    setAlwaysOnTop(alwaysOnTop: boolean) {
+      return invoke<void>("set_recording_hud_mode", { floating: alwaysOnTop });
+    },
   };
 }

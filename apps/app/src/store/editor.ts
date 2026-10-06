@@ -33,6 +33,7 @@ import {
 } from "@domolens/core";
 import { sfx } from "../lib/sound-effects";
 import { useProjects } from "./projects";
+import { useNav } from "./nav";
 import { toast } from "./toast";
 
 
@@ -169,6 +170,8 @@ interface EditorState {
   updateLooks: (updates: Partial<ProjectLooks>) => void;
   splitAtCurrentTime: () => void;
   deleteSelected: () => void;
+  deleteVideoClip: (clipId?: string) => void;
+  deleteCurrentProject: () => Promise<boolean>;
 
   // Conversational AI Assistant
   sendLlmMessage: (content: string) => Promise<void>;
@@ -217,7 +220,7 @@ export const useEditor = create<EditorState>((set, get) => ({
   timelineZoom: 1,
   isExportModalOpen: false,
 
-  isLeftSidebarOpen: true,
+  isLeftSidebarOpen: false,
   isRightSidebarOpen: true,
 
   llmMessages: INITIAL_LLM_MESSAGES,
@@ -257,6 +260,9 @@ export const useEditor = create<EditorState>((set, get) => ({
     }
 
     // 2. Fall back to useProjects summary or built-in demo templates
+    const isSampleShowcase =
+      id === "demo-saas" || id === "demo-code" || id === "demo-mobile" || id === "sample-demo";
+
     let summary = useProjects.getState().projects.find((p) => p.id === id);
     if (!summary) {
       const now = Date.now();
@@ -275,50 +281,56 @@ export const useEditor = create<EditorState>((set, get) => ({
         source: "recording",
         createdAt: now,
         updatedAt: now,
-        durationMs: 14000,
+        durationMs: isSampleShowcase ? 14000 : 0,
         width: 1920,
         height: 1080,
         thumbnail: null,
-        media: id === "blank" ? null : "/domolens_smooth_autozoom_demo.mp4",
+        media: isSampleShowcase ? "/domolens_smooth_autozoom_demo.mp4" : null,
       };
     }
 
-    const duration = summary.durationMs || 12000;
-    // Generate starter interactions
-    const starterClicks: ClickEvent[] = [
-      { id: "c-1", timestampMs: Math.round(duration * 0.22), x: 0.35, y: 0.45, button: "left" },
-      { id: "c-2", timestampMs: Math.round(duration * 0.62), x: 0.65, y: 0.55, button: "left" },
-    ];
-    const starterInteractions: InteractionEvent[] = [
-      { id: "c-1", type: "click", timestampMs: Math.round(duration * 0.22), x: 0.35, y: 0.45, button: "left" },
-      { id: "c-2", type: "typing", timestampMs: Math.round(duration * 0.62), x: 0.65, y: 0.55, snippet: "DomoLens" },
-    ];
+    const duration = summary.durationMs || (isSampleShowcase ? 14000 : 0);
 
-    const { keyframes, zoomBlocks } = plotInteractionsToKeyframesAndZoomBlocks(
-      starterInteractions,
-      duration,
-      { holdDurationMs: 1000, leadInMs: 500, scale: 1.85 },
-    );
+    let starterClicks: ClickEvent[] = [];
+    let starterInteractions: InteractionEvent[] = [];
+    let starterTrajectory: import("@domolens/core").CursorTrajectoryPoint[] = [];
+    let zoomBlocks: ZoomBlock[] = [];
+    let keyframes: KeyframeNode[] = [];
+    let textOverlays: TextOverlay[] = [];
+    let audioTracks: AudioTrack[] = [];
+    let clips: TimelineClip[] = [];
 
-    const starterTrajectory = [
-      { timestampMs: 0, x: 0.5, y: 0.5 },
-      { timestampMs: Math.round(duration * 0.12), x: 0.42, y: 0.48 },
-      { timestampMs: Math.round(duration * 0.22), x: 0.35, y: 0.45 },
-      { timestampMs: Math.round(duration * 0.38), x: 0.38, y: 0.46 },
-      { timestampMs: Math.round(duration * 0.48), x: 0.52, y: 0.50 },
-      { timestampMs: Math.round(duration * 0.62), x: 0.65, y: 0.55 },
-      { timestampMs: Math.round(duration * 0.76), x: 0.68, y: 0.54 },
-      { timestampMs: duration, x: 0.5, y: 0.5 },
-    ];
+    // Only seed mock zooms, music, and text for explicit sample demos!
+    if (isSampleShowcase) {
+      starterClicks = [
+        { id: "c-1", timestampMs: Math.round(duration * 0.22), x: 0.35, y: 0.45, button: "left" },
+        { id: "c-2", timestampMs: Math.round(duration * 0.62), x: 0.65, y: 0.55, button: "left" },
+      ];
+      starterInteractions = [
+        { id: "c-1", type: "click", timestampMs: Math.round(duration * 0.22), x: 0.35, y: 0.45, button: "left" },
+        { id: "c-2", type: "typing", timestampMs: Math.round(duration * 0.62), x: 0.65, y: 0.55, snippet: "DomoLens" },
+      ];
 
-    const projectData: ProjectData = {
-      summary,
-      clicks: starterClicks,
-      interactions: starterInteractions,
-      cursorTrajectory: starterTrajectory,
-      zoomBlocks,
-      keyframes,
-      textOverlays: [
+      const plotted = plotInteractionsToKeyframesAndZoomBlocks(
+        starterInteractions,
+        duration,
+        { holdDurationMs: 1000, leadInMs: 500, scale: 1.85 },
+      );
+      keyframes = plotted.keyframes;
+      zoomBlocks = plotted.zoomBlocks;
+
+      starterTrajectory = [
+        { timestampMs: 0, x: 0.5, y: 0.5 },
+        { timestampMs: Math.round(duration * 0.12), x: 0.42, y: 0.48 },
+        { timestampMs: Math.round(duration * 0.22), x: 0.35, y: 0.45 },
+        { timestampMs: Math.round(duration * 0.38), x: 0.38, y: 0.46 },
+        { timestampMs: Math.round(duration * 0.48), x: 0.52, y: 0.50 },
+        { timestampMs: Math.round(duration * 0.62), x: 0.65, y: 0.55 },
+        { timestampMs: Math.round(duration * 0.76), x: 0.68, y: 0.54 },
+        { timestampMs: duration, x: 0.5, y: 0.5 },
+      ];
+
+      textOverlays = [
         {
           id: "txt-welcome",
           text: "Auto-zoom Screen Demo",
@@ -330,8 +342,9 @@ export const useEditor = create<EditorState>((set, get) => ({
           color: "#ffffff",
           bgColor: "rgba(15, 17, 23, 0.85)",
         },
-      ],
-      audioTracks: [
+      ];
+
+      audioTracks = [
         {
           id: "audio-default-lofi",
           name: "Ambient Lo-Fi Beats",
@@ -342,19 +355,34 @@ export const useEditor = create<EditorState>((set, get) => ({
           volume: 0.4,
           muted: false,
         },
-      ],
-      clips: [
+      ];
+    }
+
+    if (summary.media) {
+      clips = [
         {
           id: `clip-${id}-1`,
           name: summary.name,
-          mediaUrl: summary.media || "",
+          mediaUrl: summary.media,
           timelineStartMs: 0,
           durationMs: duration,
           sourceOffsetMs: 0,
           muted: false,
           volume: 1,
         },
-      ],
+      ];
+    }
+
+    const projectData: ProjectData = {
+      summary,
+      clicks: starterClicks,
+      interactions: starterInteractions,
+      cursorTrajectory: starterTrajectory,
+      zoomBlocks,
+      keyframes,
+      textOverlays,
+      audioTracks,
+      clips,
       looks: DEFAULT_LOOKS,
       audioSettings: { ...DEFAULT_AUDIO_SETTINGS },
     };
@@ -364,6 +392,11 @@ export const useEditor = create<EditorState>((set, get) => ({
       currentTimeMs: 0,
       durationMs: duration,
       selectedBlockId: zoomBlocks[0]?.id || null,
+      selectedKeyframeId: null,
+      selectedEffectId: null,
+      selectedTextId: null,
+      selectedAudioId: null,
+      selectedClipId: clips[0]?.id || null,
       history: [],
       future: [],
     });
@@ -1263,16 +1296,62 @@ export const useEditor = create<EditorState>((set, get) => ({
     } else if (state.selectedAudioId) {
       state.deleteAudioTrack(state.selectedAudioId);
     } else if (state.selectedClipId) {
-      set({
-        ...pushHistory(state),
-        project: {
-          ...state.project,
-          clips: removeClipAndRipple(state.project.clips, state.selectedClipId),
-        },
-        selectedClipId: null,
-      });
-      toast.info("Clip deleted.");
+      state.deleteVideoClip(state.selectedClipId);
     }
+  },
+
+  deleteVideoClip: (clipId?: string) => {
+    const state = get();
+    if (!state.project) return;
+    const targetId = clipId || state.selectedClipId || state.project.clips[0]?.id;
+    if (!targetId) {
+      if (state.project.summary.media) {
+        set({
+          ...pushHistory(state),
+          project: {
+            ...state.project,
+            summary: { ...state.project.summary, media: null },
+            clips: [],
+            zoomBlocks: [],
+            keyframes: [],
+          },
+        });
+        toast.info("Video media cleared.");
+      }
+      return;
+    }
+    const updatedClips = removeClipAndRipple(state.project.clips, targetId);
+    const hasClipsLeft = updatedClips.length > 0;
+    set({
+      ...pushHistory(state),
+      project: {
+        ...state.project,
+        clips: updatedClips,
+        summary: {
+          ...state.project.summary,
+          media: hasClipsLeft ? state.project.summary.media : null,
+        },
+        zoomBlocks: hasClipsLeft ? state.project.zoomBlocks : [],
+        keyframes: hasClipsLeft ? state.project.keyframes : [],
+      },
+      selectedClipId: null,
+    });
+    toast.info("Video clip deleted.");
+  },
+
+  deleteCurrentProject: async () => {
+    const state = get();
+    if (!state.project) return false;
+    const id = state.project.summary.id;
+    if (typeof sessionStorage !== "undefined") {
+      sessionStorage.removeItem(`domolens_project_${id}`);
+    }
+    const success = await useProjects.getState().remove(id);
+    if (success) {
+      useNav.getState().go({ name: "home" });
+      set({ project: null, currentTimeMs: 0, durationMs: 0 });
+    }
+    return success;
   },
 
   sendLlmMessage: async (content: string) => {

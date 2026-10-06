@@ -300,8 +300,10 @@ export function VideoCanvas({ project, currentTimeMs: propTimeMs }: VideoCanvasP
   }, [currentTimeMs, clicks, looks.showClickRipples]);
 
   const rawMedia = summary.media;
-  const isSampleOrEmpty = !rawMedia || rawMedia.startsWith("sample://") || rawMedia.startsWith("mock://");
-  const mediaSrc = isSampleOrEmpty
+  const isExplicitSample = Boolean(rawMedia && (rawMedia.startsWith("sample://") || rawMedia.startsWith("mock://")));
+  const mediaSrc = !rawMedia
+    ? null
+    : isExplicitSample
     ? "/domolens_smooth_autozoom_demo.mp4"
     : platform.mediaUrl(rawMedia);
   const thumbnailSrc = summary.thumbnail ? platform.mediaUrl(summary.thumbnail) : null;
@@ -319,7 +321,7 @@ export function VideoCanvas({ project, currentTimeMs: propTimeMs }: VideoCanvasP
       className="relative flex size-full items-center justify-center overflow-hidden"
       style={{
         background: looks.backgroundValue,
-        padding: `${looks.padding}px`,
+        padding: `clamp(6px, 2.5vw, ${looks.padding}px)`,
       }}
     >
       {/* Video Viewport with Framing and Click-to-Shift */}

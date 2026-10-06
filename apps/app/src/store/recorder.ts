@@ -11,7 +11,8 @@ import {
 import { toast } from "./toast";
 import { useProjects } from "./projects";
 import { useNav } from "./nav";
-import { createLiveStreamMotionTracker, scanVideoElementForActivity } from "../lib/video-activity-detector";
+import { platform } from "../platform";
+import { createLiveStreamMotionTracker } from "../lib/video-activity-detector";
 
 let cursorTrajectoryBuffer: import("@domolens/core").CursorTrajectoryPoint[] = [];
 
@@ -253,7 +254,7 @@ export const useRecorder = create<RecorderStore>((set, get) => ({
     let lastTypingTime = 0;
     let lastCursorSampleTime = 0;
 
-    // Attach live optical stream tracker to capture real cursor movement & clicks on ANY shared screen
+    // Attach live optical stream tracker to capture smooth cursor movement across the shared display
     let stopMotionTracker: (() => void) | null = null;
     if (activeStream) {
       try {
@@ -264,19 +265,14 @@ export const useRecorder = create<RecorderStore>((set, get) => ({
             lastX = pt.x;
             lastY = pt.y;
           },
-          onInteraction: (inter) => {
-            if (get().state !== "recording") return;
-            if (inter.type === "click") {
-              get().recordClick(inter.x, inter.y, inter.button || "left");
-            } else {
-              get().recordTyping(inter.x, inter.y, inter.snippet || "Type", inter.id);
-            }
-          },
         });
       } catch (err) {
         console.warn("Motion tracker start error:", err);
       }
     }
+
+    // Enable floating HUD mode (always on top) while recording
+    void platform.setAlwaysOnTop?.(true);
 
     const handlePointerMove = (e: MouseEvent | TouchEvent) => {
       if (get().state !== "recording") return;
@@ -401,89 +397,21 @@ export const useRecorder = create<RecorderStore>((set, get) => ({
     const cutoffTime = Math.max(0, duration - 500);
     const rawClicks = get().clicks.filter((c) => c.timestampMs <= cutoffTime);
     const rawInteractions = get().interactions.filter((i) => i.timestampMs <= cutoffTime);
+    void platform.setAlwaysOnTop?.(false);
     set({ state: "idle" });
 
-    // If no clicks occurred during recording (e.g. desktop recording outside browser DOM),
-    // provide smart fallback focal zooms so the editor has clean auto-zooms ready to use
     let finalClicks = rawClicks;
     let finalInteractions = rawInteractions;
     let finalTrajectory = get().cursorTrajectory;
 
-    // If no clicks occurred via DOM listeners (e.g. desktop recording of other windows/screens),
-    // perform optical scan on recorded video frames to detect real user activity on any screen
-    if (finalClicks.length === 0 && finalInteractions.length === 0 && recordedChunks.length > 0 && typeof document !== "undefined") {
-      try {
-        const videoBlob = new Blob(recordedChunks, { type: "video/webm" });
-        const videoUrl = URL.createObjectURL(videoBlob);
-        const tempVideo = document.createElement("video");
-        tempVideo.src = videoUrl;
-        tempVideo.muted = true;
-        await new Promise<void>((resolve) => {
-          tempVideo.onloadedmetadata = () => resolve();
-          tempVideo.onerror = () => resolve();
-          setTimeout(resolve, 500);
-        });
-        const detected = await scanVideoElementForActivity(tempVideo);
-        if (detected.clicks.length > 0 || detected.interactions.length > 0) {
-          finalClicks = detected.clicks;
-          finalInteractions = detected.interactions;
-          finalTrajectory = detected.cursorTrajectory;
-        }
-        URL.revokeObjectURL(videoUrl);
-      } catch (err) {
-        console.warn("Video optical scan error:", err);
-      }
-    }
-
-    if (finalClicks.length === 0 && duration >= 3000) {
-      const stepMs = Math.max(2800, Math.min(4500, Math.round(duration / 9)));
-      const focalPoints = [
-        { x: 0.50, y: 0.38, type: "typing" as const },
-        { x: 0.36, y: 0.44, type: "click" as const },
-        { x: 0.58, y: 0.46, type: "click" as const },
-        { x: 0.42, y: 0.54, type: "typing" as const },
-        { x: 0.62, y: 0.40, type: "click" as const },
-        { x: 0.38, y: 0.62, type: "click" as const },
-        { x: 0.52, y: 0.42, type: "typing" as const },
-      ];
-      const autoEvents: InteractionEvent[] = [];
-      const autoClicks: ClickEvent[] = [];
-      let fpIdx = 0;
-      for (let t = 2000; t < duration - 1200; t += stepMs) {
-        const fp = focalPoints[fpIdx % focalPoints.length]!;
-        fpIdx++;
-        const id = `act-auto-${t}`;
-        autoClicks.push({ id, timestampMs: t, x: fp.x, y: fp.y, button: "left" });
-        autoEvents.push({
-          id,
-          type: fp.type,
-          timestampMs: t,
-          x: fp.x,
-          y: fp.y,
-          button: "left",
-          ...(fp.type === "typing" ? { snippet: "Input", durationMs: 1200 } : {}),
-        });
-      }
-      finalClicks = autoClicks.length > 0 ? autoClicks : [
-        { id: "c-auto-1", timestampMs: Math.round(duration * 0.22), x: 0.38, y: 0.42, button: "left" },
-        { id: "c-auto-2", timestampMs: Math.round(duration * 0.62), x: 0.62, y: 0.52, button: "left" },
-      ];
-      finalInteractions = autoEvents.length > 0 ? autoEvents : [
-        { id: "c-auto-1", type: "click", timestampMs: Math.round(duration * 0.22), x: 0.38, y: 0.42, button: "left" },
-        { id: "c-auto-2", type: "click", timestampMs: Math.round(duration * 0.62), x: 0.62, y: 0.52, button: "left" },
-      ];
-    }
-
     // Create a video Blob URL
-    let mediaUrl: string;
+    let mediaUrl = "";
     if (recordedChunks.length > 0) {
       const blob = new Blob(recordedChunks, { type: "video/webm" });
       mediaUrl = URL.createObjectURL(blob);
-    } else {
-      mediaUrl = "/domolens_smooth_autozoom_demo.mp4";
     }
 
-    // Fill long gaps (> 4200ms) between interactions to avoid dead zones across the timeline
+    // Fill gaps only if real user interactions occurred
     if (finalInteractions.length > 0) {
       finalInteractions = fillInteractionGaps(finalInteractions, duration, finalTrajectory);
       finalClicks = finalInteractions.map((i) => ({
@@ -495,29 +423,23 @@ export const useRecorder = create<RecorderStore>((set, get) => ({
       }));
     }
 
-    // Auto-plot all click and typing interactions into smooth zooms with keyframes
-    const { keyframes, zoomBlocks } = plotInteractionsToKeyframesAndZoomBlocks(
+    // Plot zooms only if interactions actually occurred. Otherwise keep empty by default!
+    const { keyframes, zoomBlocks } =
       finalInteractions.length > 0
-        ? finalInteractions
-        : finalClicks.map((c) => ({
-            id: c.id,
-            type: "click" as const,
-            timestampMs: c.timestampMs,
-            x: c.x,
-            y: c.y,
-            button: c.button,
-          })),
-      duration,
-      {
-        holdDurationMs: 1000,
-        leadInMs: 500,
-        fallbackIfEmpty: true,
-        continuousGlide: true,
-        maxGlideGapMs: 3500,
-        autoFillGaps: true,
-        cursorTrajectory: finalTrajectory,
-      },
-    );
+        ? plotInteractionsToKeyframesAndZoomBlocks(
+            finalInteractions,
+            duration,
+            {
+              holdDurationMs: 1000,
+              leadInMs: 500,
+              fallbackIfEmpty: false,
+              continuousGlide: true,
+              maxGlideGapMs: 3500,
+              autoFillGaps: true,
+              cursorTrajectory: finalTrajectory,
+            },
+          )
+        : { keyframes: [], zoomBlocks: [] };
 
     // Auto-plot text callouts from typing interactions
     const textOverlays: import("@domolens/core").TextOverlay[] = finalInteractions
@@ -642,6 +564,7 @@ export const useRecorder = create<RecorderStore>((set, get) => ({
     mediaRecorderInstance = null;
     recordedChunks = [];
     cursorTrajectoryBuffer = [];
+    void platform.setAlwaysOnTop?.(false);
     set({ state: "idle", elapsedMs: 0, clicks: [], interactions: [], cursorTrajectory: [] });
     useNav.getState().go({ name: "home" });
   },

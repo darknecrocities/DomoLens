@@ -6,6 +6,7 @@ import {
   Settings,
   Sliders,
   Sparkles,
+  Trash2,
 } from "lucide-react";
 import { copy } from "../copy/en";
 import { Button } from "../components/ui/Button";
@@ -16,6 +17,7 @@ import { LlmSidebar } from "../components/editor/LlmSidebar";
 import { ToolsSidebar } from "../components/editor/ToolsSidebar";
 import { ExportModal } from "../components/editor/ExportModal";
 import { SettingsModal } from "../components/settings/SettingsModal";
+import { DeleteModal } from "../components/home/DeleteModal";
 import { useEditor } from "../store/editor";
 import { useNav } from "../store/nav";
 
@@ -45,6 +47,7 @@ export function EditorScreen({ id }: EditorScreenProps) {
   const setExportModalOpen = useEditor((s) => s.setExportModalOpen);
 
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
   // Mobile responsive view selector (<md)
   const [mobileTab, setMobileTab] = useState<"canvas" | "ai" | "tools">("canvas");
 
@@ -194,6 +197,15 @@ export function EditorScreen({ id }: EditorScreenProps) {
           <div className="h-4 w-px bg-ink-800 hidden sm:block" />
 
           <IconButton
+            label="Delete Project"
+            icon={<Trash2 className="size-4" />}
+            variant="ghost"
+            size="sm"
+            onClick={() => setShowDeleteModal(true)}
+            className="text-neutral-400 hover:text-white hover:bg-white/10"
+          />
+
+          <IconButton
             label={copy.editor.settingsBtn}
             icon={<Settings className="size-4" />}
             variant="ghost"
@@ -223,7 +235,7 @@ export function EditorScreen({ id }: EditorScreenProps) {
           {/* CENTER PANEL: CANVAS + TIMELINE */}
           <div className="flex flex-1 flex-col overflow-hidden min-w-0">
             {/* Canvas Player Area with live mouse tracking */}
-            <div className="relative flex flex-1 items-center justify-center overflow-hidden p-3 lg:p-6 min-h-[180px]">
+            <div className="relative flex flex-1 items-center justify-center overflow-hidden p-2 sm:p-3 min-h-[180px]">
               <VideoCanvas project={project} />
             </div>
 
@@ -312,6 +324,17 @@ export function EditorScreen({ id }: EditorScreenProps) {
         open={settingsOpen}
         onClose={() => setSettingsOpen(false)}
       />
+      {showDeleteModal && (
+        <DeleteModal
+          open={showDeleteModal}
+          projectName={project.summary.name}
+          onClose={() => setShowDeleteModal(false)}
+          onConfirm={async () => {
+            setShowDeleteModal(false);
+            await useEditor.getState().deleteCurrentProject();
+          }}
+        />
+      )}
     </div>
   );
 }

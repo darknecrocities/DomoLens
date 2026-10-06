@@ -192,10 +192,10 @@ export function Timeline({ project }: TimelineProps) {
           <button
             type="button"
             onClick={() => addEffectAtCurrentTime("spotlight")}
-            className="flex items-center gap-1.5 rounded-lg border border-amber-500/40 bg-amber-500/15 px-2 py-1 text-xs font-medium text-amber-200 hover:border-amber-400 hover:bg-amber-500/25 transition-colors"
+            className="flex items-center gap-1.5 rounded-lg border border-neutral-700 bg-neutral-800 px-2 py-1 text-xs font-medium text-neutral-300 hover:border-neutral-500 hover:text-white transition-colors"
             title="Add visual effect at playhead (Spotlight, Blur, Vignette, Glow, Filter)"
           >
-            <Wand2 className="size-3 text-amber-300 shrink-0" />
+            <Wand2 className="size-3 text-neutral-300 shrink-0" />
             <span className="hidden md:inline">+ Effect</span>
           </button>
 
@@ -203,10 +203,10 @@ export function Timeline({ project }: TimelineProps) {
           <button
             type="button"
             onClick={() => addTextOverlay("New Caption")}
-            className="flex items-center gap-1 rounded-lg border border-ink-700 bg-ink-800 px-2 py-1 text-xs font-medium text-fg hover:border-purple-500/40 hover:text-purple-300 transition-colors"
+            className="flex items-center gap-1 rounded-lg border border-neutral-700 bg-neutral-800 px-2 py-1 text-xs font-medium text-neutral-300 hover:border-neutral-500 hover:text-white transition-colors"
             title="Add text overlay"
           >
-            <Type className="size-3.5 text-purple-400" />
+            <Type className="size-3.5 text-neutral-300" />
             <span className="hidden md:inline">+ Text</span>
           </button>
 
@@ -214,10 +214,10 @@ export function Timeline({ project }: TimelineProps) {
           <button
             type="button"
             onClick={() => addAudioTrack("Lo-Fi Beat", "sample://lofi-chill.mp3", "music")}
-            className="flex items-center gap-1 rounded-lg border border-ink-700 bg-ink-800 px-2 py-1 text-xs font-medium text-fg hover:border-emerald-500/40 hover:text-emerald-300 transition-colors"
+            className="flex items-center gap-1 rounded-lg border border-neutral-700 bg-neutral-800 px-2 py-1 text-xs font-medium text-neutral-300 hover:border-neutral-500 hover:text-white transition-colors"
             title="Add background audio track"
           >
-            <Music className="size-3.5 text-emerald-400" />
+            <Music className="size-3.5 text-neutral-300" />
             <span className="hidden md:inline">+ Music</span>
           </button>
 
@@ -315,8 +315,8 @@ export function Timeline({ project }: TimelineProps) {
 
           {/* TRACK: VIDEO EFFECTS HEADER */}
           {project.effects && project.effects.length > 0 && (
-            <div className="h-8 flex items-center gap-1.5 px-2 rounded-lg bg-ink-900/60 text-[10px] font-semibold uppercase tracking-wider text-amber-300/80">
-              <Wand2 className="size-3 text-amber-400 shrink-0" />
+            <div className="h-8 flex items-center gap-1.5 px-2 rounded-lg bg-ink-900/60 text-[10px] font-semibold uppercase tracking-wider text-neutral-400">
+              <Wand2 className="size-3 text-neutral-300 shrink-0" />
               <span className="truncate">Effects</span>
             </div>
           )}
@@ -329,16 +329,16 @@ export function Timeline({ project }: TimelineProps) {
 
           {/* TRACK 4: TEXT OVERLAYS TRACK HEADER */}
           {project.textOverlays && project.textOverlays.length > 0 && (
-            <div className="h-7 flex items-center gap-1.5 px-2 rounded-md bg-ink-900/60 text-[10px] font-semibold uppercase tracking-wider text-purple-300/80">
-              <Type className="size-3 text-purple-400 shrink-0" />
+            <div className="h-7 flex items-center gap-1.5 px-2 rounded-md bg-ink-900/60 text-[10px] font-semibold uppercase tracking-wider text-neutral-400">
+              <Type className="size-3 text-neutral-300 shrink-0" />
               <span className="truncate">Captions</span>
             </div>
           )}
 
           {/* TRACK 5: AUDIO TRACK HEADER */}
           {project.audioTracks && project.audioTracks.length > 0 && (
-            <div className="h-7 flex items-center gap-1.5 px-2 rounded-md bg-ink-900/60 text-[10px] font-semibold uppercase tracking-wider text-emerald-300/80">
-              <Music className="size-3 text-emerald-400 shrink-0" />
+            <div className="h-7 flex items-center gap-1.5 px-2 rounded-md bg-ink-900/60 text-[10px] font-semibold uppercase tracking-wider text-neutral-400">
+              <Music className="size-3 text-neutral-300 shrink-0" />
               <span className="truncate">Music & SFX</span>
             </div>
           )}
@@ -401,20 +401,20 @@ export function Timeline({ project }: TimelineProps) {
                         isSelected
                           ? "bg-white border-black shadow-md scale-110"
                           : kf.effect
-                          ? "bg-amber-300 border-amber-600 shadow"
+                          ? "bg-neutral-100 border-neutral-400 shadow"
                           : kf.sound === "typing"
-                          ? "bg-emerald-400 border-emerald-700 shadow"
+                          ? "bg-neutral-300 border-neutral-500 shadow"
                           : kf.sound === "click"
-                          ? "bg-cyan-400 border-cyan-700 shadow"
-                          : "bg-neutral-300 border-neutral-500"
+                          ? "bg-neutral-400 border-neutral-600 shadow"
+                          : "bg-neutral-200 border-neutral-400"
                       }`}
                     />
                     {kf.sound && (
                       <div className="absolute -bottom-2.5 left-1/2 -translate-x-1/2 pointer-events-none flex items-center justify-center">
                         {kf.sound === "typing" ? (
-                          <Keyboard className="size-2 text-emerald-400" />
+                          <Keyboard className="size-2 text-neutral-300" />
                         ) : (
-                          <MousePointer className="size-2 text-cyan-400" />
+                          <MousePointer className="size-2 text-neutral-300" />
                         )}
                       </div>
                     )}
@@ -557,18 +557,9 @@ export function Timeline({ project }: TimelineProps) {
                 const width = Math.max(3, getPositionPercent(eff.startTimeMs + eff.durationMs) - left);
                 const isSelected = selectedEffectId === eff.id;
 
-                const effectTheme =
-                  eff.type === "spotlight"
-                    ? "border-amber-500/70 bg-amber-500/20 text-amber-200"
-                    : eff.type === "vignette"
-                    ? "border-purple-500/70 bg-purple-500/20 text-purple-200"
-                    : eff.type === "blur"
-                    ? "border-blue-500/70 bg-blue-500/20 text-blue-200"
-                    : eff.type === "glow"
-                    ? "border-cyan-500/70 bg-cyan-500/20 text-cyan-200"
-                    : eff.type === "speed"
-                    ? "border-emerald-500/70 bg-emerald-500/20 text-emerald-200"
-                    : "border-rose-500/70 bg-rose-500/20 text-rose-200";
+                const effectTheme = isSelected
+                  ? "border-white bg-white/20 text-white shadow-sm"
+                  : "border-neutral-700 bg-neutral-800/80 text-neutral-300";
 
                 return (
                   <div
@@ -721,9 +712,22 @@ export function Timeline({ project }: TimelineProps) {
                   }}
                 >
                   <span className="truncate font-medium text-fg min-w-0 mr-2">{clip.name}</span>
-                  <div className="flex items-center gap-1.5 opacity-70 shrink-0">
+                  <div className="flex items-center gap-1.5 opacity-80 shrink-0">
                     {clip.muted ? <VolumeX className="size-3" /> : <Volume2 className="size-3" />}
                     <span className="font-mono text-[10px]">{formatDuration(clip.durationMs)}</span>
+                    {isSelected && (
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          useEditor.getState().deleteVideoClip(clip.id);
+                        }}
+                        className="ml-1 p-0.5 rounded text-neutral-400 hover:text-white hover:bg-neutral-800 transition-colors"
+                        title="Delete video clip"
+                      >
+                        <Trash2 className="size-3 text-neutral-300 hover:text-white" />
+                      </button>
+                    )}
                   </div>
                 </div>
               );
@@ -747,8 +751,8 @@ export function Timeline({ project }: TimelineProps) {
                     }}
                     className={`absolute top-0.5 bottom-0.5 flex items-center rounded border px-2 text-[10px] truncate cursor-pointer transition-all ${
                       isSelected
-                        ? "border-purple-400 bg-purple-500/30 text-purple-200 z-10"
-                        : "border-purple-500/40 bg-purple-500/15 text-purple-300"
+                        ? "border-white bg-white/20 text-white z-10"
+                        : "border-neutral-700 bg-neutral-800 text-neutral-300"
                     }`}
                     style={{ left: `${left}%`, width: `${width}%` }}
                   >
@@ -777,8 +781,8 @@ export function Timeline({ project }: TimelineProps) {
                     }}
                     className={`absolute top-0.5 bottom-0.5 flex items-center rounded border px-2 text-[10px] truncate cursor-pointer transition-all ${
                       isSelected
-                        ? "border-emerald-400 bg-emerald-500/30 text-emerald-200 z-10"
-                        : "border-emerald-500/40 bg-emerald-500/15 text-emerald-300"
+                        ? "border-white bg-white/20 text-white z-10"
+                        : "border-neutral-700 bg-neutral-800 text-neutral-300"
                     }`}
                     style={{ left: `${left}%`, width: `${width}%` }}
                   >

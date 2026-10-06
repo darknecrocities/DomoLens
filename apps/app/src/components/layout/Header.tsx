@@ -87,7 +87,7 @@ export function Header() {
           ))}
         </nav>
       ) : (
-        <div className="hidden lg:flex items-center gap-3 text-xs font-mono text-neutral-400">
+        <div className="hidden xl:flex items-center gap-3 text-xs font-mono text-neutral-400">
           <div className="flex items-center gap-1.5 rounded-full border border-white/10 bg-white/5 px-2.5 py-1">
             <Monitor className="size-3 text-white" />
             <span className="text-neutral-300">Display Ready</span>

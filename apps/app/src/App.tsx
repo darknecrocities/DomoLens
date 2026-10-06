@@ -11,11 +11,14 @@ import { LandingView } from "./screens/LandingView";
 import { platform } from "./platform";
 import { screenKey, useNav } from "./store/nav";
 import { useProjects } from "./store/projects";
+import { useRecorder } from "./store/recorder";
+import { FloatingQuickBar } from "./components/recording/FloatingQuickBar";
 import { initBackgroundAutoUpdater } from "./lib/updater";
 
 export function App() {
   const { screen } = useNav();
   const { load, importFiles } = useProjects();
+  const recorderState = useRecorder((s) => s.state);
   const [isDragging, setIsDragging] = useState(false);
 
   useEffect(() => {
@@ -128,6 +131,13 @@ export function App() {
           )}
         </AnimatePresence>
       </main>
+
+      {/* Global Floating Quick Action Bar during Full-Screen Recording */}
+      {(recorderState === "recording" || recorderState === "paused") && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 w-[95vw] max-w-4xl px-3 pointer-events-auto select-none shadow-2xl">
+          <FloatingQuickBar />
+        </div>
+      )}
 
       <DropZoneOverlay isDragging={isDragging} />
       <Toaster />

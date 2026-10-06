@@ -139,6 +139,15 @@ fn delete_project(id: String, state: State<'_, AppState>) -> Result<(), String> 
     Ok(())
 }
 
+#[tauri::command]
+fn set_recording_hud_mode(app_handle: tauri::AppHandle, floating: bool) -> Result<(), String> {
+    use tauri::Manager;
+    if let Some(window) = app_handle.get_webview_window("main") {
+        let _ = window.set_always_on_top(floating);
+    }
+    Ok(())
+}
+
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
@@ -151,7 +160,8 @@ pub fn run() {
             list_projects,
             import_video,
             rename_project,
-            delete_project
+            delete_project,
+            set_recording_hud_mode
         ])
         .run(tauri::generate_context!())
         .expect("error while running DomoLens");

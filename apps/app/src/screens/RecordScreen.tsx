@@ -16,7 +16,6 @@ import {
 import { formatDuration } from "@domolens/core";
 import { copy } from "../copy/en";
 import { Button } from "../components/ui/Button";
-import { FloatingQuickBar } from "../components/recording/FloatingQuickBar";
 import { useNav } from "../store/nav";
 import { useRecorder, type RecordingSource } from "../store/recorder";
 
@@ -196,11 +195,6 @@ export function RecordScreen() {
                 </Button>
               </div>
             </motion.div>
-
-            {/* Floating QuickBar Overlay */}
-            <div className="fixed bottom-6 inset-x-0 mx-auto w-full max-w-4xl px-4 z-50 pointer-events-auto">
-              <FloatingQuickBar />
-            </div>
           </div>
         )}
 

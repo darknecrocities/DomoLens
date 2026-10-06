@@ -378,7 +378,7 @@ export function ToolsSidebar() {
                           }
                           className={`rounded px-1.5 py-1 text-[9px] capitalize font-medium transition-colors ${
                             selectedKeyframe.effect === eff
-                              ? "bg-amber-400 text-black font-bold shadow-sm"
+                              ? "bg-white text-black font-bold shadow-sm"
                               : "bg-ink-800 text-fg-muted hover:bg-ink-700"
                           }`}
                         >
@@ -405,7 +405,7 @@ export function ToolsSidebar() {
                               effectIntensity: parseFloat(e.target.value),
                             })
                           }
-                          className="w-full accent-amber-400 cursor-pointer h-1.5 bg-ink-800 rounded-lg"
+                          className="w-full accent-white cursor-pointer h-1.5 bg-ink-800 rounded-lg"
                         />
                       </div>
                     )}
@@ -494,7 +494,7 @@ export function ToolsSidebar() {
                         <Diamond className="size-2.5 text-white fill-white shrink-0" />
                         <span className="truncate">Node #{i + 1} ({kf.scale.toFixed(1)}x)</span>
                         {kf.effect && (
-                          <span className="rounded bg-amber-400/20 text-amber-300 text-[9px] px-1 py-0.2 shrink-0">
+                          <span className="rounded bg-ink-800 border border-ink-700 text-fg text-[9px] px-1 py-0.2 shrink-0">
                             {kf.effect}
                           </span>
                         )}
@@ -526,10 +526,10 @@ export function ToolsSidebar() {
         {/* TAB 2: VIDEO EFFECTS */}
         {activeToolTab === "effects" && (
           <div className="space-y-4">
-            <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 shadow-sm">
+            <div className="rounded-xl border border-ink-800 bg-ink-900/60 p-3 shadow-sm">
               <div className="flex items-center justify-between mb-1.5">
                 <div className="flex items-center gap-2">
-                  <Wand2 className="size-4 text-amber-300" />
+                  <Wand2 className="size-4 text-white" />
                   <span className="font-semibold text-white text-xs">Video Effects</span>
                 </div>
                 {(project?.effects?.length ?? 0) > 0 && (
@@ -552,54 +552,54 @@ export function ToolsSidebar() {
                 <button
                   type="button"
                   onClick={() => addEffectAtCurrentTime("spotlight")}
-                  className="flex items-center gap-1.5 rounded-lg border border-ink-700 bg-ink-900/80 px-2 py-2 text-left text-[11px] font-medium text-amber-200 hover:border-amber-400 hover:bg-ink-800 transition-colors"
+                  className="flex items-center gap-1.5 rounded-lg border border-ink-700 bg-ink-900/80 px-2 py-2 text-left text-[11px] font-medium text-fg hover:border-white hover:bg-ink-800 transition-colors"
                 >
-                  <SunMedium className="size-3.5 text-amber-400 shrink-0" />
+                  <SunMedium className="size-3.5 text-white shrink-0" />
                   <span>Spotlight</span>
                 </button>
 
                 <button
                   type="button"
                   onClick={() => addEffectAtCurrentTime("vignette")}
-                  className="flex items-center gap-1.5 rounded-lg border border-ink-700 bg-ink-900/80 px-2 py-2 text-left text-[11px] font-medium text-purple-200 hover:border-purple-400 hover:bg-ink-800 transition-colors"
+                  className="flex items-center gap-1.5 rounded-lg border border-ink-700 bg-ink-900/80 px-2 py-2 text-left text-[11px] font-medium text-fg hover:border-white hover:bg-ink-800 transition-colors"
                 >
-                  <Circle className="size-3.5 text-purple-400 shrink-0" />
+                  <Circle className="size-3.5 text-white shrink-0" />
                   <span>Vignette</span>
                 </button>
 
                 <button
                   type="button"
                   onClick={() => addEffectAtCurrentTime("blur")}
-                  className="flex items-center gap-1.5 rounded-lg border border-ink-700 bg-ink-900/80 px-2 py-2 text-left text-[11px] font-medium text-blue-200 hover:border-blue-400 hover:bg-ink-800 transition-colors"
+                  className="flex items-center gap-1.5 rounded-lg border border-ink-700 bg-ink-900/80 px-2 py-2 text-left text-[11px] font-medium text-fg hover:border-white hover:bg-ink-800 transition-colors"
                 >
-                  <Sparkles className="size-3.5 text-blue-400 shrink-0" />
+                  <Sparkles className="size-3.5 text-white shrink-0" />
                   <span>Motion Blur</span>
                 </button>
 
                 <button
                   type="button"
                   onClick={() => addEffectAtCurrentTime("glow")}
-                  className="flex items-center gap-1.5 rounded-lg border border-ink-700 bg-ink-900/80 px-2 py-2 text-left text-[11px] font-medium text-cyan-200 hover:border-cyan-400 hover:bg-ink-800 transition-colors"
+                  className="flex items-center gap-1.5 rounded-lg border border-ink-700 bg-ink-900/80 px-2 py-2 text-left text-[11px] font-medium text-fg hover:border-white hover:bg-ink-800 transition-colors"
                 >
-                  <Zap className="size-3.5 text-cyan-400 shrink-0" />
+                  <Zap className="size-3.5 text-white shrink-0" />
                   <span>Cursor Glow</span>
                 </button>
 
                 <button
                   type="button"
                   onClick={() => addEffectAtCurrentTime("filter", "cinematic")}
-                  className="flex items-center gap-1.5 rounded-lg border border-ink-700 bg-ink-900/80 px-2 py-2 text-left text-[11px] font-medium text-rose-200 hover:border-rose-400 hover:bg-ink-800 transition-colors"
+                  className="flex items-center gap-1.5 rounded-lg border border-ink-700 bg-ink-900/80 px-2 py-2 text-left text-[11px] font-medium text-fg hover:border-white hover:bg-ink-800 transition-colors"
                 >
-                  <Paintbrush className="size-3.5 text-rose-400 shrink-0" />
+                  <Paintbrush className="size-3.5 text-white shrink-0" />
                   <span>Color Grade</span>
                 </button>
 
                 <button
                   type="button"
                   onClick={() => addEffectAtCurrentTime("speed")}
-                  className="flex items-center gap-1.5 rounded-lg border border-ink-700 bg-ink-900/80 px-2 py-2 text-left text-[11px] font-medium text-emerald-200 hover:border-emerald-400 hover:bg-ink-800 transition-colors"
+                  className="flex items-center gap-1.5 rounded-lg border border-ink-700 bg-ink-900/80 px-2 py-2 text-left text-[11px] font-medium text-fg hover:border-white hover:bg-ink-800 transition-colors"
                 >
-                  <Play className="size-3.5 text-emerald-400 shrink-0" />
+                  <Play className="size-3.5 text-white shrink-0" />
                   <span>Slow-Mo (0.5x)</span>
                 </button>
               </div>
@@ -610,7 +610,7 @@ export function ToolsSidebar() {
               <div className="rounded-xl border border-ink-800 bg-ink-900 p-3 space-y-3">
                 <div className="flex items-center justify-between">
                   <span className="font-semibold text-fg flex items-center gap-1.5">
-                    <Wand2 className="size-3.5 text-amber-400" />
+                    <Wand2 className="size-3.5 text-white" />
                     Edit Effect
                   </span>
                   <button
@@ -696,7 +696,7 @@ export function ToolsSidebar() {
                       onChange={(e) =>
                         updateEffect(selectedEffect.id, { radius: parseInt(e.target.value, 10) })
                       }
-                      className="w-full accent-amber-400 cursor-pointer h-1.5 bg-ink-800 rounded-lg mt-1"
+                      className="w-full accent-white cursor-pointer h-1.5 bg-ink-800 rounded-lg mt-1"
                     />
                     <div className="flex justify-between text-[10px] text-fg-muted mt-1.5">
                       <span>Focal Target:</span>
@@ -745,12 +745,12 @@ export function ToolsSidebar() {
                     onClick={() => selectEffect(eff.id)}
                     className={`flex items-center justify-between rounded-lg border p-2 cursor-pointer transition-colors ${
                       selectedEffectId === eff.id
-                        ? "border-amber-400 bg-amber-500/15 text-amber-200 font-medium"
+                        ? "border-white bg-white/10 text-white font-medium"
                         : "border-ink-800 bg-ink-900/60 text-fg-muted hover:border-ink-700"
                     }`}
                   >
                     <div className="flex items-center gap-2 min-w-0">
-                      <Wand2 className="size-3 shrink-0 text-amber-400" />
+                      <Wand2 className="size-3 shrink-0 text-white" />
                       <div className="truncate">
                         <span className="font-semibold text-fg block text-xs truncate">{eff.name}</span>
                         <span className="font-mono text-[10px] text-fg-faint">
@@ -875,7 +875,7 @@ export function ToolsSidebar() {
                   }`}
                 >
                   <div className="flex items-center gap-2 truncate">
-                    <Type className="size-3.5 text-purple-400 shrink-0" />
+                    <Type className="size-3.5 text-white shrink-0" />
                     <span className="truncate font-medium">{t.text}</span>
                   </div>
                   <span className="font-mono text-[10px] text-fg-faint shrink-0">
@@ -1082,7 +1082,7 @@ export function ToolsSidebar() {
                   className="flex items-center justify-between rounded-xl border border-ink-800 bg-ink-900 p-2.5"
                 >
                   <div className="flex items-center gap-2">
-                    <div className="flex size-7 items-center justify-center rounded-lg bg-emerald-500/20 text-emerald-400">
+                    <div className="flex size-7 items-center justify-center rounded-lg bg-ink-800 text-white border border-ink-700">
                       <Music className="size-3.5" />
                     </div>
                     <div>
@@ -1115,7 +1115,7 @@ export function ToolsSidebar() {
                   >
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-2 truncate">
-                        <Music className="size-3.5 text-emerald-400 shrink-0" />
+                        <Music className="size-3.5 text-white shrink-0" />
                         <span className="truncate text-xs font-medium text-fg">{tr.name}</span>
                       </div>
                       <div className="flex items-center gap-1.5">

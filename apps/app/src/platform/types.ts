@@ -43,4 +43,6 @@ export interface Platform {
   /** Called when projects change in the background (for example a cover image finished). */
   onProjectsChanged(callback: () => void): Off;
   listenForFileDrops(handlers: FileDropHandlers): Off;
+  /** Sets window always-on-top mode for floating HUD overlay during screen recording. */
+  setAlwaysOnTop?(alwaysOnTop: boolean): Promise<void>;
 }

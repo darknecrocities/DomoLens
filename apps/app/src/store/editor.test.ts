@@ -32,7 +32,7 @@ describe("useEditor store", () => {
     });
   });
 
-  it("loads a project into the editor", async () => {
+  it("loads a project into the editor with empty defaults for new recordings", async () => {
     const ok = await useEditor.getState().loadProject("proj-test");
     expect(ok).toBe(true);
 
@@ -40,7 +40,8 @@ describe("useEditor store", () => {
     expect(state.project).not.toBeNull();
     expect(state.project?.summary.id).toBe("proj-test");
     expect(state.durationMs).toBe(8000);
-    expect(state.project?.zoomBlocks.length).toBeGreaterThan(0);
+    expect(state.project?.zoomBlocks.length).toBe(0);
+    expect(state.project?.keyframes?.length ?? 0).toBe(0);
   });
 
   it("scrubs current time with clamping", async () => {
@@ -66,7 +67,7 @@ describe("useEditor store", () => {
   });
 
   it("updates and toggles zoom blocks with undo support", async () => {
-    await useEditor.getState().loadProject("proj-test");
+    await useEditor.getState().loadProject("demo-saas");
     const firstBlockId = useEditor.getState().project!.zoomBlocks[0]!.id;
 
     useEditor.getState().updateZoomBlock(firstBlockId, { scale: 2.2 });
@@ -172,7 +173,7 @@ describe("useEditor store", () => {
   });
 
   it("shifts camera target dynamically on interactive canvas click", async () => {
-    await useEditor.getState().loadProject("proj-test");
+    await useEditor.getState().loadProject("demo-saas");
 
     // Case 1: When playhead is inside an active zoom block
     const activeBlock = useEditor.getState().project!.zoomBlocks[0]!;

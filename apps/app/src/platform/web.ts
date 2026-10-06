@@ -256,5 +256,9 @@ export function createWebPlatform(opts: { isTouch: boolean; isMac: boolean }): P
         window.removeEventListener("drop", onDrop);
       };
     },
+
+    setAlwaysOnTop() {
+      return Promise.resolve();
+    },
   };
 }
