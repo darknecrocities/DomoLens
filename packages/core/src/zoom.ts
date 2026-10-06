@@ -36,10 +36,22 @@ export interface CameraState {
 }
 
 /**
- * Clamps center coordinates so the zoomed viewport does not bleed outside [0, 1].
+ * Clamps center coordinates so the zoomed viewport frames properly.
+ * In "center" mode, keeps the target element perfectly centered without pushing it off-center.
+ * In "strict" mode, restricts within mathematical [halfW, 1 - halfW] boundary.
  */
-export function clampCameraToBounds(targetX: number, targetY: number, scale: number): { x: number; y: number } {
+export function clampCameraToBounds(
+  targetX: number,
+  targetY: number,
+  scale: number,
+  mode: "strict" | "center" = "strict",
+): { x: number; y: number } {
   if (scale <= 1) return { x: 0.5, y: 0.5 };
+  if (mode === "center") {
+    const clampedX = Math.min(Math.max(targetX, 0.02), 0.98);
+    const clampedY = Math.min(Math.max(targetY, 0.02), 0.98);
+    return { x: clampedX, y: clampedY };
+  }
   const halfW = 0.5 / scale;
   const halfH = 0.5 / scale;
 
@@ -145,6 +157,7 @@ export function calculateDeadzoneCamera(
   cursor: { x: number; y: number },
   scale: number,
   deadzoneRatio = 0.35,
+  mode: "strict" | "center" = "center",
 ): { x: number; y: number } {
   if (scale <= 1.0) return { x: 0.5, y: 0.5 };
   const visW = 1.0 / scale;
@@ -169,22 +182,29 @@ export function calculateDeadzoneCamera(
     newY = cursor.y + halfDzH;
   }
 
-  return clampCameraToBounds(newX, newY, scale);
+  return clampCameraToBounds(newX, newY, scale, mode);
 }
 
 /**
  * Calculates adaptive zoom scale and hold parameters based on user interaction intent.
+ * When typing occurs, prioritizes zooming out to 1.0x (full frame) centered on video.
  */
 export function calculateIntentZoom(
   event: import("./project").InteractionEvent | import("./project").ClickEvent,
+  options?: { typingZoomOut?: boolean },
 ): { scale: number; holdMs: number; offsetY: number } {
   const isTyping = "type" in event && event.type === "typing";
   if (isTyping) {
-    return { scale: 2.1, holdMs: 2600, offsetY: -0.015 };
+    const zoomOut = options?.typingZoomOut ?? true;
+    return {
+      scale: zoomOut ? 1.0 : 2.1,
+      holdMs: zoomOut ? 1600 : 2600,
+      offsetY: 0,
+    };
   }
   const isRightClick = event.button === "right";
   if (isRightClick) {
-    return { scale: 1.7, holdMs: 2200, offsetY: 0.04 };
+    return { scale: 1.7, holdMs: 2200, offsetY: 0 };
   }
   return { scale: 1.85, holdMs: 2000, offsetY: 0 };
 }
@@ -442,7 +462,7 @@ export function smoothCursorTrajectory(
 export function calculateCameraAtTime(
   timeMs: number,
   zoomBlocks: ZoomBlock[],
-  leadInMs = 500,
+  leadInMs = 1000,
   leadOutMs = 400,
   cursorTrajectory?: import("./project").CursorTrajectoryPoint[],
   keyframes?: import("./project").KeyframeNode[],
@@ -519,6 +539,7 @@ export function calculateCameraAtTime(
             cursor,
             scale,
             isAutoTrack ? 0.35 : 0.65,
+            "center",
           );
 
           if (k1.scale <= 1.05) {
@@ -555,7 +576,7 @@ export function calculateCameraAtTime(
           finalY = 0.5;
         }
 
-        const clamped = clampCameraToBounds(finalX, finalY, scale);
+        const clamped = clampCameraToBounds(finalX, finalY, scale, "center");
         return {
           x: clamped.x,
           y: clamped.y,
@@ -573,7 +594,7 @@ export function calculateCameraAtTime(
   if (activeBlocks.length === 0) {
     if (Boolean(options?.autoTrackCursor) && effectiveTrajectory && effectiveTrajectory.length > 0) {
       const autoScale = options?.autoTrackScale ?? 1.6;
-      const target = clampCameraToBounds(defaultCursor.x, defaultCursor.y, autoScale);
+      const target = clampCameraToBounds(defaultCursor.x, defaultCursor.y, autoScale, "center");
       return {
         x: target.x,
         y: target.y,
@@ -617,12 +638,13 @@ export function calculateCameraAtTime(
     if (!glidedFromPrev && timeMs >= transitionInStart && timeMs < transitionInEnd) {
       const span = transitionInEnd - transitionInStart;
       const progress = span > 0 ? easeInOutCubic((timeMs - transitionInStart) / span) : 1;
-      const target = clampCameraToBounds(block.targetX, block.targetY, block.scale);
+      const target = clampCameraToBounds(block.targetX, block.targetY, block.scale, "center");
+      const currentScale = 1.0 + (block.scale - 1.0) * progress;
       return {
         x: 0.5 + (target.x - 0.5) * progress,
         y: 0.5 + (target.y - 0.5) * progress,
-        scale: 1.0 + (block.scale - 1.0) * progress,
-        isZoomed: true,
+        scale: currentScale,
+        isZoomed: currentScale > 1.05,
         cursorX: currentCursor.x,
         cursorY: currentCursor.y,
       };
@@ -635,12 +657,13 @@ export function calculateCameraAtTime(
         currentCursor,
         block.scale,
         isAutoTrack ? 0.35 : 0.65,
+        "center",
       );
       return {
         x: target.x,
         y: target.y,
         scale: block.scale,
-        isZoomed: true,
+        isZoomed: block.scale > 1.05,
         cursorX: currentCursor.x,
         cursorY: currentCursor.y,
       };
@@ -656,9 +679,9 @@ export function calculateCameraAtTime(
       if (timeMs > transitionOutStart && timeMs <= nextBlock.startTimeMs) {
         const span = nextBlock.startTimeMs - transitionOutStart;
         const progress = span > 0 ? easeInOutCubic((timeMs - transitionOutStart) / span) : 1;
-        const target1 = clampCameraToBounds(block.targetX, block.targetY, block.scale);
+        const target1 = clampCameraToBounds(block.targetX, block.targetY, block.scale, "center");
         const nextCursor = interpolateCursorAtTime(timeMs, effectiveTrajectory, nextBlock.targetX, nextBlock.targetY);
-        const target2 = clampCameraToBounds(nextCursor.x, nextCursor.y, nextBlock.scale);
+        const target2 = clampCameraToBounds(nextCursor.x, nextCursor.y, nextBlock.scale, "center");
 
         // Spatial classification: Crane pull-back on wide cross-screen jumps
         const spatial = classifySpatialTransition(target1, target2);
@@ -672,7 +695,7 @@ export function calculateCameraAtTime(
           x: target1.x + (target2.x - target1.x) * progress,
           y: target1.y + (target2.y - target1.y) * progress,
           scale: currentScale,
-          isZoomed: true,
+          isZoomed: currentScale > 1.05,
           cursorX: currentCursor.x,
           cursorY: currentCursor.y,
         };
@@ -683,12 +706,13 @@ export function calculateCameraAtTime(
     if (timeMs > transitionOutStart && timeMs <= transitionOutEnd) {
       const span = transitionOutEnd - transitionOutStart;
       const progress = span > 0 ? easeInOutCubic((timeMs - transitionOutStart) / span) : 1;
-      const target = clampCameraToBounds(block.targetX, block.targetY, block.scale);
+      const target = clampCameraToBounds(block.targetX, block.targetY, block.scale, "center");
+      const currentScale = block.scale + (1.0 - block.scale) * progress;
       return {
         x: target.x + (0.5 - target.x) * progress,
         y: target.y + (0.5 - target.y) * progress,
-        scale: block.scale + (1.0 - block.scale) * progress,
-        isZoomed: true,
+        scale: currentScale,
+        isZoomed: currentScale > 1.05,
         cursorX: currentCursor.x,
         cursorY: currentCursor.y,
       };
@@ -721,6 +745,7 @@ export interface PlotInteractionsOptions {
   maxClusterDistance?: number;
   minRestMs?: number;
   enableRevealDip?: boolean;
+  typingZoomOut?: boolean;
 }
 
 /**
@@ -865,8 +890,8 @@ export function plotInteractionsToKeyframesAndZoomBlocks(
     return { keyframes: [], zoomBlocks: [] };
   }
 
-  // 0.5s lead-in: camera starts zooming into place 500ms before user interaction
-  const leadInMs = options.leadInMs ?? 500;
+  // 1.0s lead-in: camera starts zooming into place 1000ms before user interaction
+  const leadInMs = options.leadInMs ?? 1000;
   const leadOutMs = options.leadOutMs ?? 400;
   const minDuration = options.minBlockDurationMs ?? 1000;
   // Actions within 1.5s remain in continuous zoom; if no activity for 1s, camera shifts back to full frame
@@ -915,11 +940,15 @@ export function plotInteractionsToKeyframesAndZoomBlocks(
     const lastEvt = cluster[cluster.length - 1]!;
 
     const hasTyping = cluster.some((e) => "type" in e && e.type === "typing");
-    const intent = hasTyping
-      ? calculateIntentZoom({ id: firstEvt.id, type: "typing", timestampMs: firstEvt.timestampMs, x: firstEvt.x, y: firstEvt.y })
-      : calculateIntentZoom(firstEvt);
-    const clusterScale = options.scale ?? intent.scale;
-    const clusterHoldMs = options.holdDurationMs ?? 1000;
+    const isTypingCluster = hasTyping && (options.typingZoomOut ?? true);
+    const intent = isTypingCluster
+      ? calculateIntentZoom(
+          { id: firstEvt.id, type: "typing", timestampMs: firstEvt.timestampMs, x: firstEvt.x, y: firstEvt.y },
+          { typingZoomOut: true },
+        )
+      : calculateIntentZoom(firstEvt, { typingZoomOut: options.typingZoomOut });
+    const clusterScale = isTypingCluster ? 1.0 : (options.scale ?? intent.scale);
+    const clusterHoldMs = options.holdDurationMs ?? (isTypingCluster ? 1600 : 1000);
 
     const rawStart = Math.max(0, firstEvt.timestampMs - leadInMs);
     let startMs = rawStart;
@@ -957,7 +986,9 @@ export function plotInteractionsToKeyframesAndZoomBlocks(
     const span = endMs - startMs;
     if (span < 800) continue;
 
-    const clampedFirst = clampCameraToBounds(firstEvt.x, firstEvt.y + intent.offsetY, clusterScale);
+    const clampedFirst = isTypingCluster
+      ? { x: 0.5, y: 0.5 }
+      : clampCameraToBounds(firstEvt.x, firstEvt.y + intent.offsetY, clusterScale, "center");
 
     // Check if next cluster is eligible for continuous glide
     const maxGlideGap = options.maxGlideGapMs ?? 3800;
@@ -985,7 +1016,7 @@ export function plotInteractionsToKeyframesAndZoomBlocks(
 
     // Strictly monotonic keyframe calculations:
     // startMs < peakTime <= trackTimes <= holdTime < endMs
-    const effLeadIn = Math.min(leadInMs, Math.round(span * 0.22));
+    const effLeadIn = Math.min(leadInMs, Math.max(120, firstEvt.timestampMs - startMs));
     const effLeadOut = Math.min(leadOutMs, Math.round(span * 0.22));
 
     // Keyframe 1: Start zoom lead-in (only if previous cluster did not already glide into this cluster)
@@ -1018,7 +1049,9 @@ export function plotInteractionsToKeyframesAndZoomBlocks(
 
       // Video Editor Showcase Arc: after focusing tightly on the button click,
       // optionally zoom out a little (showcase context reveal) only if explicitly enabled or long showcase hold
-      const shouldReveal = options.enableRevealDip === true || (options.enableRevealDip === undefined && clusterHoldMs >= 1800);
+      const shouldReveal =
+        clusterScale > 1.05 &&
+        (options.enableRevealDip === true || (options.enableRevealDip === undefined && clusterHoldMs >= 1800));
       if (shouldReveal) {
         const showcaseScale = Math.max(1.32, Math.round(clusterScale * 0.78 * 100) / 100);
         const revealTime = peakTime + 420;
@@ -1061,7 +1094,10 @@ export function plotInteractionsToKeyframesAndZoomBlocks(
     // Intermediate tracking keyframes for multiple actions in cluster
     for (let j = 1; j < cluster.length; j++) {
       const midEvt = cluster[j]!;
-      const clampedMid = clampCameraToBounds(midEvt.x, midEvt.y, clusterScale);
+      const isMidTyping = midEvt.type === "typing" && (options.typingZoomOut ?? true);
+      const clampedMid = isMidTyping
+        ? { x: 0.5, y: 0.5 }
+        : clampCameraToBounds(midEvt.x, midEvt.y, clusterScale, "center");
       const trackMin = firstEvt.timestampMs + 60;
       const trackMax = Math.max(trackMin, endMs - effLeadOut - 100);
       const trackTime = Math.max(trackMin, Math.min(trackMax, midEvt.timestampMs));
@@ -1069,7 +1105,7 @@ export function plotInteractionsToKeyframesAndZoomBlocks(
       keyframes.push({
         id: `kf-track-${midEvt.id}`,
         timeMs: trackTime,
-        scale: clusterScale,
+        scale: isMidTyping ? 1.0 : clusterScale,
         targetX: clampedMid.x,
         targetY: clampedMid.y,
         easing: "spring",
@@ -1089,7 +1125,7 @@ export function plotInteractionsToKeyframesAndZoomBlocks(
       const sweepDist = Math.hypot(pEnd.x - pStart.x, pEnd.y - pStart.y);
       if (sweepDist > 0.14) {
         const shiftTime = Math.round((firstEvt.timestampMs + clusterEndTime) / 2);
-        const clampedShift = clampCameraToBounds(pEnd.x, pEnd.y, clusterScale);
+        const clampedShift = clampCameraToBounds(pEnd.x, pEnd.y, clusterScale, "center");
         if (shiftTime > firstEvt.timestampMs + 80 && shiftTime < endMs - effLeadOut - 80) {
           keyframes.push({
             id: `kf-highlight-shift-${firstEvt.id}`,
@@ -1108,8 +1144,12 @@ export function plotInteractionsToKeyframesAndZoomBlocks(
     const minHold = firstEvt.timestampMs + 100;
     const maxHold = Math.max(minHold, endMs - effLeadOut);
     const holdTime = Math.max(minHold, Math.min(maxHold, idealHoldEnd));
-    const clampedLast = clampCameraToBounds(lastEvt.x, lastEvt.y, clusterScale);
-    const shouldRevealHold = options.enableRevealDip === true || (options.enableRevealDip === undefined && clusterHoldMs >= 1800);
+    const clampedLast = isTypingCluster
+      ? { x: 0.5, y: 0.5 }
+      : clampCameraToBounds(lastEvt.x, lastEvt.y, clusterScale, "center");
+    const shouldRevealHold =
+      clusterScale > 1.05 &&
+      (options.enableRevealDip === true || (options.enableRevealDip === undefined && clusterHoldMs >= 1800));
     const effectiveHoldScale = shouldRevealHold
       ? Math.max(1.32, Math.round(clusterScale * 0.78 * 100) / 100)
       : clusterScale;
@@ -1129,11 +1169,17 @@ export function plotInteractionsToKeyframesAndZoomBlocks(
       // Connect seamlessly to next cluster via continuous glide
       const nextFirst = nextCluster![0]!;
       const nextHasTyping = nextCluster!.some((e) => "type" in e && e.type === "typing");
-      const nextIntent = nextHasTyping
-        ? calculateIntentZoom({ id: nextFirst.id, type: "typing", timestampMs: nextFirst.timestampMs, x: nextFirst.x, y: nextFirst.y })
-        : calculateIntentZoom(nextFirst);
-      const nextScale = options.scale ?? nextIntent.scale;
-      const clampedNext = clampCameraToBounds(nextFirst.x, nextFirst.y + nextIntent.offsetY, nextScale);
+      const nextIsTyping = nextHasTyping && (options.typingZoomOut ?? true);
+      const nextIntent = nextIsTyping
+        ? calculateIntentZoom(
+            { id: nextFirst.id, type: "typing", timestampMs: nextFirst.timestampMs, x: nextFirst.x, y: nextFirst.y },
+            { typingZoomOut: true },
+          )
+        : calculateIntentZoom(nextFirst, { typingZoomOut: options.typingZoomOut });
+      const nextScale = nextIsTyping ? 1.0 : (options.scale ?? nextIntent.scale);
+      const clampedNext = nextIsTyping
+        ? { x: 0.5, y: 0.5 }
+        : clampCameraToBounds(nextFirst.x, nextFirst.y + nextIntent.offsetY, nextScale, "center");
 
       const spatial = classifySpatialTransition(clampedLast, clampedNext);
       const glideStart = Math.min(holdTime, Math.max(holdTime - 100, nextFirst.timestampMs - leadInMs));
@@ -1212,7 +1258,7 @@ export function zoomBlocksToKeyframes(
   if (active.length === 0 || videoDurationMs <= 0) return [];
 
   const keyframes: import("./project").KeyframeNode[] = [];
-  const leadIn = options?.leadInMs ?? 450;
+  const leadIn = options?.leadInMs ?? 1000;
   const leadOut = options?.leadOutMs ?? 350;
   const maxGlideGapMs = options?.maxGlideGapMs ?? 3800;
 
@@ -1320,7 +1366,7 @@ export function generateTourShiftSequence(
 
   const defaultScale = options?.scale ?? 1.85;
   const holdMs = options?.stepHoldMs ?? 1600;
-  const leadInMs = 450;
+  const leadInMs = 1000;
   const leadOutMs = 400;
 
   // Initial lead-in zoom from 1.0x full frame into first element
@@ -1343,7 +1389,7 @@ export function generateTourShiftSequence(
     const next = sorted[i + 1];
     const isTyping = cur.type === "typing";
     const curScale = isTyping ? 2.1 : defaultScale;
-    const clampedCur = clampCameraToBounds(cur.x, cur.y, curScale);
+    const clampedCur = clampCameraToBounds(cur.x, cur.y, curScale, "center");
 
     // Peak focal arrival on element
     const arriveMs = Math.max(prevHoldEndMs, cur.timestampMs);
@@ -1381,7 +1427,7 @@ export function generateTourShiftSequence(
       const shiftSpan = Math.max(400, Math.min(900, nextTime - holdEndMs));
       const shiftMid = holdEndMs + Math.round(shiftSpan / 2);
       const nextScale = next.type === "typing" ? 2.1 : defaultScale;
-      const clampedNext = clampCameraToBounds(next.x, next.y, nextScale);
+      const clampedNext = clampCameraToBounds(next.x, next.y, nextScale, "center");
       const shiftDist = Math.hypot(clampedNext.x - clampedCur.x, clampedNext.y - clampedCur.y);
 
       if (shiftDist > 0.20) {

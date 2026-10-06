@@ -64,7 +64,7 @@ export function VideoCanvas({ project, currentTimeMs: propTimeMs }: VideoCanvasP
     return calculateCameraAtTime(
       currentTimeMs,
       zoomBlocks,
-      500,
+      1000,
       400,
       smoothedTrajectory,
       keyframes,
@@ -314,6 +314,19 @@ export function VideoCanvas({ project, currentTimeMs: propTimeMs }: VideoCanvasP
   }, [rawMedia, isExplicitSample]);
 
   const thumbnailSrc = summary.thumbnail ? platform.mediaUrl(summary.thumbnail) : null;
+  const [naturalAspectRatio, setNaturalAspectRatio] = useState<string | null>(null);
+
+  const viewportAspectRatio = useMemo(() => {
+    if (looks.aspectRatio) {
+      if (looks.aspectRatio === "9:16") return "9 / 16";
+      if (looks.aspectRatio === "1:1") return "1 / 1";
+      if (looks.aspectRatio === "4:3") return "4 / 3";
+      if (looks.aspectRatio === "16:9") {
+        return naturalAspectRatio || "16 / 9";
+      }
+    }
+    return naturalAspectRatio || "16 / 9";
+  }, [looks.aspectRatio, naturalAspectRatio]);
 
   // Shadow styling lookup
   const shadowStyles: Record<string, string> = {
@@ -335,8 +348,9 @@ export function VideoCanvas({ project, currentTimeMs: propTimeMs }: VideoCanvasP
       <div
         ref={viewportRef}
         onClick={handleCanvasClick}
-        className="relative aspect-video max-h-full max-w-full overflow-hidden bg-ink-950 cursor-crosshair group select-none"
+        className="relative max-h-full max-w-full overflow-hidden bg-ink-950 cursor-crosshair group select-none"
         style={{
+          aspectRatio: viewportAspectRatio,
           borderRadius: `${looks.borderRadius}px`,
           boxShadow: shadowStyles[looks.shadow] || shadowStyles.lift,
         }}
@@ -362,6 +376,9 @@ export function VideoCanvas({ project, currentTimeMs: propTimeMs }: VideoCanvasP
               className="size-full object-contain pointer-events-none"
               onLoadedMetadata={(e) => {
                 const v = e.currentTarget;
+                if (v.videoWidth && v.videoHeight) {
+                  setNaturalAspectRatio(`${v.videoWidth} / ${v.videoHeight}`);
+                }
                 if (!isPlaying && v.currentTime === 0) {
                   v.currentTime = 0.001;
                 }

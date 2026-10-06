@@ -717,7 +717,7 @@ export const useRecorder = create<RecorderStore>((set, get) => ({
             duration,
             {
               holdDurationMs: 1200,
-              leadInMs: 450,
+              leadInMs: 1000,
               scale: 1.80,
               fallbackIfEmpty: false,
               continuousGlide: false,
@@ -726,6 +726,7 @@ export const useRecorder = create<RecorderStore>((set, get) => ({
               minRestMs: 800,
               enableRevealDip: false,
               cursorTrajectory: finalTrajectory,
+              typingZoomOut: true,
             },
           )
         : { keyframes: [], zoomBlocks: [] };

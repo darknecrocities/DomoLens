@@ -563,13 +563,14 @@ export const useEditor = create<EditorState>((set, get) => ({
       state.durationMs,
       {
         continuousGlide: false,
-        leadInMs: 500,
+        leadInMs: 1000,
         holdDurationMs: 1200,
         scale: 1.80,
         maxClusterDistance: 0.22,
         minRestMs: 800,
         enableRevealDip: false,
         cursorTrajectory: state.project.cursorTrajectory,
+        typingZoomOut: true,
         ...options,
       },
     );
@@ -664,7 +665,7 @@ export const useEditor = create<EditorState>((set, get) => ({
     if (!state.project) return;
     const time = state.currentTimeMs;
     const activeScale = options?.scale ?? 1.85;
-    const clamped = clampCameraToBounds(targetX, targetY, activeScale);
+    const clamped = clampCameraToBounds(targetX, targetY, activeScale, "center");
     const now = Date.now();
 
     // Trigger acoustic bop feedback immediately
@@ -964,7 +965,7 @@ export const useEditor = create<EditorState>((set, get) => ({
     if (!state.project) return;
     const time = state.currentTimeMs;
     const cur = interpolateCursorAtTime(time, state.project.cursorTrajectory, 0.5, 0.5);
-    const clamped = clampCameraToBounds(cur.x, cur.y, 1.85);
+    const clamped = clampCameraToBounds(cur.x, cur.y, 1.85, "center");
 
     const leadInMs = 400;
     const holdDurationMs = 2200;
@@ -1010,7 +1011,7 @@ export const useEditor = create<EditorState>((set, get) => ({
     const cur = interpolateCursorAtTime(time, state.project.cursorTrajectory, 0.5, 0.5);
     const finalX = targetX !== undefined ? targetX : cur.x;
     const finalY = targetY !== undefined ? targetY : cur.y;
-    const clamped = clampCameraToBounds(finalX, finalY, scale);
+    const clamped = clampCameraToBounds(finalX, finalY, scale, "center");
     const newKf: KeyframeNode = {
       id: `kf-${Date.now()}`,
       timeMs: time,
