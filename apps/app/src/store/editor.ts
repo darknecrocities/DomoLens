@@ -562,11 +562,13 @@ export const useEditor = create<EditorState>((set, get) => ({
       eventsToUse,
       state.durationMs,
       {
-        continuousGlide: true,
-        maxGlideGapMs: 3500,
+        continuousGlide: false,
         leadInMs: 500,
-        holdDurationMs: 1000,
-        scale: 1.85,
+        holdDurationMs: 1200,
+        scale: 1.80,
+        maxClusterDistance: 0.22,
+        minRestMs: 800,
+        enableRevealDip: false,
         cursorTrajectory: state.project.cursorTrajectory,
         ...options,
       },
@@ -874,7 +876,7 @@ export const useEditor = create<EditorState>((set, get) => ({
     const { keyframes, zoomBlocks } = plotInteractionsToKeyframesAndZoomBlocks(
       interactions,
       state.durationMs,
-      { continuousGlide: true, holdDurationMs: 2400, scale: 1.85 },
+      { continuousGlide: false, holdDurationMs: 1400, scale: 1.80, minRestMs: 800, enableRevealDip: false },
     );
 
     set({

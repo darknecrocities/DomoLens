@@ -69,7 +69,7 @@ export function VideoCanvas({ project, currentTimeMs: propTimeMs }: VideoCanvasP
       smoothedTrajectory,
       keyframes,
       {
-        autoTrackCursor: looks.autoTrackCursor !== false,
+        autoTrackCursor: Boolean(looks.autoTrackCursor),
         autoTrackScale: looks.autoTrackScale || 1.6,
         cursorSmoothing: looks.cursorSmoothing || "smooth",
         clicks,
@@ -498,14 +498,14 @@ export function VideoCanvas({ project, currentTimeMs: propTimeMs }: VideoCanvasP
           </div>
         )}
 
-        {/* Live Zoom & Mouse Tracking Badge Overlay */}
+        {/* Live Zoom & Focus Badge Overlay */}
         {camera.isZoomed && (
           <div className="absolute top-3 left-3 flex items-center gap-2 rounded-full bg-ink-950/90 px-3 py-1.5 text-xs font-semibold text-white backdrop-blur-md border border-neutral-700 shadow-md z-30">
             <Sparkles className="size-3.5" />
             <span>{camera.scale.toFixed(1)}x Zoom</span>
             <span className="size-1 rounded-full bg-white/60" />
             <span className="text-[11px] font-mono text-fg-muted font-normal">
-              Auto-Tracking Cursor ({Math.round(camera.cursorX * 100)}%, {Math.round(camera.cursorY * 100)}%)
+              {looks.autoTrackCursor ? "Dynamic Reframe" : "Anchored Focus"}
             </span>
           </div>
         )}

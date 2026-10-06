@@ -205,12 +205,12 @@ export function ToolsSidebar() {
 
                 <div className="flex items-center justify-between rounded-lg border border-ink-800 bg-ink-950/80 p-2.5 mt-2">
                   <div>
-                    <span className="block text-xs font-semibold text-white">Auto-Track Cursor</span>
-                    <span className="block text-[10px] text-fg-faint">Continuous camera glide following cursor</span>
+                    <span className="block text-xs font-semibold text-white">Dynamic Camera Reframing</span>
+                    <span className="block text-[10px] text-fg-faint">Gently reframes on highlights or wide drags</span>
                   </div>
                   <input
                     type="checkbox"
-                    checked={project?.looks.autoTrackCursor !== false}
+                    checked={Boolean(project?.looks.autoTrackCursor)}
                     onChange={(e) => updateLooks({ autoTrackCursor: e.target.checked })}
                     className="size-4 accent-white rounded cursor-pointer"
                   />
@@ -229,7 +229,7 @@ export function ToolsSidebar() {
                   className="w-full rounded-lg bg-white py-2 text-center text-xs font-bold text-black hover:bg-neutral-200 transition-colors shadow-sm flex items-center justify-center gap-1.5"
                 >
                   <Sparkles className="size-3.5 fill-black" />
-                  Auto-Plot Clicks & Typing
+                  Auto-Plot (Zoom In & Out)
                 </button>
 
                 <button
@@ -1253,20 +1253,20 @@ export function ToolsSidebar() {
             <div className="rounded-xl border border-ink-800 bg-ink-900/80 p-3 shadow-sm space-y-3">
               <div className="flex items-center justify-between">
                 <div>
-                  <span className="block text-xs font-semibold text-white">Auto-Track Cursor</span>
+                  <span className="block text-xs font-semibold text-white">Dynamic Camera Reframing</span>
                   <span className="block text-[10px] text-fg-faint">
-                    Camera smoothly follows mouse across screen
+                    Gently reframes camera on highlights or wide drags
                   </span>
                 </div>
                 <input
                   type="checkbox"
-                  checked={project?.looks.autoTrackCursor !== false}
+                  checked={Boolean(project?.looks.autoTrackCursor)}
                   onChange={(e) => updateLooks({ autoTrackCursor: e.target.checked })}
                   className="size-4 accent-white rounded cursor-pointer"
                 />
               </div>
 
-              {(project?.looks.autoTrackCursor !== false) && (
+              {Boolean(project?.looks.autoTrackCursor) && (
                 <div className="space-y-1 pt-1 border-t border-ink-800/80">
                   <div className="flex justify-between text-[11px]">
                     <span className="text-fg-muted">Follow Zoom Scale</span>

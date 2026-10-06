@@ -260,7 +260,7 @@ export const DEFAULT_LOOKS: ProjectLooks = {
   showClickRipples: false,
   cursorSize: 1.4,
   cursorSmoothing: "smooth",
-  autoTrackCursor: true,
+  autoTrackCursor: false,
   autoTrackScale: 1.6,
   aspectRatio: "16:9",
 };

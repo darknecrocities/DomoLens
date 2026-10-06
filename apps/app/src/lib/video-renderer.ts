@@ -297,7 +297,7 @@ export async function renderProjectVideo(options: RenderOptions): Promise<Render
         smoothedTrajectory,
         project.keyframes,
         {
-          autoTrackCursor: looks.autoTrackCursor !== false,
+          autoTrackCursor: Boolean(looks.autoTrackCursor),
           autoTrackScale: looks.autoTrackScale || 1.6,
           cursorSmoothing: looks.cursorSmoothing || "smooth",
           clicks: project.clicks,

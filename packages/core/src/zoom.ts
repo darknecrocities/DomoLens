@@ -364,6 +364,10 @@ export interface CameraOptions {
   clicks?: import("./project").ClickEvent[];
   /** Flag indicating trajectory was pre-smoothed by caller, skipping redundant smoothing per frame. */
   alreadySmoothed?: boolean;
+  /** Whether adjacent zoom blocks glide continuously without dropping to 1.0x full frame. */
+  continuousGlide?: boolean;
+  /** Maximum time gap in milliseconds to bridge with continuous glide. */
+  maxGlideGapMs?: number;
 }
 
 /**
@@ -444,7 +448,7 @@ export function calculateCameraAtTime(
   keyframes?: import("./project").KeyframeNode[],
   options?: CameraOptions,
 ): CameraStateWithCursor {
-  const isAutoTrack = options?.autoTrackCursor !== false;
+  const isAutoTrack = Boolean(options?.autoTrackCursor);
   const effectiveTrajectory =
     options?.cursorSmoothing && options.cursorSmoothing !== "none" && cursorTrajectory && !options.alreadySmoothed
       ? smoothCursorTrajectory(cursorTrajectory, options.cursorSmoothing, options.clicks)
@@ -472,16 +476,6 @@ export function calculateCameraAtTime(
       }
       let finalX = firstKf.targetX;
       let finalY = firstKf.targetY;
-      if (firstKf.scale > 1.05 && effectiveTrajectory && effectiveTrajectory.length > 0) {
-        const tracked = calculateDeadzoneCamera(
-          { x: firstKf.targetX, y: firstKf.targetY },
-          defaultCursor,
-          firstKf.scale,
-          isAutoTrack ? 0.22 : 0.30,
-        );
-        finalX = tracked.x;
-        finalY = tracked.y;
-      }
       return {
         x: finalX,
         y: finalY,
@@ -493,21 +487,9 @@ export function calculateCameraAtTime(
     }
 
     if (timeMs >= lastKf.timeMs) {
-      let finalX = lastKf.targetX;
-      let finalY = lastKf.targetY;
-      if (lastKf.scale > 1.05 && effectiveTrajectory && effectiveTrajectory.length > 0) {
-        const tracked = calculateDeadzoneCamera(
-          { x: lastKf.targetX, y: lastKf.targetY },
-          defaultCursor,
-          lastKf.scale,
-          isAutoTrack ? 0.22 : 0.30,
-        );
-        finalX = tracked.x;
-        finalY = tracked.y;
-      }
       return {
-        x: finalX,
-        y: finalY,
+        x: lastKf.targetX,
+        y: lastKf.targetY,
         scale: lastKf.scale,
         isZoomed: lastKf.scale > 1.05,
         cursorX: defaultCursor.x,
@@ -529,27 +511,26 @@ export function calculateCameraAtTime(
         let finalX = baseTargetX;
         let finalY = baseTargetY;
 
-        // When zoomed in or transitioning, smoothly follow the cursor frame-by-frame with spring damping
+        // When zoomed in or transitioning, maintain rock-solid anchor on keyframe targets
+        // Only subtly reframe if cursor travels outside wide safe deadband (highlights or wide drags)
         if (scale > 1.05 && effectiveTrajectory && effectiveTrajectory.length > 0) {
           const tracked = calculateDeadzoneCamera(
             { x: baseTargetX, y: baseTargetY },
             cursor,
             scale,
-            isAutoTrack ? 0.22 : 0.30,
+            isAutoTrack ? 0.35 : 0.65,
           );
 
           if (k1.scale <= 1.05) {
-            // Zooming in from full frame: smoothly glide from 0.5 center to target cursor position
-            finalX = 0.5 + (tracked.x - 0.5) * progress;
-            finalY = 0.5 + (tracked.y - 0.5) * progress;
+            // Zooming in from full frame: smoothly glide from 0.5 center to target position
+            finalX = 0.5 + (baseTargetX - 0.5) * progress;
+            finalY = 0.5 + (baseTargetY - 0.5) * progress;
           } else if (k2.scale <= 1.05) {
-            // Zooming out to full frame: smoothly glide from target cursor position to 0.5 center
-            finalX = tracked.x + (0.5 - tracked.x) * progress;
-            finalY = tracked.y + (0.5 - tracked.y) * progress;
+            // Zooming out to full frame: smoothly glide from target position back to 0.5 center
+            finalX = baseTargetX + (0.5 - baseTargetX) * progress;
+            finalY = baseTargetY + (0.5 - baseTargetY) * progress;
           } else {
-            // Actively zoomed in: Camera Shift Tour Effect!
-            // When transitioning between different UI focal targets (a tour or workflow shift),
-            // glide the camera focal center smoothly along the path with organic crane pullback.
+            // Actively zoomed in: Camera Shift Tour or wide focal jump
             const shiftDist = Math.hypot(k2.targetX - k1.targetX, k2.targetY - k1.targetY);
             if (shiftDist > 0.04) {
               if (shiftDist > 0.25 && k1.scale > 1.35 && k2.scale > 1.35 && Math.abs(k1.scale - k2.scale) < 0.15) {
@@ -557,9 +538,11 @@ export function calculateCameraAtTime(
                 const craneDip = Math.min(0.20, shiftDist * 0.30) * Math.sin(progress * Math.PI);
                 scale = Math.max(1.25, scale - craneDip);
               }
-              finalX = baseTargetX + (tracked.x - baseTargetX) * 0.30;
-              finalY = baseTargetY + (tracked.y - baseTargetY) * 0.30;
+              finalX = baseTargetX;
+              finalY = baseTargetY;
             } else {
+              // Steady hold: stay anchored on target.
+              // If cursor moves outside safe deadband (highlights / wide drags), follow smoothly
               finalX = tracked.x;
               finalY = tracked.y;
             }
@@ -588,7 +571,7 @@ export function calculateCameraAtTime(
   const activeBlocks = zoomBlocks.filter((b) => b.enabled).sort((a, b) => a.startTimeMs - b.startTimeMs);
 
   if (activeBlocks.length === 0) {
-    if (isAutoTrack && effectiveTrajectory && effectiveTrajectory.length > 0) {
+    if (Boolean(options?.autoTrackCursor) && effectiveTrajectory && effectiveTrajectory.length > 0) {
       const autoScale = options?.autoTrackScale ?? 1.6;
       const target = clampCameraToBounds(defaultCursor.x, defaultCursor.y, autoScale);
       return {
@@ -630,12 +613,11 @@ export function calculateCameraAtTime(
         block.startTimeMs > prevBlock.endTimeMs,
     );
 
-    // 1. Inside lead-in transition: smoothly zoom in while tracking the moving cursor
-    // If previous block already glided into this block, camera is already zoomed in and tracking
+    // 1. Inside lead-in transition: smoothly zoom in while tracking towards block target
     if (!glidedFromPrev && timeMs >= transitionInStart && timeMs < transitionInEnd) {
       const span = transitionInEnd - transitionInStart;
       const progress = span > 0 ? easeInOutCubic((timeMs - transitionInStart) / span) : 1;
-      const target = clampCameraToBounds(currentCursor.x, currentCursor.y, block.scale);
+      const target = clampCameraToBounds(block.targetX, block.targetY, block.scale);
       return {
         x: 0.5 + (target.x - 0.5) * progress,
         y: 0.5 + (target.y - 0.5) * progress,
@@ -646,13 +628,13 @@ export function calculateCameraAtTime(
       };
     }
 
-    // 2. Inside active zoom hold: apply dynamic cursor tracking
+    // 2. Inside active zoom hold: apply rock-solid anchor on block target with calm deadband
     if (timeMs >= transitionInEnd && timeMs <= transitionOutStart) {
       const target = calculateDeadzoneCamera(
         { x: block.targetX, y: block.targetY },
         currentCursor,
         block.scale,
-        isAutoTrack ? 0.22 : 0.30,
+        isAutoTrack ? 0.35 : 0.65,
       );
       return {
         x: target.x,
@@ -664,8 +646,9 @@ export function calculateCameraAtTime(
       };
     }
 
-    // 3. Between this block and next block: glide smoothly across fields if within 4500ms
+    // 3. Between this block and next block: glide smoothly ONLY if options?.continuousGlide is true
     if (
+      options?.continuousGlide &&
       nextBlock &&
       nextBlock.startTimeMs - transitionOutStart <= maxGlideGapMs &&
       nextBlock.startTimeMs > transitionOutStart
@@ -696,7 +679,7 @@ export function calculateCameraAtTime(
       }
     }
 
-    // 4. Return to full frame when true inactivity lull occurs (> 4500ms) or end of video
+    // 4. Return to full frame (1.0x) during lead-out
     if (timeMs > transitionOutStart && timeMs <= transitionOutEnd) {
       const span = transitionOutEnd - transitionOutStart;
       const progress = span > 0 ? easeInOutCubic((timeMs - transitionOutStart) / span) : 1;
@@ -735,6 +718,9 @@ export interface PlotInteractionsOptions {
   cursorTrajectory?: import("./project").CursorTrajectoryPoint[];
   autoFillGaps?: boolean;
   maxGapMs?: number;
+  maxClusterDistance?: number;
+  minRestMs?: number;
+  enableRevealDip?: boolean;
 }
 
 /**
@@ -887,8 +873,10 @@ export function plotInteractionsToKeyframesAndZoomBlocks(
   const clusterGapMs = options.inactivityResetMs ?? 1500;
 
   const sorted = [...validInteractions].sort((a, b) => a.timestampMs - b.timestampMs);
+  const maxClusterDist = options.maxClusterDistance ?? 0.22;
+  const minRestMs = options.minRestMs ?? 800;
 
-  // Group events into clusters
+  // Group events into clusters based on temporal proximity and spatial proximity
   const clusters: import("./project").InteractionEvent[][] = [];
   let currentCluster: import("./project").InteractionEvent[] = [];
 
@@ -898,7 +886,12 @@ export function plotInteractionsToKeyframesAndZoomBlocks(
     } else {
       const prev = currentCluster[currentCluster.length - 1]!;
       const prevEffectiveEnd = prev.timestampMs + (prev.durationMs ?? 0);
-      if (event.timestampMs - prevEffectiveEnd <= clusterGapMs) {
+      const timeDiff = event.timestampMs - prevEffectiveEnd;
+      const spatialDist = Math.hypot(event.x - prev.x, event.y - prev.y);
+
+      // Rapid consecutive actions in the same local region stay clustered
+      // Distant actions (> 0.22 screen distance) break into separate zoom cycles
+      if (timeDiff <= clusterGapMs && spatialDist <= maxClusterDist) {
         currentCluster.push(event);
       } else {
         clusters.push(currentCluster);
@@ -929,7 +922,18 @@ export function plotInteractionsToKeyframesAndZoomBlocks(
     const clusterHoldMs = options.holdDurationMs ?? 1000;
 
     const rawStart = Math.max(0, firstEvt.timestampMs - leadInMs);
-    let startMs = Math.max(lastBlockEndTime, rawStart);
+    let startMs = rawStart;
+
+    if (lastBlockEndTime > 0) {
+      const earliestStart = lastBlockEndTime + (options.continuousGlide ? 0 : minRestMs);
+      if (rawStart < earliestStart) {
+        if (firstEvt.timestampMs - earliestStart >= 150) {
+          startMs = earliestStart;
+        } else {
+          startMs = Math.max(lastBlockEndTime, rawStart);
+        }
+      }
+    }
 
     const clusterEndTime = Math.max(
       lastEvt.timestampMs,
@@ -1013,19 +1017,21 @@ export function plotInteractionsToKeyframesAndZoomBlocks(
       });
 
       // Video Editor Showcase Arc: after focusing tightly on the button click,
-      // automatically zoom out a little (showcase context reveal) to show what changed on screen,
-      // then smoothly track cursor movement during the hold.
-      const showcaseScale = Math.max(1.32, Math.round(clusterScale * 0.78 * 100) / 100);
-      const revealTime = peakTime + 420;
-      if (revealTime < endMs - effLeadOut - 100) {
-        keyframes.push({
-          id: `kf-reveal-${firstEvt.id}`,
-          timeMs: revealTime,
-          scale: showcaseScale,
-          targetX: clampedFirst.x,
-          targetY: clampedFirst.y,
-          easing: "cubic",
-        });
+      // optionally zoom out a little (showcase context reveal) only if explicitly enabled or long showcase hold
+      const shouldReveal = options.enableRevealDip === true || (options.enableRevealDip === undefined && clusterHoldMs >= 1800);
+      if (shouldReveal) {
+        const showcaseScale = Math.max(1.32, Math.round(clusterScale * 0.78 * 100) / 100);
+        const revealTime = peakTime + 420;
+        if (revealTime < endMs - effLeadOut - 100) {
+          keyframes.push({
+            id: `kf-reveal-${firstEvt.id}`,
+            timeMs: revealTime,
+            scale: showcaseScale,
+            targetX: clampedFirst.x,
+            targetY: clampedFirst.y,
+            easing: "cubic",
+          });
+        }
       }
     }
 
@@ -1073,13 +1079,40 @@ export function plotInteractionsToKeyframesAndZoomBlocks(
       });
     }
 
+    // Highlight / Drag Trajectory Detection:
+    // If the cursor traversed a sustained path (> 0.14 normalized screen distance) during the interaction
+    // (e.g. dragging across text to highlight, or moving an element across the screen),
+    // add an intentional guided camera shift keyframe along the drag vector.
+    if (options.cursorTrajectory && options.cursorTrajectory.length > 0) {
+      const pStart = interpolateCursorAtTime(firstEvt.timestampMs, options.cursorTrajectory, firstEvt.x, firstEvt.y);
+      const pEnd = interpolateCursorAtTime(clusterEndTime, options.cursorTrajectory, lastEvt.x, lastEvt.y);
+      const sweepDist = Math.hypot(pEnd.x - pStart.x, pEnd.y - pStart.y);
+      if (sweepDist > 0.14) {
+        const shiftTime = Math.round((firstEvt.timestampMs + clusterEndTime) / 2);
+        const clampedShift = clampCameraToBounds(pEnd.x, pEnd.y, clusterScale);
+        if (shiftTime > firstEvt.timestampMs + 80 && shiftTime < endMs - effLeadOut - 80) {
+          keyframes.push({
+            id: `kf-highlight-shift-${firstEvt.id}`,
+            timeMs: shiftTime,
+            scale: clusterScale,
+            targetX: clampedShift.x,
+            targetY: clampedShift.y,
+            easing: "cubic",
+          });
+        }
+      }
+    }
+
     // Keyframe 3: End of hold before lead-out or glide
     const idealHoldEnd = clusterEndTime + clusterHoldMs;
     const minHold = firstEvt.timestampMs + 100;
     const maxHold = Math.max(minHold, endMs - effLeadOut);
     const holdTime = Math.max(minHold, Math.min(maxHold, idealHoldEnd));
     const clampedLast = clampCameraToBounds(lastEvt.x, lastEvt.y, clusterScale);
-    const effectiveHoldScale = Math.max(1.32, Math.round(clusterScale * 0.78 * 100) / 100);
+    const shouldRevealHold = options.enableRevealDip === true || (options.enableRevealDip === undefined && clusterHoldMs >= 1800);
+    const effectiveHoldScale = shouldRevealHold
+      ? Math.max(1.32, Math.round(clusterScale * 0.78 * 100) / 100)
+      : clusterScale;
 
     if (holdTime > firstEvt.timestampMs + 80) {
       keyframes.push({
@@ -1145,7 +1178,7 @@ export function plotInteractionsToKeyframesAndZoomBlocks(
       });
 
       previousGlidedIntoThis = false;
-      lastBlockEndTime = endMs + 50;
+      lastBlockEndTime = endMs;
     }
   }
 
@@ -1168,6 +1201,8 @@ export function zoomBlocksToKeyframes(
   options?: {
     leadInMs?: number;
     leadOutMs?: number;
+    continuousGlide?: boolean;
+    maxGlideGapMs?: number;
   },
 ): import("./project").KeyframeNode[] {
   const active = (zoomBlocks || [])
@@ -1179,7 +1214,7 @@ export function zoomBlocksToKeyframes(
   const keyframes: import("./project").KeyframeNode[] = [];
   const leadIn = options?.leadInMs ?? 450;
   const leadOut = options?.leadOutMs ?? 350;
-  const maxGlideGapMs = 3800;
+  const maxGlideGapMs = options?.maxGlideGapMs ?? 3800;
 
   for (let i = 0; i < active.length; i++) {
     const b = active[i]!;
@@ -1188,7 +1223,8 @@ export function zoomBlocksToKeyframes(
 
     const rawStart = Math.max(0, b.startTimeMs - leadIn);
     const glidedFromPrev = Boolean(
-      prev &&
+      options?.continuousGlide &&
+        prev &&
         b.startTimeMs - prev.endTimeMs <= maxGlideGapMs &&
         b.startTimeMs > prev.endTimeMs,
     );
@@ -1233,7 +1269,8 @@ export function zoomBlocksToKeyframes(
     }
 
     const canGlideToNext = Boolean(
-      next &&
+      options?.continuousGlide &&
+        next &&
         next.startTimeMs - holdEndMs <= maxGlideGapMs &&
         next.startTimeMs > holdEndMs,
     );
