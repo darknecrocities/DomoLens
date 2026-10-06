@@ -45,4 +45,6 @@ export interface Platform {
   listenForFileDrops(handlers: FileDropHandlers): Off;
   /** Sets window always-on-top mode for floating HUD overlay during screen recording. */
   setAlwaysOnTop?(alwaysOnTop: boolean): Promise<void>;
+  /** Saves or registers a project summary on the platform. */
+  saveProject?(project: ProjectSummary): Promise<void>;
 }

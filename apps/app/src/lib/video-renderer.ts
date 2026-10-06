@@ -273,7 +273,7 @@ export async function renderProjectVideo(options: RenderOptions): Promise<Render
         ctx.save();
         ctx.shadowColor =
           looks.shadow === "glow"
-            ? "rgba(255, 122, 26, 0.45)"
+            ? "rgba(255, 255, 255, 0.35)"
             : "rgba(0, 0, 0, 0.75)";
         ctx.shadowBlur = looks.shadow === "lift" ? 40 * baseScale : 24 * baseScale;
         ctx.shadowOffsetY = looks.shadow === "lift" ? 20 * baseScale : 10 * baseScale;
@@ -347,18 +347,18 @@ export async function renderProjectVideo(options: RenderOptions): Promise<Render
         ctx.fillStyle = "#1e2029";
         ctx.fillRect(-winW / 2, -winH / 2, winW, 44 * baseScale);
 
-        // Window controls
-        ctx.fillStyle = "#ff5f56";
+        // Window controls (strictly monochromatic)
+        ctx.fillStyle = "rgba(255, 255, 255, 0.25)";
         ctx.beginPath();
         ctx.arc(-winW / 2 + 24 * baseScale, -winH / 2 + 22 * baseScale, 6 * baseScale, 0, Math.PI * 2);
         ctx.fill();
 
-        ctx.fillStyle = "#ffbd2e";
+        ctx.fillStyle = "rgba(255, 255, 255, 0.2)";
         ctx.beginPath();
         ctx.arc(-winW / 2 + 42 * baseScale, -winH / 2 + 22 * baseScale, 6 * baseScale, 0, Math.PI * 2);
         ctx.fill();
 
-        ctx.fillStyle = "#27c93f";
+        ctx.fillStyle = "rgba(255, 255, 255, 0.15)";
         ctx.beginPath();
         ctx.arc(-winW / 2 + 60 * baseScale, -winH / 2 + 22 * baseScale, 6 * baseScale, 0, Math.PI * 2);
         ctx.fill();
@@ -392,7 +392,104 @@ export async function renderProjectVideo(options: RenderOptions): Promise<Render
         }
       }
 
+      // 7b. Draw Mouse Cursor Pointer and Cursor Glow if enabled
+      if (looks.showCursor && looks.cursorStyle !== "hidden") {
+        const curX = camera.cursorX * winW - winW / 2;
+        const curY = camera.cursorY * winH - winH / 2;
+        const cursorScale = (looks.cursorSize || 1.4) * baseScale;
+
+        // Dynamic Cursor Glow Effect
+        if (effectsState.glow) {
+          ctx.save();
+          const glowRadius = 32 * cursorScale;
+          const glowGrad = ctx.createRadialGradient(curX, curY, 0, curX, curY, glowRadius);
+          glowGrad.addColorStop(0, "rgba(255, 255, 255, 0.5)");
+          glowGrad.addColorStop(1, "rgba(255, 255, 255, 0)");
+          ctx.fillStyle = glowGrad;
+          ctx.beginPath();
+          ctx.arc(curX, curY, glowRadius, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.restore();
+        }
+
+        // Pointer Shape
+        ctx.save();
+        ctx.translate(curX, curY);
+        ctx.scale(cursorScale, cursorScale);
+
+        if (looks.cursorStyle === "dot") {
+          ctx.fillStyle = "#ffffff";
+          ctx.shadowColor = "rgba(0, 0, 0, 0.5)";
+          ctx.shadowBlur = 4;
+          ctx.beginPath();
+          ctx.arc(0, 0, 5, 0, Math.PI * 2);
+          ctx.fill();
+        } else if (looks.cursorStyle === "ring") {
+          ctx.strokeStyle = "#ffffff";
+          ctx.fillStyle = "rgba(255, 255, 255, 0.15)";
+          ctx.lineWidth = 2.5;
+          ctx.beginPath();
+          ctx.arc(0, 0, 9, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.stroke();
+        } else {
+          // Standard / Studio Cursor Arrow
+          ctx.fillStyle = "#ffffff";
+          ctx.strokeStyle = "#171717";
+          ctx.lineWidth = 1.5;
+          ctx.lineJoin = "round";
+          ctx.beginPath();
+          ctx.moveTo(0, 0);
+          ctx.lineTo(0, 16);
+          ctx.lineTo(4.5, 12.5);
+          ctx.lineTo(8.5, 20.5);
+          ctx.lineTo(11.5, 19);
+          ctx.lineTo(7.5, 11);
+          ctx.lineTo(13.5, 11);
+          ctx.closePath();
+          ctx.fill();
+          ctx.stroke();
+        }
+        ctx.restore();
+      }
+
       ctx.restore(); // Restore camera transform
+
+      // 7c. Draw Dynamic Spotlight Overlay (window space)
+      if (effectsState.spotlight && effectsState.spotlight.active) {
+        ctx.save();
+        const spotX = winX + effectsState.spotlight.x * winW;
+        const spotY = winY + effectsState.spotlight.y * winH;
+        const spotRadius = Math.max(20, effectsState.spotlight.radius * baseScale);
+        const spotIntensity = Math.min(1, Math.max(0, effectsState.spotlight.intensity));
+
+        const spotGrad = ctx.createRadialGradient(spotX, spotY, 0, spotX, spotY, spotRadius);
+        spotGrad.addColorStop(0, "rgba(0, 0, 0, 0)");
+        spotGrad.addColorStop(0.45, "rgba(0, 0, 0, 0)");
+        spotGrad.addColorStop(1, `rgba(0, 0, 0, ${(spotIntensity * 0.75).toFixed(3)})`);
+
+        ctx.fillStyle = spotGrad;
+        ctx.fillRect(winX, winY, winW, winH);
+        ctx.restore();
+      }
+
+      // 7d. Draw Dynamic Vignette Overlay (window space)
+      if (effectsState.vignette > 0) {
+        ctx.save();
+        const vIntensity = Math.min(1, Math.max(0, effectsState.vignette));
+        const cx = winX + winW / 2;
+        const cy = winY + winH / 2;
+        const innerR = Math.min(winW, winH) * 0.35;
+        const outerR = Math.hypot(winW / 2, winH / 2);
+
+        const vigGrad = ctx.createRadialGradient(cx, cy, innerR, cx, cy, outerR);
+        vigGrad.addColorStop(0, "rgba(0, 0, 0, 0)");
+        vigGrad.addColorStop(1, `rgba(0, 0, 0, ${(Math.min(0.95, vIntensity * 0.9)).toFixed(3)})`);
+
+        ctx.fillStyle = vigGrad;
+        ctx.fillRect(winX, winY, winW, winH);
+        ctx.restore();
+      }
 
       // 8. Draw Active Text Overlays (Captions)
       if (project.textOverlays && project.textOverlays.length > 0) {
@@ -451,12 +548,15 @@ export async function renderProjectVideo(options: RenderOptions): Promise<Render
       const percent = Math.min(98, Math.round((currentFrame / totalFrames) * 90) + 8);
       onProgress?.(percent, `Rendering video frames (${currentFrame}/${totalFrames})...`);
 
-      if (tMs + frameIntervalMs < durationMs && !cancelled) {
+      const playbackRate = effectsState.playbackRate > 0 ? effectsState.playbackRate : 1.0;
+      const stepMs = frameIntervalMs * playbackRate;
+
+      if (tMs + stepMs < durationMs && !cancelled) {
         // If HTML5 video is driving, seek or tick next frame
         if (videoLoaded && video.duration > 0) {
-          video.currentTime = Math.min(video.duration, (tMs + frameIntervalMs) / 1000);
+          video.currentTime = Math.min(video.duration, (tMs + stepMs) / 1000);
         }
-        animId = requestAnimationFrame(() => renderFrame(tMs + frameIntervalMs));
+        animId = requestAnimationFrame(() => renderFrame(tMs + stepMs));
       } else {
         // Finish recording
         finishRender();

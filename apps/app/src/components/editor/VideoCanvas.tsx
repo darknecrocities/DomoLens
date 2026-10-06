@@ -313,7 +313,7 @@ export function VideoCanvas({ project, currentTimeMs: propTimeMs }: VideoCanvasP
     none: "none",
     soft: "0 12px 32px -16px rgb(0 0 0 / 0.7)",
     lift: "0 24px 60px -24px rgb(0 0 0 / 0.8)",
-    glow: "0 10px 36px -10px rgb(255 122 26 / 0.55)",
+    glow: "0 10px 36px -10px rgb(255 255 255 / 0.35)",
   };
 
   return (
@@ -465,7 +465,7 @@ export function VideoCanvas({ project, currentTimeMs: propTimeMs }: VideoCanvasP
 
               {/* Dynamic Cursor Glow Effect */}
               {effectsState.glow && (
-                <div className="absolute -inset-4 rounded-full border border-cyan-400 bg-cyan-400/20 animate-pulse pointer-events-none shadow-[0_0_20px_rgba(34,211,238,0.7)]" />
+                <div className="absolute -inset-4 rounded-full border border-white/60 bg-white/20 animate-pulse pointer-events-none shadow-[0_0_20px_rgba(255,255,255,0.6)]" />
               )}
             </div>
           )}
@@ -501,7 +501,7 @@ export function VideoCanvas({ project, currentTimeMs: propTimeMs }: VideoCanvasP
               top: `${clickShiftMarker.y}px`,
             }}
           >
-            <div className="size-8 rounded-full border-2 border-amber-400 bg-amber-400/25 shadow-lg" />
+            <div className="size-8 rounded-full border-2 border-white bg-white/30 shadow-lg" />
           </div>
         )}
 
@@ -524,7 +524,7 @@ export function VideoCanvas({ project, currentTimeMs: propTimeMs }: VideoCanvasP
           effectsState.glow ||
           effectsState.filterStyle ||
           effectsState.playbackRate !== 1.0) && (
-          <div className="absolute top-3 right-3 flex items-center gap-1.5 rounded-full bg-amber-500/90 px-2.5 py-1 text-[11px] font-semibold text-black backdrop-blur-md shadow-md z-30">
+          <div className="absolute top-3 right-3 flex items-center gap-1.5 rounded-full bg-white/95 px-2.5 py-1 text-[11px] font-semibold text-black backdrop-blur-md shadow-md z-30">
             <Wand2 className="size-3 text-black" />
             <span>
               {effectsState.playbackRate !== 1.0

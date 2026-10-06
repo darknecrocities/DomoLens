@@ -205,6 +205,12 @@ export function createWebPlatform(opts: { isTouch: boolean; isMac: boolean }): P
       const current = projects.get(id);
       if (current?.media?.startsWith("blob:")) URL.revokeObjectURL(current.media);
       projects.delete(id);
+      notify();
+    },
+
+    async saveProject(project: ProjectSummary) {
+      projects.set(project.id, project);
+      notify();
     },
 
     mediaUrl: (url) => url,

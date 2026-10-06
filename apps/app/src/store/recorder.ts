@@ -2,7 +2,6 @@ import { create } from "zustand";
 import {
   DEFAULT_AUDIO_SETTINGS,
   DEFAULT_LOOKS,
-  fillInteractionGaps,
   plotInteractionsToKeyframesAndZoomBlocks,
   type ClickEvent,
   type InteractionEvent,
@@ -52,7 +51,79 @@ let recordingStartTimestamp = 0;
 let mediaRecorderInstance: MediaRecorder | null = null;
 let recordedChunks: Blob[] = [];
 let activeStream: MediaStream | null = null;
+let audioContextInstance: AudioContext | null = null;
+let micStreamInstance: MediaStream | null = null;
 let recorderCleanupFn: (() => void) | null = null;
+
+const displaySurfaceMap: Record<RecordingSource, "monitor" | "window" | "browser"> = {
+  screen: "monitor",
+  window: "window",
+  tab: "browser",
+};
+
+/** Captures an offscreen video frame as a base64 thumbnail. */
+async function captureVideoThumbnail(
+  videoUrl: string,
+  targetWidth = 480,
+  targetHeight = 270,
+): Promise<string | null> {
+  if (typeof document === "undefined" || !videoUrl) return null;
+  return new Promise((resolve) => {
+    const video = document.createElement("video");
+    video.muted = true;
+    video.preload = "auto";
+    video.playsInline = true;
+    video.src = videoUrl;
+
+    const timeout = setTimeout(() => {
+      cleanup();
+      resolve(null);
+    }, 3500);
+
+    const cleanup = () => {
+      clearTimeout(timeout);
+      video.removeEventListener("loadedmetadata", onMetadata);
+      video.removeEventListener("seeked", onSeeked);
+      video.removeEventListener("error", onError);
+      video.removeAttribute("src");
+      video.load();
+    };
+
+    const onMetadata = () => {
+      video.currentTime = Math.min(0.5, (video.duration || 0) / 2);
+    };
+
+    const onSeeked = () => {
+      try {
+        const canvas = document.createElement("canvas");
+        canvas.width = targetWidth;
+        canvas.height = targetHeight;
+        const ctx = canvas.getContext("2d");
+        if (ctx) {
+          ctx.drawImage(video, 0, 0, targetWidth, targetHeight);
+          const dataUrl = canvas.toDataURL("image/jpeg", 0.75);
+          cleanup();
+          resolve(dataUrl);
+          return;
+        }
+      } catch {
+        // ignore
+      }
+      cleanup();
+      resolve(null);
+    };
+
+    const onError = () => {
+      cleanup();
+      resolve(null);
+    };
+
+    video.addEventListener("loadedmetadata", onMetadata, { once: true });
+    video.addEventListener("seeked", onSeeked, { once: true });
+    video.addEventListener("error", onError, { once: true });
+    video.load();
+  });
+}
 
 export const useRecorder = create<RecorderStore>((set, get) => ({
   state: "idle",
@@ -161,22 +232,81 @@ export const useRecorder = create<RecorderStore>((set, get) => ({
   startCountdown: async () => {
     if (get().state !== "idle") return;
 
-    // 1. In browser environment, prompt for screen sharing FIRST!
+    // 1. Prompt for screen sharing with tailored source constraints (screen, window, tab)
     if (typeof navigator !== "undefined" && navigator.mediaDevices?.getDisplayMedia) {
       set({ state: "requesting_share" });
       try {
-        const stream = await navigator.mediaDevices.getDisplayMedia({
-          video: true,
-          audio: get().systemAudioEnabled,
-        });
+        const targetSurface = displaySurfaceMap[get().source] || "monitor";
+        let stream: MediaStream;
+
+        try {
+          stream = await navigator.mediaDevices.getDisplayMedia({
+            video: {
+              displaySurface: targetSurface,
+              frameRate: { ideal: 60, max: 60 },
+              width: { ideal: 1920, max: 3840 },
+              height: { ideal: 1080, max: 2160 },
+            } as MediaTrackConstraints,
+            audio: get().systemAudioEnabled,
+            preferCurrentTab: false,
+            selfBrowserSurface: "exclude",
+            systemAudio: get().systemAudioEnabled ? "include" : "exclude",
+            surfaceSwitching: "include",
+            monitorTypeSurfaces: "include",
+          } as DisplayMediaStreamOptions);
+        } catch {
+          // Fallback to relaxed constraints for environments without advanced displaySurface options
+          stream = await navigator.mediaDevices.getDisplayMedia({
+            video: true,
+            audio: get().systemAudioEnabled,
+          });
+        }
 
         activeStream = stream;
 
-        // If mic requested, combine mic track
+        // If mic requested, capture and mix cleanly via Web Audio API
         if (get().micEnabled && navigator.mediaDevices?.getUserMedia) {
           try {
-            const micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
-            micStream.getAudioTracks().forEach((track) => stream.addTrack(track));
+            const micStream = await navigator.mediaDevices.getUserMedia({
+              audio: {
+                echoCancellation: true,
+                noiseSuppression: true,
+                autoGainControl: true,
+              },
+            });
+            micStreamInstance = micStream;
+
+            const systemAudioTracks = stream.getAudioTracks();
+            const micAudioTracks = micStream.getAudioTracks();
+
+            if (systemAudioTracks.length > 0 && micAudioTracks.length > 0) {
+              try {
+                const AudioCtx =
+                  window.AudioContext ||
+                  (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+                if (AudioCtx) {
+                  audioContextInstance = new AudioCtx();
+                  const dest = audioContextInstance.createMediaStreamDestination();
+
+                  const sysSrc = audioContextInstance.createMediaStreamSource(new MediaStream([systemAudioTracks[0]!]));
+                  sysSrc.connect(dest);
+
+                  const micSrc = audioContextInstance.createMediaStreamSource(new MediaStream([micAudioTracks[0]!]));
+                  micSrc.connect(dest);
+
+                  const mixedTrack = dest.stream.getAudioTracks()[0];
+                  if (mixedTrack) {
+                    systemAudioTracks.forEach((t) => stream.removeTrack(t));
+                    stream.addTrack(mixedTrack);
+                  }
+                }
+              } catch (audioErr) {
+                console.warn("Audio mixing fallback:", audioErr);
+                micAudioTracks.forEach((track) => stream.addTrack(track));
+              }
+            } else if (micAudioTracks.length > 0) {
+              micAudioTracks.forEach((track) => stream.addTrack(track));
+            }
           } catch {
             // Ignore mic permission denials and continue with video
           }
@@ -387,6 +517,26 @@ export const useRecorder = create<RecorderStore>((set, get) => ({
       }
     }
 
+    if (audioContextInstance) {
+      try {
+        void audioContextInstance.close();
+      } catch {
+        // ignore
+      }
+      audioContextInstance = null;
+    }
+
+    if (micStreamInstance) {
+      micStreamInstance.getTracks().forEach((t) => t.stop());
+      micStreamInstance = null;
+    }
+
+    // Dynamically query actual resolution from active display stream track
+    const videoTrack = activeStream?.getVideoTracks()[0];
+    const trackSettings = videoTrack?.getSettings();
+    const recordedWidth = trackSettings?.width || 1920;
+    const recordedHeight = trackSettings?.height || 1080;
+
     if (activeStream) {
       activeStream.getTracks().forEach((t) => t.stop());
       activeStream = null;
@@ -400,9 +550,10 @@ export const useRecorder = create<RecorderStore>((set, get) => ({
     void platform.setAlwaysOnTop?.(false);
     set({ state: "idle" });
 
-    let finalClicks = rawClicks;
-    let finalInteractions = rawInteractions;
-    let finalTrajectory = get().cursorTrajectory;
+    // Strictly preserve real user clicks without synthetic filler
+    const finalClicks = rawClicks;
+    const finalInteractions = rawInteractions;
+    const finalTrajectory = get().cursorTrajectory;
 
     // Create a video Blob URL
     let mediaUrl = "";
@@ -411,19 +562,17 @@ export const useRecorder = create<RecorderStore>((set, get) => ({
       mediaUrl = URL.createObjectURL(blob);
     }
 
-    // Fill gaps only if real user interactions occurred
-    if (finalInteractions.length > 0) {
-      finalInteractions = fillInteractionGaps(finalInteractions, duration, finalTrajectory);
-      finalClicks = finalInteractions.map((i) => ({
-        id: i.id,
-        timestampMs: i.timestampMs,
-        x: i.x,
-        y: i.y,
-        button: "left" as const,
-      }));
+    // Capture real video frame thumbnail from the recorded video
+    let thumbnail: string | null = null;
+    if (mediaUrl) {
+      try {
+        thumbnail = await captureVideoThumbnail(mediaUrl, 480, 270);
+      } catch {
+        thumbnail = null;
+      }
     }
 
-    // Plot zooms only if interactions actually occurred. Otherwise keep empty by default!
+    // Plot zooms ONLY if interactions actually occurred. Otherwise keep empty by default!
     const { keyframes, zoomBlocks } =
       finalInteractions.length > 0
         ? plotInteractionsToKeyframesAndZoomBlocks(
@@ -435,7 +584,7 @@ export const useRecorder = create<RecorderStore>((set, get) => ({
               fallbackIfEmpty: false,
               continuousGlide: true,
               maxGlideGapMs: 3500,
-              autoFillGaps: true,
+              autoFillGaps: false,
               cursorTrajectory: finalTrajectory,
             },
           )
@@ -482,9 +631,9 @@ export const useRecorder = create<RecorderStore>((set, get) => ({
       createdAt: now,
       updatedAt: now,
       durationMs: duration,
-      width: 1920,
-      height: 1080,
-      thumbnail: null,
+      width: recordedWidth,
+      height: recordedHeight,
+      thumbnail,
       media: mediaUrl,
     };
 
@@ -531,11 +680,12 @@ export const useRecorder = create<RecorderStore>((set, get) => ({
       },
     };
 
-    // Register project
+    // Register project in projects store and on platform
     const projectsStore = useProjects.getState();
     useProjects.setState({
       projects: [summary, ...projectsStore.projects],
     });
+    await platform.saveProject?.(summary);
 
     // Save project data to session storage for seamless editor reload
     if (typeof sessionStorage !== "undefined") {
@@ -556,6 +706,18 @@ export const useRecorder = create<RecorderStore>((set, get) => ({
     if (recorderCleanupFn) {
       recorderCleanupFn();
       recorderCleanupFn = null;
+    }
+    if (audioContextInstance) {
+      try {
+        void audioContextInstance.close();
+      } catch {
+        // ignore
+      }
+      audioContextInstance = null;
+    }
+    if (micStreamInstance) {
+      micStreamInstance.getTracks().forEach((t) => t.stop());
+      micStreamInstance = null;
     }
     if (activeStream) {
       activeStream.getTracks().forEach((t) => t.stop());

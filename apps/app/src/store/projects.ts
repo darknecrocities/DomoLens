@@ -90,6 +90,9 @@ export const useProjects = create<ProjectsState>((set, get) => ({
     set({ projects: before.filter((p) => p.id !== id) });
     try {
       await platform.deleteProject(id);
+      if (typeof sessionStorage !== "undefined") {
+        sessionStorage.removeItem(`domolens_project_${id}`);
+      }
       toast.info(copy.project.deleted);
       return true;
     } catch (err) {
