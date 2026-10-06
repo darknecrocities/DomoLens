@@ -477,7 +477,7 @@ export function LandingView() {
                 className="inline-flex min-h-[46px] items-center gap-2 rounded-lg bg-white px-7 py-3 font-mono text-xs font-bold uppercase text-black hover:bg-neutral-200 transition-colors shadow-2xl touch-manipulation"
               >
                 <Download className="size-4" />
-                <span>Download App (Mac / Win / Linux / Android)</span>
+                <span>Download App (Mac / Win / Linux)</span>
               </a>
 
               <button
@@ -1305,41 +1305,53 @@ export function LandingView() {
             )}
 
             {activeTab === "android" && (
-              <div>
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                  <div>
-                    <h3 className="text-xl font-bold uppercase text-white">DomoLens Android Companion</h3>
-                    <p className="text-xs text-neutral-400 mt-1">MediaProjection Screen Recorder with Floating HUD (Android 12+)</p>
+              <div className="relative min-h-[260px] flex items-center justify-center overflow-hidden rounded-lg">
+                {/* Blurred Android Section */}
+                <div
+                  aria-hidden="true"
+                  className="w-full select-none pointer-events-none filter blur-[6px] opacity-25"
+                >
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                    <div>
+                      <h3 className="text-xl font-bold uppercase text-white">DomoLens Android Companion</h3>
+                      <p className="text-xs text-neutral-400 mt-1">MediaProjection Screen Recorder with Floating HUD (Android 12+)</p>
+                    </div>
                   </div>
-                  <span className="font-mono text-xs font-bold text-white border border-neutral-700 px-2.5 py-1 rounded w-fit">
-                    APK Release
-                  </span>
+
+                  <div className="mt-6 grid grid-cols-1 sm:grid-cols-2 gap-6 items-center">
+                    <div>
+                      <div className="inline-flex items-center gap-2 rounded-lg bg-white px-5 py-2.5 font-mono text-xs font-bold text-black uppercase">
+                        <Download className="size-4" />
+                        <span>Direct .APK Download</span>
+                      </div>
+                      <p className="mt-3 font-mono text-[11px] text-neutral-400">
+                        Install directly without Google Play. Includes floating quickbar tile and touch tracker.
+                      </p>
+                    </div>
+
+                    <div className="flex items-center gap-3 rounded-lg border border-neutral-800 bg-black p-3">
+                      <div className="flex size-14 items-center justify-center rounded bg-white text-black shrink-0">
+                        <QrCode className="size-10" />
+                      </div>
+                      <div className="font-mono text-[11px] text-neutral-300">
+                        <span className="font-bold text-white block">Scan to Install on Mobile</span>
+                        <span>Point your phone camera to download APK immediately</span>
+                      </div>
+                    </div>
+                  </div>
                 </div>
 
-                <div className="mt-6 grid grid-cols-1 sm:grid-cols-2 gap-6 items-center">
-                  <div>
-                    <a
-                      href="/domolens_smooth_autozoom_demo.mp4"
-                      download="DomoLens-Android.apk"
-                      className="inline-flex items-center gap-2 rounded-lg bg-white px-5 py-2.5 font-mono text-xs font-bold text-black uppercase hover:bg-neutral-200"
-                    >
-                      <Download className="size-4" />
-                      <span>Direct .APK Download</span>
-                    </a>
-                    <p className="mt-3 font-mono text-[11px] text-neutral-400">
-                      Install directly without Google Play. Includes floating quickbar tile and touch tracker.
-                    </p>
-                  </div>
-
-                  <div className="flex items-center gap-3 rounded-lg border border-neutral-800 bg-black p-3">
-                    <div className="flex size-14 items-center justify-center rounded bg-white text-black shrink-0">
-                      <QrCode className="size-10" />
-                    </div>
-                    <div className="font-mono text-[11px] text-neutral-300">
-                      <span className="font-bold text-white block">Scan to Install on Mobile</span>
-                      <span>Point your phone camera to download APK immediately</span>
-                    </div>
-                  </div>
+                {/* Overlapped Text */}
+                <div className="absolute inset-0 flex flex-col items-center justify-center text-center p-6 bg-black/40 backdrop-blur-[2px]">
+                  <span className="font-mono text-xs uppercase tracking-widest text-neutral-400">
+                    // Android Companion
+                  </span>
+                  <h3 className="mt-2 text-2xl sm:text-3xl font-black uppercase tracking-tight text-white">
+                    Coming Soon
+                  </h3>
+                  <p className="mt-2 max-w-md text-xs sm:text-sm text-neutral-300">
+                    The Android screen recorder and floating quickbar companion is currently in development.
+                  </p>
                 </div>
               </div>
             )}

@@ -51,7 +51,7 @@ export function HeroSection() {
     mac: "Download for macOS (Universal)",
     windows: "Download for Windows (64-bit)",
     linux: "Download for Linux (.AppImage)",
-    android: "Download Android (.apk)",
+    android: "Android (Coming Soon)",
   };
 
   // Cursor 3D Physics Calculation
