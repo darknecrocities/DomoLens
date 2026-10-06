@@ -2,14 +2,21 @@ name: Release Desktop Bundles
 
 on:
   push:
+    branches:
+      - main
     tags:
       - 'v*'
+    paths:
+      - 'apps/**'
+      - 'packages/**'
+      - 'package.json'
+      - '.github/workflows/release.yml'
   workflow_dispatch:
     inputs:
       version:
-        description: 'Release version tag (e.g. v0.1.0)'
+        description: 'Release version tag (e.g. v0.1.1)'
         required: false
-        default: 'v0.1.0'
+        default: ''
 
 jobs:
   release:
@@ -30,6 +37,18 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+
+      - name: Determine Release Tag
+        id: tag
+        shell: bash
+        run: |
+          if [[ "${{ github.ref_type }}" == "tag" ]]; then
+            echo "val=${{ github.ref_name }}" >> $GITHUB_OUTPUT
+          elif [[ -n "${{ inputs.version }}" ]]; then
+            echo "val=${{ inputs.version }}" >> $GITHUB_OUTPUT
+          else
+            echo "val=v0.1.${{ github.run_number }}" >> $GITHUB_OUTPUT
+          fi
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
@@ -53,11 +72,17 @@ jobs:
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
         with:
           projectPath: './apps/app'
-          tagName: ${{ github.ref_name || inputs.version || 'v0.1.0' }}
-          releaseName: 'DomoLens ${{ github.ref_name || inputs.version || 'v0.1.0' }}'
-          releaseBody: 'See CHANGELOG.md for detailed release notes and changes.'
+          tagName: ${{ steps.tag.outputs.val }}
+          releaseName: 'DomoLens ${{ steps.tag.outputs.val }}'
+          releaseBody: |
+            DomoLens Automated Release ${{ steps.tag.outputs.val }}
+            - macOS (.dmg, .app)
+            - Windows (.exe installer)
+            - Linux (.AppImage, .deb)
+            - Auto-updater manifest (latest.json)
           releaseDraft: false
           prerelease: false
           args: ${{ matrix.args }}

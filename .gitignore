@@ -57,6 +57,8 @@ coverage/
 .env.local
 .env.*.local
 *.local
+tauri-updater.key*
+*.key
 
 # IDEs and Editors
 .vscode/*

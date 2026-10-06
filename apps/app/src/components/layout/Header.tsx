@@ -1,8 +1,9 @@
-import { FolderOpen, Globe, Monitor, Mic, Sliders, Zap } from "lucide-react";
+import { FolderOpen, Globe, Monitor, Mic, RefreshCw, Sliders, Zap } from "lucide-react";
 import { copy } from "../../copy/en";
 import { platform } from "../../platform";
 import { useNav } from "../../store/nav";
 import { useProjects } from "../../store/projects";
+import { checkForAppUpdates } from "../../lib/updater";
 
 export function Header() {
   const { screen, go } = useNav();
@@ -139,6 +140,20 @@ export function Header() {
             <FolderOpen className="size-3.5" />
             <span className="hidden md:inline">Import Clip</span>
             <span className="md:hidden">Import</span>
+          </button>
+        )}
+
+        {/* Native App: Check for Updates */}
+        {platform.isApp && (
+          <button
+            type="button"
+            onClick={() => void checkForAppUpdates({ silent: false })}
+            className="flex min-h-[34px] items-center gap-1.5 rounded-full border border-white/10 bg-white/5 px-3 py-1.5 font-mono text-xs font-semibold uppercase text-neutral-300 hover:text-white hover:bg-white/10 transition-all shadow-[inset_0_1px_0_rgba(255,255,255,0.08)] touch-manipulation"
+            title="Check for DomoLens updates"
+          >
+            <RefreshCw className="size-3.5" />
+            <span className="hidden xl:inline">Check Updates</span>
+            <span className="xl:hidden">Update</span>
           </button>
         )}
 

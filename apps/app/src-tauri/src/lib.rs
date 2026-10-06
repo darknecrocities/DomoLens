@@ -28,7 +28,11 @@ pub struct AppState {
 }
 
 fn get_data_dir() -> PathBuf {
-    if let Some(dirs) = directories::ProjectDirs::from("com", "domolens", "app") {
+    if let Some(dirs) = directories::ProjectDirs::from("com", "domolens", "desktop") {
+        let dir = dirs.data_dir().to_path_buf();
+        let _ = fs::create_dir_all(&dir);
+        dir
+    } else if let Some(dirs) = directories::ProjectDirs::from("com", "domolens", "app") {
         let dir = dirs.data_dir().to_path_buf();
         let _ = fs::create_dir_all(&dir);
         dir
@@ -138,6 +142,8 @@ fn delete_project(id: String, state: State<'_, AppState>) -> Result<(), String> 
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
+        .plugin(tauri_plugin_process::init())
         .manage(AppState {
             projects: Mutex::new(load_projects_from_disk()),
         })

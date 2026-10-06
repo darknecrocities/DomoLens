@@ -11,6 +11,7 @@ import { LandingView } from "./screens/LandingView";
 import { platform } from "./platform";
 import { screenKey, useNav } from "./store/nav";
 import { useProjects } from "./store/projects";
+import { initBackgroundAutoUpdater } from "./lib/updater";
 
 export function App() {
   const { screen } = useNav();
@@ -38,9 +39,13 @@ export function App() {
       },
     });
 
+    // Auto-updater background scheduler (desktop app only)
+    const unbindUpdater = initBackgroundAutoUpdater();
+
     return () => {
       unbindProjects();
       unbindDrops();
+      unbindUpdater();
     };
   }, [load, importFiles]);
 
