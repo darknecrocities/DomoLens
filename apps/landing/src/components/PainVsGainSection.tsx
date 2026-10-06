@@ -62,27 +62,27 @@ export function PainVsGainSection() {
 
         <div className="mt-14 grid grid-cols-1 md:grid-cols-2 gap-8 items-stretch">
           {/* The Old Way: 3+ Hours of Editing Fatigue */}
-          <div className="rounded-2xl border border-red-500/30 bg-neutral-900/60 p-6 sm:p-8 flex flex-col justify-between shadow-2xl relative overflow-hidden before:absolute before:inset-x-0 before:top-0 before:h-1 before:bg-gradient-to-r before:from-red-500/80 before:to-red-500/20">
+          <div className="rounded-2xl border border-neutral-800 bg-neutral-900/60 p-6 sm:p-8 flex flex-col justify-between shadow-2xl relative overflow-hidden before:absolute before:inset-x-0 before:top-0 before:h-1 before:bg-gradient-to-r before:from-neutral-700 before:to-neutral-900">
             <div>
               <div className="flex items-center justify-between pb-6 border-b border-neutral-800">
                 <div className="flex items-center gap-2.5">
-                  <div className="flex size-10 items-center justify-center rounded-xl bg-red-500/15 border border-red-500/40 text-red-400">
+                  <div className="flex size-10 items-center justify-center rounded-xl bg-neutral-800 border border-neutral-700 text-neutral-400">
                     <Clock className="size-5" />
                   </div>
                   <div>
                     <h3 className="font-bold text-base uppercase text-white tracking-wide">
                       Traditional Video Editors
                     </h3>
-                    <span className="font-mono text-[11px] text-red-400">3+ Hours of Editing Fatigue</span>
+                    <span className="font-mono text-[11px] text-neutral-400">3+ Hours of Editing Fatigue</span>
                   </div>
                 </div>
-                <XCircle className="size-5 text-red-400/80" />
+                <XCircle className="size-5 text-neutral-500" />
               </div>
 
               <div className="mt-6 space-y-4">
                 {painPoints.map((pain, idx) => (
                   <div key={idx} className="flex items-start gap-3 rounded-lg border border-neutral-800/80 bg-black/40 p-3.5">
-                    <XCircle className="size-4 text-red-400 shrink-0 mt-0.5" />
+                    <XCircle className="size-4 text-neutral-500 shrink-0 mt-0.5" />
                     <div>
                       <span className="block font-mono text-xs font-bold text-neutral-200 uppercase">{pain.title}</span>
                       <span className="block text-xs text-neutral-400 mt-1 leading-relaxed">{pain.desc}</span>
@@ -94,7 +94,7 @@ export function PainVsGainSection() {
 
             <div className="mt-8 pt-4 border-t border-neutral-800 flex items-center justify-between font-mono text-xs text-neutral-500">
               <span>Result: Hours lost, tired eyes</span>
-              <span className="text-red-400 font-semibold">Exhausting</span>
+              <span className="text-neutral-400 font-semibold">Exhausting</span>
             </div>
           </div>
 
