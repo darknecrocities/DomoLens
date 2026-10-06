@@ -23,6 +23,8 @@ export type Off = () => void;
  */
 export interface Platform {
   kind: PlatformKind;
+  /** True when running as an installed desktop or mobile app (Tauri runtime). */
+  isApp: boolean;
   /** True on phones and tablets (fingers instead of a mouse). */
   isTouch: boolean;
   /** True on macOS desktop (used to leave room for the window buttons). */

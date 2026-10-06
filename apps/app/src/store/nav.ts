@@ -1,10 +1,12 @@
 import { create } from "zustand";
+import { platform } from "../platform";
 
 export type Screen =
   | { name: "home" }
   | { name: "record" }
   | { name: "project"; id: string }
-  | { name: "editor"; id: string };
+  | { name: "editor"; id: string }
+  | { name: "landing" };
 
 interface NavState {
   screen: Screen;
@@ -15,9 +17,17 @@ interface NavState {
 }
 
 export const useNav = create<NavState>((set) => ({
-  screen: { name: "home" },
+  // In a browser, default to the landing page. In the downloaded desktop app, default directly to OpenScreen.
+  screen: platform.isApp ? { name: "home" } : { name: "landing" },
   direction: 1,
-  go: (screen) => set({ screen, direction: 1 }),
+  go: (screen) => {
+    // If running inside the desktop app, prevent navigating to the landing page.
+    if (platform.isApp && screen.name === "landing") {
+      set({ screen: { name: "home" }, direction: 1 });
+      return;
+    }
+    set({ screen, direction: 1 });
+  },
   back: () => set({ screen: { name: "home" }, direction: -1 }),
 }));
 

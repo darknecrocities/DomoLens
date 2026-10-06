@@ -139,6 +139,7 @@ export function createWebPlatform(opts: { isTouch: boolean; isMac: boolean }): P
 
   return {
     kind: "web",
+    isApp: false,
     isTouch: opts.isTouch,
     isMac: false,
 

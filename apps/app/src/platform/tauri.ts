@@ -23,6 +23,7 @@ function lazyOff(pending: Promise<() => void>): Off {
 export function createTauriPlatform(opts: { isMobile: boolean; isTouch: boolean; isMac: boolean }): Platform {
   return {
     kind: opts.isMobile ? "mobile" : "desktop",
+    isApp: true,
     isTouch: opts.isTouch,
     isMac: opts.isMac,
 
