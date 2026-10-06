@@ -8,10 +8,12 @@ import {
   detectZoomBlocksFromClicks,
   easeInOutCubic,
   fillInteractionGaps,
+  interpolateCursorAtTime,
   plotInteractionsToKeyframesAndZoomBlocks,
   screenToVideoCoordinates,
   smoothCursorTrajectory,
   videoToScreenCoordinates,
+  zoomBlocksToKeyframes,
 } from "./zoom";
 import type { ClickEvent, TimelineClip } from "./project";
 import { removeClipAndRipple, splitClip, splitZoomBlock } from "./timeline";
@@ -614,6 +616,35 @@ describe("timeline operations", () => {
     const holdKf = plotted.keyframes.find((k) => k.id === "kf-hold-c-btn");
     expect(holdKf).toBeDefined();
     expect(holdKf?.scale).toBeLessThan(1.9);
+  });
+
+  it("zoomBlocksToKeyframes generates smooth monotonic keyframes from zoom blocks", () => {
+    const blocks = [
+      { id: "b1", startTimeMs: 2000, endTimeMs: 4000, targetX: 0.3, targetY: 0.4, scale: 1.8, enabled: true },
+      { id: "b2", startTimeMs: 8000, endTimeMs: 10000, targetX: 0.7, targetY: 0.6, scale: 2.0, enabled: true },
+    ];
+    const keyframes = zoomBlocksToKeyframes(blocks, 15000);
+    expect(keyframes.length).toBeGreaterThanOrEqual(6);
+    // Verify strictly monotonic timeMs ordering
+    for (let i = 0; i < keyframes.length - 1; i++) {
+      expect(keyframes[i + 1]!.timeMs).toBeGreaterThanOrEqual(keyframes[i]!.timeMs);
+    }
+  });
+
+  it("interpolateCursorAtTime accurately locates coordinates with O(log N) binary search", () => {
+    const trajectory = [
+      { timestampMs: 1000, x: 0.1, y: 0.2 },
+      { timestampMs: 2000, x: 0.3, y: 0.4 },
+      { timestampMs: 3000, x: 0.5, y: 0.6 },
+      { timestampMs: 4000, x: 0.7, y: 0.8 },
+    ];
+    const at1500 = interpolateCursorAtTime(1500, trajectory);
+    expect(at1500.x).toBeCloseTo(0.2, 2);
+    expect(at1500.y).toBeCloseTo(0.3, 2);
+
+    const at3500 = interpolateCursorAtTime(3500, trajectory);
+    expect(at3500.x).toBeCloseTo(0.6, 2);
+    expect(at3500.y).toBeCloseTo(0.7, 2);
   });
 });
 

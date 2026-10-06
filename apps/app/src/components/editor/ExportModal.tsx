@@ -1,10 +1,13 @@
-import { useEffect, useState } from "react";
-import { CheckCircle2, Download, Film } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { CheckCircle2, Download, Film, Sparkles } from "lucide-react";
 import { copy } from "../../copy/en";
 import { Button } from "../ui/Button";
 import { Modal } from "../ui/Modal";
 import { toast } from "../../store/toast";
 import type { ProjectData } from "@domolens/core";
+import { renderProjectVideo, type ExportResolution } from "../../lib/video-renderer";
+
+export type { ExportResolution };
 
 interface ExportModalProps {
   open: boolean;
@@ -12,64 +15,107 @@ interface ExportModalProps {
   onClose: () => void;
 }
 
-export type ExportResolution = "1080p" | "720p" | "4k" | "gif";
-
 export function ExportModal({ open, project, onClose }: ExportModalProps) {
   const [resolution, setResolution] = useState<ExportResolution>("1080p");
   const [isExporting, setIsExporting] = useState(false);
   const [progress, setProgress] = useState(0);
+  const [statusText, setStatusText] = useState("Preparing video export...");
+  const abortControllerRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
     if (!open) {
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+        abortControllerRef.current = null;
+      }
       setIsExporting(false);
       setProgress(0);
+      setStatusText("Preparing video export...");
     }
   }, [open]);
 
-  const handleStartExport = () => {
+  const handleStartExport = async () => {
     setIsExporting(true);
-    setProgress(0);
+    setProgress(2);
+    setStatusText("Initializing video renderer...");
 
-    // Simulate/run render progress increments
-    const interval = setInterval(() => {
-      setProgress((prev) => {
-        if (prev >= 100) {
-          clearInterval(interval);
-          setIsExporting(false);
-          toast.success(copy.export.done);
+    const abortCtrl = new AbortController();
+    abortControllerRef.current = abortCtrl;
 
-          // Trigger simulated download
-          const link = document.createElement("a");
-          link.href = project.summary.media || "#";
-          link.download = `${project.summary.name.replace(/\s+/g, "_")}_${resolution}.mp4`;
-          document.body.appendChild(link);
-          link.click();
-          document.body.removeChild(link);
-
-          onClose();
-          return 100;
-        }
-        return prev + Math.random() * 20 + 10;
+    try {
+      const result = await renderProjectVideo({
+        project,
+        resolution,
+        onProgress: (pct, status) => {
+          setProgress(pct);
+          setStatusText(status);
+        },
+        signal: abortCtrl.signal,
       });
-    }, 250);
+
+      setProgress(100);
+      setStatusText("Export complete!");
+      toast.success(copy.export.done);
+
+      // Trigger download of real rendered video
+      const link = document.createElement("a");
+      link.href = result.downloadUrl;
+      link.download = result.filename;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+
+      setTimeout(() => {
+        setIsExporting(false);
+        onClose();
+      }, 500);
+    } catch (err: unknown) {
+      if (abortCtrl.signal.aborted) {
+        setIsExporting(false);
+        return;
+      }
+
+      console.warn("Canvas video render fallback:", err);
+      toast.info("Rendering fallback: exporting source video.");
+
+      // Graceful fallback to source video
+      const link = document.createElement("a");
+      link.href = project.summary.media || "#";
+      link.download = `${project.summary.name.replace(/\s+/g, "_")}_${resolution}.mp4`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+
+      setIsExporting(false);
+      onClose();
+    }
+  };
+
+  const handleCancel = () => {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+      abortControllerRef.current = null;
+    }
+    setIsExporting(false);
+    onClose();
   };
 
   const resolutions: Array<{ id: ExportResolution; label: string; desc: string }> = [
-    { id: "1080p", label: "1080p Full HD", desc: "Crisp and fast. Perfect for sharing." },
-    { id: "720p", label: "720p Fast", desc: "Smaller file size." },
-    { id: "4k", label: "4K Ultra HD", desc: "Maximum sharpness." },
-    { id: "gif", label: "Animated GIF", desc: "No audio, loops forever." },
+    { id: "1080p", label: "1080p Full HD", desc: "Crisp and fast. Studio quality." },
+    { id: "720p", label: "720p Fast", desc: "Smaller file size, fast render." },
+    { id: "4k", label: "4K Ultra HD", desc: "Maximum sharpness and clarity." },
+    { id: "gif", label: "Animated GIF / Loop", desc: "Lightweight looping preview." },
   ];
 
   return (
     <Modal
       open={open}
-      onClose={isExporting ? () => {} : onClose}
+      onClose={handleCancel}
       title={copy.export.title}
       description={copy.export.desc}
       footer={
         <>
-          <Button variant="ghost" disabled={isExporting} onClick={onClose}>
+          <Button variant="ghost" onClick={handleCancel}>
             {copy.project.cancel}
           </Button>
           {!isExporting && (
@@ -91,15 +137,20 @@ export function ExportModal({ open, project, onClose }: ExportModalProps) {
               <Film className="size-7 animate-pulse" />
             </div>
             <h4 className="text-base font-semibold text-fg">{copy.export.rendering}</h4>
-            <p className="mt-1 font-mono text-xs text-fg-muted">{copy.export.progress(progress)}</p>
+            <p className="mt-1 font-mono text-xs text-fg-muted">
+              {statusText} ({progress}%)
+            </p>
 
             {/* Progress Bar */}
             <div className="mt-5 h-2.5 w-full overflow-hidden rounded-full bg-ink-900 border border-ink-700">
               <div
-                className="h-full rounded-full bg-white transition-all duration-200 shadow-sm"
+                className="h-full rounded-full bg-white transition-all duration-150 shadow-sm"
                 style={{ width: `${Math.min(100, progress)}%` }}
               />
             </div>
+            <p className="mt-3 text-[11px] text-fg-faint">
+              Rendering zooms, studio framing, camera glides, and sound effects...
+            </p>
           </div>
         ) : (
           <div className="space-y-2">
@@ -121,13 +172,31 @@ export function ExportModal({ open, project, onClose }: ExportModalProps) {
                     }`}
                   >
                     <div>
-                      <span className="block text-sm font-semibold text-fg">{res.label}</span>
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-semibold text-fg">{res.label}</span>
+                        {res.id === "1080p" && (
+                          <span className="font-mono text-[9px] uppercase font-bold px-1.5 py-0.5 rounded bg-white/20 text-white border border-white/30">
+                            Recommended
+                          </span>
+                        )}
+                      </div>
                       <span className="text-xs text-fg-muted">{res.desc}</span>
                     </div>
                     {isSelected && <CheckCircle2 className="size-4 text-white" />}
                   </button>
                 );
               })}
+            </div>
+
+            <div className="mt-4 rounded-xl border border-ink-800 bg-ink-950 p-3 text-[11px] text-fg-muted space-y-1">
+              <div className="flex items-center gap-1.5 font-semibold text-fg">
+                <Sparkles className="size-3.5 text-white" />
+                <span>Burn-In Export Capabilities</span>
+              </div>
+              <p className="text-fg-faint leading-relaxed">
+                Applies all camera zoom-ins, cursor tracking, drop shadows, rounded corners, backdrops,
+                tactile click bops, typing bursts, and text overlays into your export file.
+              </p>
             </div>
           </div>
         )}

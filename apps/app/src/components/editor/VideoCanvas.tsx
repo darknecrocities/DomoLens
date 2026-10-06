@@ -71,6 +71,7 @@ export function VideoCanvas({ project, currentTimeMs: propTimeMs }: VideoCanvasP
         autoTrackScale: looks.autoTrackScale || 1.6,
         cursorSmoothing: looks.cursorSmoothing || "smooth",
         clicks,
+        alreadySmoothed: true,
       },
     );
   }, [

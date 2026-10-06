@@ -300,10 +300,18 @@ export function Timeline({ project }: TimelineProps) {
           </div>
 
           {/* TRACK 2: ZOOM BLOCKS HEADER */}
-          <div className="h-9 flex items-center gap-1.5 px-2 rounded-lg bg-ink-900/60 text-[10px] font-semibold uppercase tracking-wider text-fg-muted">
-            <Sparkles className="size-3 text-neutral-300 shrink-0" />
-            <span className="truncate">{copy.editor.autoZoomTrack}</span>
-          </div>
+          <button
+            type="button"
+            onClick={() => plotInteractions({ holdDurationMs: 2400, scale: 1.85 })}
+            className="h-9 flex items-center justify-between px-2 rounded-lg bg-ink-900/60 text-[10px] font-semibold uppercase tracking-wider text-fg-muted hover:text-white hover:bg-ink-800 transition-colors text-left group"
+            title="Auto-plot 2-3s camera zooms on all clicks and typing (applies immediately)"
+          >
+            <div className="flex items-center gap-1.5 min-w-0">
+              <Sparkles className="size-3 text-neutral-300 group-hover:text-white shrink-0" />
+              <span className="truncate">{copy.editor.autoZoomTrack}</span>
+            </div>
+            <Plus className="size-3 text-neutral-400 group-hover:text-white shrink-0 opacity-0 group-hover:opacity-100 transition-opacity" />
+          </button>
 
           {/* TRACK: VIDEO EFFECTS HEADER */}
           {project.effects && project.effects.length > 0 && (
@@ -441,6 +449,7 @@ export function Timeline({ project }: TimelineProps) {
                   onClick={(e) => {
                     e.stopPropagation();
                     selectBlock(block.id);
+                    setCurrentTime(Math.round((block.startTimeMs + block.endTimeMs) / 2));
                   }}
                   onPointerDown={(e) => {
                     if ((e.target as HTMLElement).closest(".group\\/handle")) return;

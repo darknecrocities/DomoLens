@@ -72,6 +72,7 @@ export function ToolsSidebar() {
   const selectKeyframe = useEditor((s) => s.selectKeyframe);
   const selectEffect = useEditor((s) => s.selectEffect);
   const selectText = useEditor((s) => s.selectText);
+  const setExportModalOpen = useEditor((s) => s.setExportModalOpen);
 
   const [holdDurationSec, setHoldDurationSec] = useState(1.0);
   const [zoomScale, setZoomScale] = useState(1.85);
@@ -1391,6 +1392,15 @@ export function ToolsSidebar() {
                   <span className="font-semibold text-fg">Desktop & Mobile</span>
                 </div>
               </div>
+
+              <button
+                type="button"
+                onClick={() => setExportModalOpen(true)}
+                className="w-full rounded-xl bg-white py-2.5 text-center text-xs font-bold text-black hover:bg-neutral-200 transition-colors shadow-sm flex items-center justify-center gap-2 mt-3"
+              >
+                <Download className="size-4" />
+                Render & Export Video
+              </button>
             </div>
           </div>
         )}

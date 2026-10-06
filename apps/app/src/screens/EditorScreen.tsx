@@ -41,8 +41,9 @@ export function EditorScreen({ id }: EditorScreenProps) {
   const addEffectAtCurrentTime = useEditor((s) => s.addEffectAtCurrentTime);
   const undo = useEditor((s) => s.undo);
   const redo = useEditor((s) => s.redo);
+  const isExportModalOpen = useEditor((s) => s.isExportModalOpen);
+  const setExportModalOpen = useEditor((s) => s.setExportModalOpen);
 
-  const [exportOpen, setExportOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   // Mobile responsive view selector (<md)
   const [mobileTab, setMobileTab] = useState<"canvas" | "ai" | "tools">("canvas");
@@ -204,7 +205,7 @@ export function EditorScreen({ id }: EditorScreenProps) {
             variant="primary"
             size="sm"
             icon={<Download className="size-4 text-ink-950" />}
-            onClick={() => setExportOpen(true)}
+            onClick={() => setExportModalOpen(true)}
             className="px-2.5 sm:px-3.5"
           >
             <span className="hidden sm:inline">{copy.editor.exportBtn}</span>
@@ -303,9 +304,9 @@ export function EditorScreen({ id }: EditorScreenProps) {
 
       {/* Modals */}
       <ExportModal
-        open={exportOpen}
+        open={isExportModalOpen}
         project={project}
-        onClose={() => setExportOpen(false)}
+        onClose={() => setExportModalOpen(false)}
       />
       <SettingsModal
         open={settingsOpen}

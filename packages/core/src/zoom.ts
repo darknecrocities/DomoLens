@@ -311,7 +311,7 @@ export interface CameraStateWithCursor extends CameraState {
 }
 
 /**
- * Interpolates cursor coordinates at any given playback timestamp.
+ * Interpolates cursor coordinates at any given playback timestamp with O(log N) binary search.
  */
 export function interpolateCursorAtTime(
   timeMs: number,
@@ -330,10 +330,17 @@ export function interpolateCursorAtTime(
     return { x: last.x, y: last.y };
   }
 
-  for (let i = 0; i < trajectory.length - 1; i++) {
-    const p1 = trajectory[i]!;
-    const p2 = trajectory[i + 1]!;
-    if (timeMs >= p1.timestampMs && timeMs <= p2.timestampMs) {
+  let low = 0;
+  let high = trajectory.length - 2;
+  while (low <= high) {
+    const mid = (low + high) >> 1;
+    const p1 = trajectory[mid]!;
+    const p2 = trajectory[mid + 1]!;
+    if (timeMs < p1.timestampMs) {
+      high = mid - 1;
+    } else if (timeMs > p2.timestampMs) {
+      low = mid + 1;
+    } else {
       const span = p2.timestampMs - p1.timestampMs;
       const alpha = span > 0 ? (timeMs - p1.timestampMs) / span : 0;
       return {
@@ -355,6 +362,8 @@ export interface CameraOptions {
   cursorSmoothing?: "none" | "smooth" | "cinematic";
   /** Optional click events used to anchor cursor smoothing precisely to targets. */
   clicks?: import("./project").ClickEvent[];
+  /** Flag indicating trajectory was pre-smoothed by caller, skipping redundant smoothing per frame. */
+  alreadySmoothed?: boolean;
 }
 
 /**
@@ -377,13 +386,25 @@ export function smoothCursorTrajectory(
     { ...points[0]! },
   ];
 
+  const sortedClicks = clicks && clicks.length > 0 ? [...clicks].sort((a, b) => a.timestampMs - b.timestampMs) : null;
+  let clickIdx = 0;
+
   for (let i = 1; i < points.length; i++) {
     const pt = points[i]!;
     const prev = smoothed[i - 1]!;
 
-    const nearClick = clicks?.find(
-      (c) => Math.abs(c.timestampMs - pt.timestampMs) <= clickToleranceMs,
-    );
+    let nearClick: import("./project").ClickEvent | undefined;
+    if (sortedClicks) {
+      while (clickIdx < sortedClicks.length && sortedClicks[clickIdx]!.timestampMs < pt.timestampMs - clickToleranceMs) {
+        clickIdx++;
+      }
+      if (
+        clickIdx < sortedClicks.length &&
+        Math.abs(sortedClicks[clickIdx]!.timestampMs - pt.timestampMs) <= clickToleranceMs
+      ) {
+        nearClick = sortedClicks[clickIdx];
+      }
+    }
 
     if (nearClick) {
       const blend = 0.85;
@@ -425,7 +446,7 @@ export function calculateCameraAtTime(
 ): CameraStateWithCursor {
   const isAutoTrack = options?.autoTrackCursor !== false;
   const effectiveTrajectory =
-    options?.cursorSmoothing && options.cursorSmoothing !== "none" && cursorTrajectory
+    options?.cursorSmoothing && options.cursorSmoothing !== "none" && cursorTrajectory && !options.alreadySmoothed
       ? smoothCursorTrajectory(cursorTrajectory, options.cursorSmoothing, options.clicks)
       : cursorTrajectory;
   const defaultCursor = interpolateCursorAtTime(timeMs, effectiveTrajectory, 0.5, 0.5);
@@ -1121,6 +1142,106 @@ export function plotInteractionsToKeyframesAndZoomBlocks(
     .sort((a, b) => a.timeMs - b.timeMs);
 
   return { keyframes: uniqueKeyframes, zoomBlocks };
+}
+
+/**
+ * Converts and synchronizes an array of ZoomBlocks into continuous, monotonic KeyframeNodes.
+ * Ensures the camera smoothly scales in before each zoom, holds steady across interactions,
+ * and glides or returns to full frame.
+ */
+export function zoomBlocksToKeyframes(
+  zoomBlocks: ZoomBlock[],
+  videoDurationMs: number,
+  options?: {
+    leadInMs?: number;
+    leadOutMs?: number;
+  },
+): import("./project").KeyframeNode[] {
+  const active = (zoomBlocks || [])
+    .filter((b) => b.enabled)
+    .sort((a, b) => a.startTimeMs - b.startTimeMs);
+
+  if (active.length === 0 || videoDurationMs <= 0) return [];
+
+  const keyframes: import("./project").KeyframeNode[] = [];
+  const leadIn = options?.leadInMs ?? 450;
+  const leadOut = options?.leadOutMs ?? 350;
+  const maxGlideGapMs = 3800;
+
+  for (let i = 0; i < active.length; i++) {
+    const b = active[i]!;
+    const prev = active[i - 1];
+    const next = active[i + 1];
+
+    const rawStart = Math.max(0, b.startTimeMs - leadIn);
+    const glidedFromPrev = Boolean(
+      prev &&
+        b.startTimeMs - prev.endTimeMs <= maxGlideGapMs &&
+        b.startTimeMs > prev.endTimeMs,
+    );
+
+    const startMs = glidedFromPrev ? prev!.endTimeMs : rawStart;
+    const holdStartMs = b.startTimeMs;
+    const holdEndMs = Math.min(videoDurationMs, b.endTimeMs);
+    const endMs = Math.min(videoDurationMs, holdEndMs + leadOut);
+
+    // Lead-in keyframe: start zooming from 1.0x (unless previous block glided into this one)
+    if (!glidedFromPrev) {
+      keyframes.push({
+        id: `kf-start-${b.id}`,
+        timeMs: startMs,
+        scale: 1.0,
+        targetX: 0.5,
+        targetY: 0.5,
+        easing: "cubic",
+      });
+    }
+
+    // Peak zoom target
+    keyframes.push({
+      id: `kf-peak-${b.id}`,
+      timeMs: holdStartMs,
+      scale: b.scale,
+      targetX: b.targetX,
+      targetY: b.targetY,
+      easing: "spring",
+    });
+
+    // Hold end
+    if (holdEndMs > holdStartMs + 100) {
+      keyframes.push({
+        id: `kf-hold-${b.id}`,
+        timeMs: holdEndMs,
+        scale: b.scale,
+        targetX: b.targetX,
+        targetY: b.targetY,
+        easing: "cubic",
+      });
+    }
+
+    const canGlideToNext = Boolean(
+      next &&
+        next.startTimeMs - holdEndMs <= maxGlideGapMs &&
+        next.startTimeMs > holdEndMs,
+    );
+
+    // If not gliding to next block, return to 1.0x full frame
+    if (!canGlideToNext) {
+      keyframes.push({
+        id: `kf-out-${b.id}`,
+        timeMs: endMs,
+        scale: 1.0,
+        targetX: 0.5,
+        targetY: 0.5,
+        easing: "cubic",
+      });
+    }
+  }
+
+  // Deduplicate by id and sort chronologically
+  return keyframes
+    .filter((kf, index, arr) => arr.findIndex((k) => k.id === kf.id) === index)
+    .sort((a, b) => a.timeMs - b.timeMs);
 }
 
 

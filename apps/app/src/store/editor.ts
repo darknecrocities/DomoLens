@@ -6,6 +6,7 @@ import {
   detectActivityEventsFromFrames,
   insertKeyframe,
   insertVideoEffect,
+  interpolateCursorAtTime,
   plotInteractionsToKeyframesAndZoomBlocks,
   removeClipAndRipple,
   removeKeyframe,
@@ -13,6 +14,7 @@ import {
   splitClip,
   splitZoomBlock,
   updateVideoEffect,
+  zoomBlocksToKeyframes,
   type AudioTrack,
   type ClickEvent,
   type ClickSoundPreset,
@@ -91,6 +93,8 @@ interface EditorState {
   toggleLeftSidebar: () => void;
   toggleRightSidebar: () => void;
   setTimelineZoom: (zoom: number) => void;
+  isExportModalOpen: boolean;
+  setExportModalOpen: (open: boolean) => void;
 
   selectBlock: (id: string | null) => void;
   selectClip: (id: string | null) => void;
@@ -211,6 +215,7 @@ export const useEditor = create<EditorState>((set, get) => ({
   activeTab: "timeline",
   activeToolTab: "zoom",
   timelineZoom: 1,
+  isExportModalOpen: false,
 
   isLeftSidebarOpen: true,
   isRightSidebarOpen: true,
@@ -376,6 +381,7 @@ export const useEditor = create<EditorState>((set, get) => ({
   toggleLeftSidebar: () => set((s) => ({ isLeftSidebarOpen: !s.isLeftSidebarOpen })),
   toggleRightSidebar: () => set((s) => ({ isRightSidebarOpen: !s.isRightSidebarOpen })),
   setTimelineZoom: (zoom) => set({ timelineZoom: Math.max(0.5, Math.min(5, zoom)) }),
+  setExportModalOpen: (open) => set({ isExportModalOpen: open }),
 
   selectBlock: (id) =>
     set({
@@ -494,6 +500,22 @@ export const useEditor = create<EditorState>((set, get) => ({
       }
     }
 
+    // Ensure the current moment has a zoom applied immediately if playhead is active
+    const currentMs = state.currentTimeMs;
+    const hasEventNearCurrent = eventsToUse.some((e) => Math.abs(e.timestampMs - currentMs) <= 800);
+    if (currentMs > 200 && currentMs < state.durationMs - 350 && !hasEventNearCurrent) {
+      const cur = interpolateCursorAtTime(currentMs, state.project.cursorTrajectory, 0.5, 0.5);
+      eventsToUse.push({
+        id: `act-now-${Date.now()}`,
+        type: "click",
+        timestampMs: currentMs,
+        x: cur.x,
+        y: cur.y,
+        button: "left",
+      });
+      eventsToUse.sort((a, b) => a.timestampMs - b.timestampMs);
+    }
+
     const { keyframes, zoomBlocks } = plotInteractionsToKeyframesAndZoomBlocks(
       eventsToUse,
       state.durationMs,
@@ -508,6 +530,9 @@ export const useEditor = create<EditorState>((set, get) => ({
       },
     );
 
+    const activeAtCurrent = zoomBlocks.find((b) => currentMs >= b.startTimeMs && currentMs <= b.endTimeMs);
+    const selectedBlockId = activeAtCurrent ? activeAtCurrent.id : (zoomBlocks[0]?.id ?? null);
+
     set({
       ...pushHistory(state),
       project: {
@@ -519,12 +544,13 @@ export const useEditor = create<EditorState>((set, get) => ({
         keyframes,
         zoomBlocks,
       },
-      selectedBlockId: zoomBlocks[0]?.id ?? null,
+      selectedBlockId,
     });
+    sfx.playClickBop(state.project.audioSettings?.clickSoundPreset || "bop", 0.7);
     toast.success(
       isFallback
-        ? `Auto-generated ${zoomBlocks.length} zooms and ${keyframes.length} keyframes across timeline!`
-        : `Plotted ${zoomBlocks.length} zooms and ${keyframes.length} keyframes!`,
+        ? `Auto-generated ${zoomBlocks.length} zooms applied across timeline!`
+        : `Plotted ${zoomBlocks.length} zooms and applied to current moment!`,
     );
   },
 
@@ -768,11 +794,14 @@ export const useEditor = create<EditorState>((set, get) => ({
   updateZoomBlock: (id, updates) => {
     const state = get();
     if (!state.project) return;
+    const updatedBlocks = state.project.zoomBlocks.map((b) => (b.id === id ? { ...b, ...updates } : b));
+    const updatedKeyframes = zoomBlocksToKeyframes(updatedBlocks, state.durationMs);
     set({
       ...pushHistory(state),
       project: {
         ...state.project,
-        zoomBlocks: state.project.zoomBlocks.map((b) => (b.id === id ? { ...b, ...updates } : b)),
+        zoomBlocks: updatedBlocks,
+        keyframes: updatedKeyframes,
       },
     });
   },
@@ -780,11 +809,14 @@ export const useEditor = create<EditorState>((set, get) => ({
   toggleZoomBlock: (id) => {
     const state = get();
     if (!state.project) return;
+    const updatedBlocks = state.project.zoomBlocks.map((b) => (b.id === id ? { ...b, enabled: !b.enabled } : b));
+    const updatedKeyframes = zoomBlocksToKeyframes(updatedBlocks, state.durationMs);
     set({
       ...pushHistory(state),
       project: {
         ...state.project,
-        zoomBlocks: state.project.zoomBlocks.map((b) => (b.id === id ? { ...b, enabled: !b.enabled } : b)),
+        zoomBlocks: updatedBlocks,
+        keyframes: updatedKeyframes,
       },
     });
   },
@@ -792,11 +824,14 @@ export const useEditor = create<EditorState>((set, get) => ({
   deleteZoomBlock: (id) => {
     const state = get();
     if (!state.project) return;
+    const updatedBlocks = state.project.zoomBlocks.filter((b) => b.id !== id);
+    const updatedKeyframes = zoomBlocksToKeyframes(updatedBlocks, state.durationMs);
     set({
       ...pushHistory(state),
       project: {
         ...state.project,
-        zoomBlocks: state.project.zoomBlocks.filter((b) => b.id !== id),
+        zoomBlocks: updatedBlocks,
+        keyframes: updatedKeyframes,
       },
       selectedBlockId: null,
     });
@@ -811,8 +846,10 @@ export const useEditor = create<EditorState>((set, get) => ({
       project: {
         ...state.project,
         zoomBlocks: [],
+        keyframes: [],
       },
       selectedBlockId: null,
+      selectedKeyframeId: null,
     });
     toast.info("Cleared all zoom blocks.");
   },
@@ -821,43 +858,64 @@ export const useEditor = create<EditorState>((set, get) => ({
     const state = get();
     if (!state.project) return;
     const time = state.currentTimeMs;
+    const cur = interpolateCursorAtTime(time, state.project.cursorTrajectory, 0.5, 0.5);
+    const clamped = clampCameraToBounds(cur.x, cur.y, 1.85);
+
+    const leadInMs = 400;
+    const holdDurationMs = 2200;
+    const startMs = Math.max(0, time - leadInMs);
+    const endMs = Math.min(state.durationMs, time + holdDurationMs);
+
     const newBlock: ZoomBlock = {
       id: `zoom-${Date.now()}`,
-      startTimeMs: time,
-      endTimeMs: Math.min(state.durationMs, time + 2500),
-      targetX: 0.5,
-      targetY: 0.5,
-      scale: 1.8,
+      startTimeMs: startMs,
+      endTimeMs: endMs,
+      targetX: clamped.x,
+      targetY: clamped.y,
+      scale: 1.85,
       enabled: true,
     };
+
+    const updatedBlocks = [...state.project.zoomBlocks, newBlock].sort((a, b) => a.startTimeMs - b.startTimeMs);
+    const updatedKeyframes = zoomBlocksToKeyframes(updatedBlocks, state.durationMs);
+
     set({
       ...pushHistory(state),
       project: {
         ...state.project,
-        zoomBlocks: [...state.project.zoomBlocks, newBlock].sort((a, b) => a.startTimeMs - b.startTimeMs),
+        zoomBlocks: updatedBlocks,
+        keyframes: updatedKeyframes,
       },
       selectedBlockId: newBlock.id,
     });
-    toast.success("Zoom block added.");
+    sfx.playClickBop(state.project.audioSettings?.clickSoundPreset || "bop", 0.7);
+    toast.success("Zoom applied at current playhead.");
   },
 
   addKeyframeAtCurrentTime: (
-    scale = 1.8,
-    targetX = 0.5,
-    targetY = 0.5,
+    scale = 1.85,
+    targetX,
+    targetY,
     effect?: VideoEffectType,
     effectIntensity?: number,
   ) => {
     const state = get();
     if (!state.project) return;
     const time = state.currentTimeMs;
+    const cur = interpolateCursorAtTime(time, state.project.cursorTrajectory, 0.5, 0.5);
+    const finalX = targetX !== undefined ? targetX : cur.x;
+    const finalY = targetY !== undefined ? targetY : cur.y;
+    const clamped = clampCameraToBounds(finalX, finalY, scale);
     const newKf: KeyframeNode = {
       id: `kf-${Date.now()}`,
       timeMs: time,
       scale,
-      targetX,
-      targetY,
+      targetX: clamped.x,
+      targetY: clamped.y,
       easing: "cubic",
+      sound: "click",
+      soundPreset: "bop",
+      soundVolume: 0.7,
       ...(effect ? { effect, effectIntensity: effectIntensity ?? 0.8 } : {}),
     };
     const updated = insertKeyframe(state.project.keyframes || [], newKf);

@@ -125,6 +125,8 @@ export interface ProjectLooks {
   autoTrackCursor?: boolean;
   /** Camera zoom scale when auto-tracking cursor (1.2 to 2.5). */
   autoTrackScale?: number;
+  /** Aspect ratio of the canvas (default "16:9"). */
+  aspectRatio?: "16:9" | "9:16" | "1:1" | "4:3";
 }
 
 /** Video effect types that can be placed on the timeline or attached to keyframes. */
@@ -260,5 +262,6 @@ export const DEFAULT_LOOKS: ProjectLooks = {
   cursorSmoothing: "smooth",
   autoTrackCursor: true,
   autoTrackScale: 1.6,
+  aspectRatio: "16:9",
 };
 
