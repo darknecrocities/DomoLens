@@ -91,8 +91,10 @@ export function createLiveStreamMotionTracker(
         const centroid = calculateOpticalCentroid(diff.diffMap, width, height);
         const now = Date.now();
 
-        // Report moving cursor / activity point
-        if (callbacks.onPoint) {
+        // Report moving cursor / activity point only for localized motion.
+        // Page-wide changes (scrolling, animated backgrounds, tab switches) produce a
+        // centroid that has no relation to where the user is pointing.
+        if (callbacks.onPoint && centroid.spread <= maxSpread) {
           callbacks.onPoint({
             x: centroid.x,
             y: centroid.y,

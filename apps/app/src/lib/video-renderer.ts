@@ -1,6 +1,7 @@
 import {
   calculateActiveEffectsState,
   calculateCameraAtTime,
+  clampCameraToBounds,
   smoothCursorTrajectory,
   type ProjectData,
 } from "@domolens/core";
@@ -289,7 +290,7 @@ export async function renderProjectVideo(options: RenderOptions): Promise<Render
       }
 
       // 3. Compute camera state at timestamp tMs
-      const camera = calculateCameraAtTime(
+      const rawCamera = calculateCameraAtTime(
         tMs,
         project.zoomBlocks,
         500,
@@ -304,6 +305,8 @@ export async function renderProjectVideo(options: RenderOptions): Promise<Render
           alreadySmoothed: true,
         },
       );
+      const filledCam = clampCameraToBounds(rawCamera.x, rawCamera.y, rawCamera.scale, "strict");
+      const camera = { ...rawCamera, x: filledCam.x, y: filledCam.y };
 
       // Compute active visual effects at timestamp tMs
       const effectsState = calculateActiveEffectsState(

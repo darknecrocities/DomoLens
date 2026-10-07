@@ -3,6 +3,7 @@ import { Film, FolderOpen, Sparkles, Video, Wand2 } from "lucide-react";
 import {
   calculateActiveEffectsState,
   calculateCameraAtTime,
+  clampCameraToBounds,
   screenToVideoCoordinates,
   smoothCursorTrajectory,
   type ProjectData,
@@ -61,7 +62,7 @@ export function VideoCanvas({ project, currentTimeMs: propTimeMs }: VideoCanvasP
 
   // Calculate live camera frame with real-time mouse cursor auto-tracking and keyframes
   const camera = useMemo(() => {
-    return calculateCameraAtTime(
+    const raw = calculateCameraAtTime(
       currentTimeMs,
       zoomBlocks,
       1000,
@@ -76,6 +77,9 @@ export function VideoCanvas({ project, currentTimeMs: propTimeMs }: VideoCanvasP
         alreadySmoothed: true,
       },
     );
+    // Frame-fill clamp: never translate past the video edge (prevents black void)
+    const filled = clampCameraToBounds(raw.x, raw.y, raw.scale, "strict");
+    return { ...raw, x: filled.x, y: filled.y };
   }, [
     currentTimeMs,
     zoomBlocks,

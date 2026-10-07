@@ -557,15 +557,40 @@ export const useRecorder = create<RecorderStore>((set, get) => ({
       }
     });
 
+    // Map DOM pointer coordinates into the captured surface's normalized space.
+    // - monitor: use screen-relative coordinates (screenX / screen.width)
+    // - browser tab (this tab): use viewport-relative coordinates
+    // - window / other: DOM events do not correspond to the captured pixels, so ignore
+    const captureSurface = (() => {
+      try {
+        const settings = activeStream?.getVideoTracks()[0]?.getSettings() as
+          | (MediaTrackSettings & { displaySurface?: string })
+          | undefined;
+        return settings?.displaySurface ?? "monitor";
+      } catch {
+        return "monitor";
+      }
+    })();
+    const mapPointer = (clientX: number, clientY: number, screenX: number, screenY: number) => {
+      if (captureSurface === "monitor") {
+        const sw = window.screen.width || window.innerWidth;
+        const sh = window.screen.height || window.innerHeight;
+        return { x: Math.min(1, Math.max(0, screenX / sw)), y: Math.min(1, Math.max(0, screenY / sh)) };
+      }
+      if (captureSurface === "browser" && document.visibilityState === "visible") {
+        return { x: clientX / window.innerWidth, y: clientY / window.innerHeight };
+      }
+      return null;
+    };
+
     const handlePointerMove = (e: MouseEvent | TouchEvent) => {
       if (get().state !== "recording") return;
-      if ("clientX" in e) {
-        lastX = e.clientX / window.innerWidth;
-        lastY = e.clientY / window.innerHeight;
-      } else if (e.touches[0]) {
-        lastX = e.touches[0].clientX / window.innerWidth;
-        lastY = e.touches[0].clientY / window.innerHeight;
-      }
+      const src = "clientX" in e ? e : e.touches[0];
+      if (!src) return;
+      const mapped = mapPointer(src.clientX, src.clientY, src.screenX, src.screenY);
+      if (!mapped) return;
+      lastX = mapped.x;
+      lastY = mapped.y;
       const now = Date.now();
       if (now - lastCursorSampleTime >= 25) {
         lastCursorSampleTime = now;
@@ -581,8 +606,9 @@ export const useRecorder = create<RecorderStore>((set, get) => ({
         return;
       }
 
-      const x = e.clientX / window.innerWidth;
-      const y = e.clientY / window.innerHeight;
+      const mapped = mapPointer(e.clientX, e.clientY, e.screenX, e.screenY);
+      if (!mapped) return;
+      const { x, y } = mapped;
       lastX = x;
       lastY = y;
       const nowRel = Math.max(0, Date.now() - recordingStartTimestamp);
@@ -592,8 +618,9 @@ export const useRecorder = create<RecorderStore>((set, get) => ({
 
     const handleMouseUp = (e: MouseEvent) => {
       if (get().state !== "recording") return;
-      const x = e.clientX / window.innerWidth;
-      const y = e.clientY / window.innerHeight;
+      const mapped = mapPointer(e.clientX, e.clientY, e.screenX, e.screenY);
+      if (!mapped) return;
+      const { x, y } = mapped;
       lastX = x;
       lastY = y;
       if (inAppDragStart) {
