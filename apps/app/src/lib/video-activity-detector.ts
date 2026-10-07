@@ -62,6 +62,14 @@ export function createLiveStreamMotionTracker(
   let prevLuma: Uint8ClampedArray | null = null;
   let isRunning = true;
   let lastInteractionTime = 0;
+  let activeTypingBurst: {
+    id: string;
+    startTime: number;
+    lastTime: number;
+    x: number;
+    y: number;
+    count: number;
+  } | null = null;
 
   const startTracking = () => {
     if (!isRunning || timer) return;
@@ -97,18 +105,52 @@ export function createLiveStreamMotionTracker(
 
           const kind = classifyFrameActivity(diff.motionEnergy, centroid.spread, minEnergy, maxSpread);
 
-          if (callbacks.onInteraction && now - lastInteractionTime >= 3000) {
-            const isClick = kind === "click" && diff.motionEnergy >= minEnergy * 2.5 && centroid.spread <= 0.18;
-            if (isClick) {
-              lastInteractionTime = now;
-              callbacks.onInteraction({
-                id: `opt-act-${now}`,
-                type: "click",
-                timestampMs: now,
-                x: centroid.x,
-                y: centroid.y,
-                button: "left",
-              });
+          if (callbacks.onInteraction) {
+            const isLocalized = centroid.spread <= maxSpread * 1.25;
+
+            if (isLocalized) {
+              if (
+                activeTypingBurst &&
+                now - activeTypingBurst.lastTime <= 1500 &&
+                Math.hypot(centroid.x - activeTypingBurst.x, centroid.y - activeTypingBurst.y) <= 0.12
+              ) {
+                activeTypingBurst.lastTime = now;
+                activeTypingBurst.count++;
+                callbacks.onInteraction({
+                  id: activeTypingBurst.id,
+                  type: "typing",
+                  timestampMs: activeTypingBurst.startTime,
+                  x: activeTypingBurst.x,
+                  y: activeTypingBurst.y,
+                  snippet: "Text Input",
+                  durationMs: activeTypingBurst.lastTime - activeTypingBurst.startTime,
+                });
+              } else {
+                if (now - lastInteractionTime >= 700) {
+                  lastInteractionTime = now;
+                  const newBurstId = `opt-type-${now}`;
+                  activeTypingBurst = {
+                    id: newBurstId,
+                    startTime: now,
+                    lastTime: now,
+                    x: centroid.x,
+                    y: centroid.y,
+                    count: 1,
+                  };
+                  if (kind === "click" && diff.motionEnergy >= minEnergy * 1.8) {
+                    callbacks.onInteraction({
+                      id: `opt-act-${now}`,
+                      type: "click",
+                      timestampMs: now,
+                      x: centroid.x,
+                      y: centroid.y,
+                      button: "left",
+                    });
+                  }
+                }
+              }
+            } else {
+              activeTypingBurst = null;
             }
           }
         }

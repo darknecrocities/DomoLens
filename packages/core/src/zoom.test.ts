@@ -16,7 +16,7 @@ import {
   zoomBlocksToKeyframes,
   generateTourShiftSequence,
 } from "./zoom";
-import type { ClickEvent, TimelineClip } from "./project";
+import type { ClickEvent, InteractionEvent, TimelineClip } from "./project";
 import { removeClipAndRipple, splitClip, splitZoomBlock } from "./timeline";
 import { BACKGROUND_PRESETS, SHADOW_PRESETS } from "./looks";
 
@@ -708,6 +708,33 @@ describe("timeline operations", () => {
     const at3500 = interpolateCursorAtTime(3500, trajectory);
     expect(at3500.x).toBeCloseTo(0.6, 2);
     expect(at3500.y).toBeCloseTo(0.7, 2);
+  });
+  it("plotInteractionsToKeyframesAndZoomBlocks centers typing clusters on the exact text input coordinates without reveal dip", () => {
+    const typingInteractions: InteractionEvent[] = [
+      { id: "click-input", type: "click", timestampMs: 2000, x: 0.72, y: 0.18, button: "left" },
+      { id: "type-search", type: "typing", timestampMs: 2200, x: 0.75, y: 0.18, snippet: "God of War", durationMs: 1500 },
+    ];
+
+    const result = plotInteractionsToKeyframesAndZoomBlocks(typingInteractions, 10000, {
+      typingZoomOut: false,
+    });
+
+    expect(result.zoomBlocks.length).toBe(1);
+    const block = result.zoomBlocks[0]!;
+    // Must center precisely on typing location
+    expect(block.targetX).toBeCloseTo(0.75, 2);
+    expect(block.targetY).toBeCloseTo(0.18, 2);
+    expect(block.scale).toBeGreaterThanOrEqual(1.85);
+
+    // Peak keyframe must center on typing location
+    const peakKf = result.keyframes.find((k) => k.id.includes("kf-peak"));
+    expect(peakKf).toBeDefined();
+    expect(peakKf?.targetX).toBeCloseTo(0.75, 2);
+    expect(peakKf?.targetY).toBeCloseTo(0.18, 2);
+
+    // Typing must NOT have reveal dip (no zooming out mid-typing)
+    const revealKf = result.keyframes.find((k) => k.id.includes("kf-reveal"));
+    expect(revealKf).toBeUndefined();
   });
 });
 

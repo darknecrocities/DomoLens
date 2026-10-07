@@ -996,7 +996,8 @@ export function plotInteractionsToKeyframesAndZoomBlocks(
     const span = endMs - startMs;
     if (span < 800) continue;
 
-    const focalEvt = highlightEvt || firstEvt;
+    const typingEvt = cluster.find((e) => "type" in e && e.type === "typing");
+    const focalEvt = typingEvt || highlightEvt || firstEvt;
     const clampedFirst = isTypingCluster
       ? { x: 0.5, y: 0.5 }
       : clampCameraToBounds(focalEvt.x, focalEvt.y + intent.offsetY, clusterScale, "center");
@@ -1064,6 +1065,7 @@ export function plotInteractionsToKeyframesAndZoomBlocks(
       // optionally zoom out a little (showcase context reveal) only if explicitly enabled or long showcase hold
       const shouldReveal =
         clusterScale > 1.05 &&
+        !hasTyping &&
         (options.enableRevealDip === true || (options.enableRevealDip === undefined && clusterHoldMs >= 1800));
       if (shouldReveal) {
         const showcaseScale = Math.max(1.32, Math.round(clusterScale * 0.78 * 100) / 100);

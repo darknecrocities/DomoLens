@@ -424,6 +424,8 @@ pub fn run() {
                         user_info: *mut std::ffi::c_void,
                     ) -> *mut std::ffi::c_void;
                     fn CGEventGetLocation(event: *mut std::ffi::c_void) -> CGPoint;
+                    fn CGEventCreate(source: *mut std::ffi::c_void) -> *mut std::ffi::c_void;
+                    fn CFRelease(cf: *mut std::ffi::c_void);
                     fn CFMachPortCreateRunLoopSource(
                         allocator: *mut std::ffi::c_void,
                         port: *mut std::ffi::c_void,
@@ -449,15 +451,42 @@ pub fn run() {
                         return event;
                     }
                     unsafe {
-                        let loc = CGEventGetLocation(event);
-                        if let Ok(mut pos) = LAST_MOUSE_POS.lock() {
-                            *pos = (loc.x, loc.y);
-                        }
+                        let is_mouse_event = matches!(event_type, 1..=7 | 25..=27);
+                        let (loc_x, loc_y) = if is_mouse_event {
+                            let loc = CGEventGetLocation(event);
+                            if let Ok(mut pos) = LAST_MOUSE_POS.lock() {
+                                *pos = (loc.x, loc.y);
+                            }
+                            (loc.x, loc.y)
+                        } else {
+                            let mut px = 0.0;
+                            let mut py = 0.0;
+                            if let Ok(pos) = LAST_MOUSE_POS.lock() {
+                                px = pos.0;
+                                py = pos.1;
+                            }
+                            if px == 0.0 && py == 0.0 {
+                                let dummy = CGEventCreate(ptr::null_mut());
+                                if !dummy.is_null() {
+                                    let live = CGEventGetLocation(dummy);
+                                    CFRelease(dummy);
+                                    if live.x > 0.0 || live.y > 0.0 {
+                                        px = live.x;
+                                        py = live.y;
+                                        if let Ok(mut pos) = LAST_MOUSE_POS.lock() {
+                                            *pos = (px, py);
+                                        }
+                                    }
+                                }
+                            }
+                            (px, py)
+                        };
+
                         let now_ms = chrono::Utc::now().timestamp_millis();
                         let handle = &*(user_info as *const tauri::AppHandle);
                         let (screen_w, screen_h) = get_screen_size(handle);
-                        let norm_x = (loc.x / screen_w).clamp(0.0, 1.0);
-                        let norm_y = (loc.y / screen_h).clamp(0.0, 1.0);
+                        let norm_x = (loc_x / screen_w).clamp(0.0, 1.0);
+                        let norm_y = (loc_y / screen_h).clamp(0.0, 1.0);
 
                         if event_type == 1 || event_type == 3 || event_type == 25 {
                             let btn = if event_type == 3 {
@@ -470,8 +499,8 @@ pub fn run() {
                             let _ = handle.emit(
                                 "global-click",
                                 GlobalClickPayload {
-                                    x: loc.x,
-                                    y: loc.y,
+                                    x: loc_x,
+                                    y: loc_y,
                                     norm_x,
                                     norm_y,
                                     screen_width: screen_w,
@@ -491,8 +520,8 @@ pub fn run() {
                             let _ = handle.emit(
                                 "global-mouse-up",
                                 GlobalMouseUpPayload {
-                                    x: loc.x,
-                                    y: loc.y,
+                                    x: loc_x,
+                                    y: loc_y,
                                     norm_x,
                                     norm_y,
                                     button: btn.to_string(),
@@ -515,8 +544,8 @@ pub fn run() {
                                 let _ = handle.emit(
                                     "global-mouse-move",
                                     GlobalMouseMovePayload {
-                                        x: loc.x,
-                                        y: loc.y,
+                                        x: loc_x,
+                                        y: loc_y,
                                         norm_x,
                                         norm_y,
                                         timestamp_ms: now_ms,
@@ -527,8 +556,8 @@ pub fn run() {
                             let _ = handle.emit(
                                 "global-typing",
                                 GlobalTypingPayload {
-                                    x: loc.x,
-                                    y: loc.y,
+                                    x: loc_x,
+                                    y: loc_y,
                                     norm_x,
                                     norm_y,
                                     timestamp_ms: now_ms,

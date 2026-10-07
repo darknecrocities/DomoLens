@@ -519,31 +519,38 @@ export const useEditor = create<EditorState>((set, get) => ({
     if (eventsToUse.length === 0 || isOldDummy) {
       isFallback = true;
       const dur = state.durationMs || 10000;
-      const stepMs = Math.max(2800, Math.min(4500, Math.round(dur / 9)));
-      const focalPoints = [
-        { x: 0.50, y: 0.38, type: "typing" as const },
-        { x: 0.36, y: 0.44, type: "click" as const },
-        { x: 0.58, y: 0.46, type: "click" as const },
-        { x: 0.42, y: 0.54, type: "typing" as const },
-        { x: 0.62, y: 0.40, type: "click" as const },
-        { x: 0.38, y: 0.62, type: "click" as const },
-        { x: 0.52, y: 0.42, type: "typing" as const },
-      ];
+      const trajectory = state.project.cursorTrajectory;
       const autoEvents: InteractionEvent[] = [];
-      let fpIdx = 0;
-      for (let t = 2000; t < dur - 1200; t += stepMs) {
-        const fp = focalPoints[fpIdx % focalPoints.length]!;
-        fpIdx++;
-        autoEvents.push({
-          id: `act-auto-${t}`,
-          type: fp.type,
-          timestampMs: t,
-          x: fp.x,
-          y: fp.y,
-          button: "left",
-          ...(fp.type === "typing" ? { snippet: "Input", durationMs: 1200 } : {}),
-        });
+
+      if (trajectory && trajectory.length >= 2) {
+        // Center auto-zooms strictly on the user's real cursor trajectory and activity locations
+        const stepMs = Math.max(2200, Math.min(4200, Math.round(dur / 7)));
+        for (let t = 1200; t < dur - 1000; t += stepMs) {
+          const pt = interpolateCursorAtTime(t, trajectory, 0.5, 0.5);
+          autoEvents.push({
+            id: `act-auto-traj-${t}`,
+            type: "click",
+            timestampMs: t,
+            x: pt.x,
+            y: pt.y,
+            button: "left",
+          });
+        }
+      } else {
+        // If no trajectory is available, place balanced zooms at center
+        const stepMs = Math.max(2800, Math.min(4500, Math.round(dur / 5)));
+        for (let t = 2000; t < dur - 1200; t += stepMs) {
+          autoEvents.push({
+            id: `act-auto-${t}`,
+            type: "click",
+            timestampMs: t,
+            x: 0.50,
+            y: 0.50,
+            button: "left",
+          });
+        }
       }
+
       if (autoEvents.length > 0) {
         eventsToUse = autoEvents;
       }

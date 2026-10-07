@@ -2,6 +2,7 @@ import { create } from "zustand";
 import {
   DEFAULT_AUDIO_SETTINGS,
   DEFAULT_LOOKS,
+  interpolateCursorAtTime,
   plotInteractionsToKeyframesAndZoomBlocks,
   type ClickEvent,
   type InteractionEvent,
@@ -514,6 +515,16 @@ export const useRecorder = create<RecorderStore>((set, get) => ({
             lastX = pt.x;
             lastY = pt.y;
           },
+          onInteraction: (act) => {
+            if (get().state !== "recording") return;
+            lastX = act.x;
+            lastY = act.y;
+            if (act.type === "typing") {
+              get().recordTyping(act.x, act.y, act.snippet, act.id);
+            } else {
+              get().recordClick(act.x, act.y, (act.button as "left" | "right" | "middle") || "left");
+            }
+          },
         });
       } catch (err) {
         console.warn("Motion tracker start error:", err);
@@ -782,16 +793,39 @@ export const useRecorder = create<RecorderStore>((set, get) => ({
       }
     }
 
-    // Plot zooms ONLY if interactions actually occurred. Otherwise keep empty by default!
+    // Synthesize focal interactions from trajectory if no discrete clicks were logged
+    let interactionsForPlotting = finalInteractions;
+    if (interactionsForPlotting.length === 0 && finalTrajectory.length >= 8) {
+      const stepMs = Math.max(2200, Math.min(4200, Math.round(duration / 6)));
+      const synth: InteractionEvent[] = [];
+      for (let t = 1000; t < duration - 800; t += stepMs) {
+        const pt = interpolateCursorAtTime(t, finalTrajectory, 0.5, 0.5);
+        if (Math.abs(pt.x - 0.5) > 0.03 || Math.abs(pt.y - 0.5) > 0.03) {
+          synth.push({
+            id: `act-auto-traj-${t}`,
+            type: "click",
+            timestampMs: t,
+            x: pt.x,
+            y: pt.y,
+            button: "left",
+          });
+        }
+      }
+      if (synth.length > 0) {
+        interactionsForPlotting = synth;
+      }
+    }
+
+    // Plot zooms using real interactions or trajectory focal points
     const { keyframes, zoomBlocks } =
-      finalInteractions.length > 0
+      interactionsForPlotting.length > 0
         ? plotInteractionsToKeyframesAndZoomBlocks(
-            finalInteractions,
+            interactionsForPlotting,
             duration,
             {
               holdDurationMs: 1200,
               leadInMs: 1000,
-              scale: 1.80,
+              scale: 1.85,
               fallbackIfEmpty: false,
               continuousGlide: false,
               autoFillGaps: false,
@@ -799,7 +833,7 @@ export const useRecorder = create<RecorderStore>((set, get) => ({
               minRestMs: 800,
               enableRevealDip: false,
               cursorTrajectory: finalTrajectory,
-              typingZoomOut: true,
+              typingZoomOut: false,
             },
           )
         : { keyframes: [], zoomBlocks: [] };
