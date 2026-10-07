@@ -44,12 +44,12 @@ export function clampCameraToBounds(
   targetX: number,
   targetY: number,
   scale: number,
-  mode: "strict" | "center" = "strict",
+  mode: "strict" | "center" = "center",
 ): { x: number; y: number } {
   if (scale <= 1) return { x: 0.5, y: 0.5 };
   if (mode === "center") {
-    const clampedX = Math.min(Math.max(targetX, 0.02), 0.98);
-    const clampedY = Math.min(Math.max(targetY, 0.02), 0.98);
+    const clampedX = Math.min(Math.max(targetX, 0.0), 1.0);
+    const clampedY = Math.min(Math.max(targetY, 0.0), 1.0);
     return { x: clampedX, y: clampedY };
   }
   const halfW = 0.5 / scale;
@@ -315,7 +315,7 @@ export function detectZoomBlocksFromClicks(
     }
 
     if (actualStart + options.minDurationMs <= videoDurationMs && rawEnd > actualStart) {
-      const clamped = clampCameraToBounds(cluster.centerX, cluster.centerY, options.defaultScale);
+      const clamped = clampCameraToBounds(cluster.centerX, cluster.centerY, options.defaultScale, "center");
 
       blocks.push({
         id,
@@ -540,46 +540,42 @@ export function calculateCameraAtTime(
         let finalX = baseTargetX;
         let finalY = baseTargetY;
 
-        // When zoomed in or transitioning, maintain rock-solid anchor on keyframe targets
-        // Only subtly reframe if cursor travels outside wide safe deadband (highlights or wide drags)
-        if (scale > 1.05 && effectiveTrajectory && effectiveTrajectory.length > 0) {
-          const tracked = calculateDeadzoneCamera(
-            { x: baseTargetX, y: baseTargetY },
-            cursor,
-            scale,
-            isAutoTrack ? 0.35 : 0.65,
-            "center",
-          );
-
-          if (k1.scale <= 1.05) {
-            // Zooming in from full frame: smoothly glide from 0.5 center to target position
-            finalX = 0.5 + (baseTargetX - 0.5) * progress;
-            finalY = 0.5 + (baseTargetY - 0.5) * progress;
-          } else if (k2.scale <= 1.05) {
-            // Zooming out to full frame: smoothly glide from target position back to 0.5 center
-            finalX = baseTargetX + (0.5 - baseTargetX) * progress;
-            finalY = baseTargetY + (0.5 - baseTargetY) * progress;
+        if (k1.scale <= 1.05 && k2.scale > 1.05) {
+          // Zooming in from full frame: smoothly shift camera so target point glides directly to viewport center
+          finalX = k2.targetX + (0.5 - k2.targetX) * (1 - progress) / Math.max(1.0, scale);
+          finalY = k2.targetY + (0.5 - k2.targetY) * (1 - progress) / Math.max(1.0, scale);
+        } else if (k2.scale <= 1.05 && k1.scale > 1.05) {
+          // Zooming out to full frame: smoothly shift camera so target point glides back to original full frame position
+          finalX = k1.targetX + (0.5 - k1.targetX) * progress / Math.max(1.0, scale);
+          finalY = k1.targetY + (0.5 - k1.targetY) * progress / Math.max(1.0, scale);
+        } else if (scale > 1.05) {
+          // Actively zoomed in: Camera Shift Tour or steady hold
+          const shiftDist = Math.hypot(k2.targetX - k1.targetX, k2.targetY - k1.targetY);
+          if (shiftDist > 0.04) {
+            if (shiftDist > 0.25 && k1.scale > 1.35 && k2.scale > 1.35 && Math.abs(k1.scale - k2.scale) < 0.15) {
+              // Cinematic crane dip: slight scale pullback mid-shift when holding high scale
+              const craneDip = Math.min(0.20, shiftDist * 0.30) * Math.sin(progress * Math.PI);
+              scale = Math.max(1.25, scale - craneDip);
+            }
+            finalX = baseTargetX;
+            finalY = baseTargetY;
           } else {
-            // Actively zoomed in: Camera Shift Tour or wide focal jump
-            const shiftDist = Math.hypot(k2.targetX - k1.targetX, k2.targetY - k1.targetY);
-            if (shiftDist > 0.04) {
-              if (shiftDist > 0.25 && k1.scale > 1.35 && k2.scale > 1.35 && Math.abs(k1.scale - k2.scale) < 0.15) {
-                // Cinematic crane dip: slight scale pullback mid-shift when holding high scale
-                const craneDip = Math.min(0.20, shiftDist * 0.30) * Math.sin(progress * Math.PI);
-                scale = Math.max(1.25, scale - craneDip);
-              }
-              finalX = baseTargetX;
-              finalY = baseTargetY;
-            } else {
-              // Steady hold: stay anchored on target.
-              // If cursor moves outside safe deadband (highlights / wide drags), follow smoothly
+            // Steady hold: stay anchored on target
+            if (effectiveTrajectory && effectiveTrajectory.length > 0) {
+              const tracked = calculateDeadzoneCamera(
+                { x: baseTargetX, y: baseTargetY },
+                cursor,
+                scale,
+                isAutoTrack ? 0.35 : 0.65,
+                "center",
+              );
               finalX = tracked.x;
               finalY = tracked.y;
+            } else {
+              finalX = baseTargetX;
+              finalY = baseTargetY;
             }
           }
-        } else if (scale > 1.0) {
-          finalX = baseTargetX;
-          finalY = baseTargetY;
         } else {
           finalX = 0.5;
           finalY = 0.5;
@@ -650,8 +646,8 @@ export function calculateCameraAtTime(
       const target = clampCameraToBounds(block.targetX, block.targetY, block.scale, "center");
       const currentScale = 1.0 + (block.scale - 1.0) * progress;
       return {
-        x: 0.5 + (target.x - 0.5) * progress,
-        y: 0.5 + (target.y - 0.5) * progress,
+        x: target.x + (0.5 - target.x) * (1 - progress) / Math.max(1.0, currentScale),
+        y: target.y + (0.5 - target.y) * (1 - progress) / Math.max(1.0, currentScale),
         scale: currentScale,
         isZoomed: currentScale > 1.05,
         cursorX: currentCursor.x,
@@ -718,8 +714,8 @@ export function calculateCameraAtTime(
       const target = clampCameraToBounds(block.targetX, block.targetY, block.scale, "center");
       const currentScale = block.scale + (1.0 - block.scale) * progress;
       return {
-        x: target.x + (0.5 - target.x) * progress,
-        y: target.y + (0.5 - target.y) * progress,
+        x: target.x + (0.5 - target.x) * progress / Math.max(1.0, currentScale),
+        y: target.y + (0.5 - target.y) * progress / Math.max(1.0, currentScale),
         scale: currentScale,
         isZoomed: currentScale > 1.05,
         cursorX: currentCursor.x,
@@ -1148,7 +1144,7 @@ export function plotInteractionsToKeyframesAndZoomBlocks(
           easing: "cubic",
         });
       }
-    } else if (options.cursorTrajectory && options.cursorTrajectory.length > 0) {
+    } else if (firstEvt.type !== "click" && options.cursorTrajectory && options.cursorTrajectory.length > 0) {
       const effectiveEnd = Math.max(clusterEndTime, firstEvt.timestampMs + 400);
       const pStart = interpolateCursorAtTime(firstEvt.timestampMs, options.cursorTrajectory, firstEvt.x, firstEvt.y);
       const pEnd = interpolateCursorAtTime(effectiveEnd, options.cursorTrajectory, lastEvt.x, lastEvt.y);

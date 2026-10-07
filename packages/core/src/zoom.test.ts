@@ -22,15 +22,15 @@ import { BACKGROUND_PRESETS, SHADOW_PRESETS } from "./looks";
 
 describe("zoom algorithms", () => {
   it("clampCameraToBounds clamps within valid range", () => {
-    // At scale 2.0, half width is 0.25, valid range is [0.25, 0.75] in strict mode
-    const clampedNearLeft = clampCameraToBounds(0.05, 0.5, 2.0);
-    expect(clampedNearLeft.x).toBe(0.25);
-
-    // In center mode, preserves target element centered without pushing away
-    const centeredNearLeft = clampCameraToBounds(0.05, 0.5, 2.0, "center");
+    // In default center mode, preserves exact target element coordinates without pushing away
+    const centeredNearLeft = clampCameraToBounds(0.05, 0.5, 2.0);
     expect(centeredNearLeft.x).toBe(0.05);
 
-    const clampedNearRight = clampCameraToBounds(0.95, 0.5, 2.0);
+    // At scale 2.0, half width is 0.25, valid range is [0.25, 0.75] in strict mode
+    const clampedNearLeft = clampCameraToBounds(0.05, 0.5, 2.0, "strict");
+    expect(clampedNearLeft.x).toBe(0.25);
+
+    const clampedNearRight = clampCameraToBounds(0.95, 0.5, 2.0, "strict");
     expect(clampedNearRight.x).toBe(0.75);
 
     const centered = clampCameraToBounds(0.5, 0.5, 2.0);
@@ -735,6 +735,69 @@ describe("timeline operations", () => {
     // Typing must NOT have reveal dip (no zooming out mid-typing)
     const revealKf = result.keyframes.find((k) => k.id.includes("kf-reveal"));
     expect(revealKf).toBeUndefined();
+  });
+
+  it("centers camera on exact click coordinates even near screen edges", () => {
+    const clickEvents: InteractionEvent[] = [
+      { id: "c-edge", type: "click", timestampMs: 3000, x: 0.85, y: 0.12, button: "left" },
+    ];
+
+    const result = plotInteractionsToKeyframesAndZoomBlocks(clickEvents, 8000, {
+      leadInMs: 1000,
+      scale: 1.85,
+    });
+
+    expect(result.zoomBlocks.length).toBe(1);
+    const block = result.zoomBlocks[0]!;
+    // Must target exact click position without strict boundary clipping
+    expect(block.targetX).toBeCloseTo(0.85, 4);
+    expect(block.targetY).toBeCloseTo(0.12, 4);
+
+    const peakKf = result.keyframes.find((k) => k.id.includes("kf-peak"));
+    expect(peakKf).toBeDefined();
+    expect(peakKf?.targetX).toBeCloseTo(0.85, 4);
+    expect(peakKf?.targetY).toBeCloseTo(0.12, 4);
+
+    // At peak click timestamp, the clicked element must be centered directly at (0.5, 0.5)
+    const cameraAtClick = calculateCameraAtTime(3000, result.zoomBlocks, 1000, 400, undefined, result.keyframes);
+    expect(cameraAtClick.scale).toBeCloseTo(1.85, 2);
+    expect(cameraAtClick.x).toBeCloseTo(0.85, 3);
+    expect(cameraAtClick.y).toBeCloseTo(0.12, 3);
+
+    // Verify screen coordinates place clicked element at viewport dead center (960, 540)
+    const screenCenter = videoToScreenCoordinates(0.85, 0.12, 1920, 1080, cameraAtClick);
+    expect(screenCenter.pixelX).toBeCloseTo(960, 1);
+    expect(screenCenter.pixelY).toBeCloseTo(540, 1);
+  });
+
+  it("smoothly shifts the clicked element towards screen center during lead-in zoom", () => {
+    const clickEvents: InteractionEvent[] = [
+      { id: "c-topright", type: "click", timestampMs: 2000, x: 0.90, y: 0.10, button: "left" },
+    ];
+
+    const result = plotInteractionsToKeyframesAndZoomBlocks(clickEvents, 6000, {
+      leadInMs: 1000,
+      scale: 2.0,
+    });
+
+    // At t = 1000ms (start of lead-in), scale is 1.0 and element is at original screen position
+    const camStart = calculateCameraAtTime(1000, result.zoomBlocks, 1000, 400, undefined, result.keyframes);
+    const screenStart = videoToScreenCoordinates(0.90, 0.10, 1920, 1080, camStart);
+    expect(screenStart.pixelX).toBeCloseTo(0.90 * 1920, 1);
+    expect(screenStart.pixelY).toBeCloseTo(0.10 * 1080, 1);
+
+    // At t = 1500ms (midpoint of lead-in), element has shifted halfway towards screen center
+    const camMid = calculateCameraAtTime(1500, result.zoomBlocks, 1000, 400, undefined, result.keyframes);
+    const screenMid = videoToScreenCoordinates(0.90, 0.10, 1920, 1080, camMid);
+    // Midpoint in screen space is (0.90 + 0.50)/2 * 1920 = 0.70 * 1920 = 1344
+    expect(screenMid.pixelX).toBeCloseTo(0.70 * 1920, 1);
+    expect(screenMid.pixelY).toBeCloseTo(0.30 * 1080, 1);
+
+    // At t = 2000ms (exact click moment), element lands at dead center (960, 540)
+    const camPeak = calculateCameraAtTime(2000, result.zoomBlocks, 1000, 400, undefined, result.keyframes);
+    const screenPeak = videoToScreenCoordinates(0.90, 0.10, 1920, 1080, camPeak);
+    expect(screenPeak.pixelX).toBeCloseTo(960, 1);
+    expect(screenPeak.pixelY).toBeCloseTo(540, 1);
   });
 });
 
