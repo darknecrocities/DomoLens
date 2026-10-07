@@ -770,7 +770,7 @@ describe("timeline operations", () => {
     expect(screenCenter.pixelY).toBeCloseTo(540, 1);
   });
 
-  it("smoothly shifts the clicked element towards screen center during lead-in zoom", () => {
+  it("zooms in directly on the clicked element coordinates without center deflection", () => {
     const clickEvents: InteractionEvent[] = [
       { id: "c-topright", type: "click", timestampMs: 2000, x: 0.90, y: 0.10, button: "left" },
     ];
@@ -780,21 +780,29 @@ describe("timeline operations", () => {
       scale: 2.0,
     });
 
-    // At t = 1000ms (start of lead-in), scale is 1.0 and element is at original screen position
+    // At t = 1000ms (start of lead-in), camera directly targets the clicked element
     const camStart = calculateCameraAtTime(1000, result.zoomBlocks, 1000, 400, undefined, result.keyframes);
+    expect(camStart.x).toBeCloseTo(0.90, 2);
+    expect(camStart.y).toBeCloseTo(0.10, 2);
     const screenStart = videoToScreenCoordinates(0.90, 0.10, 1920, 1080, camStart);
-    expect(screenStart.pixelX).toBeCloseTo(0.90 * 1920, 1);
-    expect(screenStart.pixelY).toBeCloseTo(0.10 * 1080, 1);
+    expect(screenStart.pixelX).toBeCloseTo(960, 1);
+    expect(screenStart.pixelY).toBeCloseTo(540, 1);
 
-    // At t = 1500ms (midpoint of lead-in), element has shifted halfway towards screen center
+    // At t = 1500ms (midpoint of lead-in), camera remains centered directly on clicked element
     const camMid = calculateCameraAtTime(1500, result.zoomBlocks, 1000, 400, undefined, result.keyframes);
+    expect(camMid.x).toBeCloseTo(0.90, 2);
+    expect(camMid.y).toBeCloseTo(0.10, 2);
+    expect(camMid.scale).toBeGreaterThan(1.0);
+    expect(camMid.scale).toBeLessThan(2.0);
     const screenMid = videoToScreenCoordinates(0.90, 0.10, 1920, 1080, camMid);
-    // Midpoint in screen space is (0.90 + 0.50)/2 * 1920 = 0.70 * 1920 = 1344
-    expect(screenMid.pixelX).toBeCloseTo(0.70 * 1920, 1);
-    expect(screenMid.pixelY).toBeCloseTo(0.30 * 1080, 1);
+    expect(screenMid.pixelX).toBeCloseTo(960, 1);
+    expect(screenMid.pixelY).toBeCloseTo(540, 1);
 
     // At t = 2000ms (exact click moment), element lands at dead center (960, 540)
     const camPeak = calculateCameraAtTime(2000, result.zoomBlocks, 1000, 400, undefined, result.keyframes);
+    expect(camPeak.x).toBeCloseTo(0.90, 2);
+    expect(camPeak.y).toBeCloseTo(0.10, 2);
+    expect(camPeak.scale).toBeCloseTo(2.0, 2);
     const screenPeak = videoToScreenCoordinates(0.90, 0.10, 1920, 1080, camPeak);
     expect(screenPeak.pixelX).toBeCloseTo(960, 1);
     expect(screenPeak.pixelY).toBeCloseTo(540, 1);

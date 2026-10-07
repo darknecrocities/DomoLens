@@ -541,13 +541,13 @@ export function calculateCameraAtTime(
         let finalY = baseTargetY;
 
         if (k1.scale <= 1.05 && k2.scale > 1.05) {
-          // Zooming in from full frame: smoothly shift camera so target point glides directly to viewport center
-          finalX = k2.targetX + (0.5 - k2.targetX) * (1 - progress) / Math.max(1.0, scale);
-          finalY = k2.targetY + (0.5 - k2.targetY) * (1 - progress) / Math.max(1.0, scale);
+          // Zooming in from full frame: directly zoom into target interaction coordinates
+          finalX = k2.targetX;
+          finalY = k2.targetY;
         } else if (k2.scale <= 1.05 && k1.scale > 1.05) {
-          // Zooming out to full frame: smoothly shift camera so target point glides back to original full frame position
-          finalX = k1.targetX + (0.5 - k1.targetX) * progress / Math.max(1.0, scale);
-          finalY = k1.targetY + (0.5 - k1.targetY) * progress / Math.max(1.0, scale);
+          // Zooming out to full frame: directly zoom out maintaining target focal coordinate
+          finalX = k1.targetX;
+          finalY = k1.targetY;
         } else if (scale > 1.05) {
           // Actively zoomed in: Camera Shift Tour or steady hold
           const shiftDist = Math.hypot(k2.targetX - k1.targetX, k2.targetY - k1.targetY);
@@ -639,15 +639,15 @@ export function calculateCameraAtTime(
         block.startTimeMs > prevBlock.endTimeMs,
     );
 
-    // 1. Inside lead-in transition: smoothly zoom in while tracking towards block target
+    // 1. Inside lead-in transition: smoothly zoom in directly on block target
     if (!glidedFromPrev && timeMs >= transitionInStart && timeMs < transitionInEnd) {
       const span = transitionInEnd - transitionInStart;
       const progress = span > 0 ? easeInOutCubic((timeMs - transitionInStart) / span) : 1;
       const target = clampCameraToBounds(block.targetX, block.targetY, block.scale, "center");
       const currentScale = 1.0 + (block.scale - 1.0) * progress;
       return {
-        x: target.x + (0.5 - target.x) * (1 - progress) / Math.max(1.0, currentScale),
-        y: target.y + (0.5 - target.y) * (1 - progress) / Math.max(1.0, currentScale),
+        x: target.x,
+        y: target.y,
         scale: currentScale,
         isZoomed: currentScale > 1.05,
         cursorX: currentCursor.x,
@@ -714,8 +714,8 @@ export function calculateCameraAtTime(
       const target = clampCameraToBounds(block.targetX, block.targetY, block.scale, "center");
       const currentScale = block.scale + (1.0 - block.scale) * progress;
       return {
-        x: target.x + (0.5 - target.x) * progress / Math.max(1.0, currentScale),
-        y: target.y + (0.5 - target.y) * progress / Math.max(1.0, currentScale),
+        x: target.x,
+        y: target.y,
         scale: currentScale,
         isZoomed: currentScale > 1.05,
         cursorX: currentCursor.x,
@@ -1035,8 +1035,8 @@ export function plotInteractionsToKeyframesAndZoomBlocks(
         id: `kf-start-${firstEvt.id}`,
         timeMs: startMs,
         scale: 1.0,
-        targetX: 0.5,
-        targetY: 0.5,
+        targetX: clampedFirst.x,
+        targetY: clampedFirst.y,
         easing: "cubic",
       });
 
@@ -1272,8 +1272,8 @@ export function plotInteractionsToKeyframesAndZoomBlocks(
         id: `kf-out-${lastEvt.id}`,
         timeMs: endMs,
         scale: 1.0,
-        targetX: 0.5,
-        targetY: 0.5,
+        targetX: clampedLast.x,
+        targetY: clampedLast.y,
         easing: "cubic",
       });
 
@@ -1354,8 +1354,8 @@ export function zoomBlocksToKeyframes(
         id: `kf-start-${b.id}`,
         timeMs: startMs,
         scale: 1.0,
-        targetX: 0.5,
-        targetY: 0.5,
+        targetX: b.targetX,
+        targetY: b.targetY,
         easing: "cubic",
       });
     }
@@ -1395,8 +1395,8 @@ export function zoomBlocksToKeyframes(
         id: `kf-out-${b.id}`,
         timeMs: endMs,
         scale: 1.0,
-        targetX: 0.5,
-        targetY: 0.5,
+        targetX: b.targetX,
+        targetY: b.targetY,
         easing: "cubic",
       });
     }
@@ -1440,13 +1440,15 @@ export function generateTourShiftSequence(
   // Initial lead-in zoom from 1.0x full frame into first element
   const first = sorted[0]!;
   const firstStartMs = Math.max(0, first.timestampMs - leadInMs);
+  const firstScale = first.type === "typing" ? 2.1 : defaultScale;
+  const clampedFirst = clampCameraToBounds(first.x, first.y, firstScale, "center");
 
   keyframes.push({
     id: `tour-kf-start`,
     timeMs: firstStartMs,
     scale: 1.0,
-    targetX: 0.5,
-    targetY: 0.5,
+    targetX: clampedFirst.x,
+    targetY: clampedFirst.y,
     easing: "cubic",
   });
 
@@ -1518,8 +1520,8 @@ export function generateTourShiftSequence(
         id: `tour-kf-out`,
         timeMs: endMs,
         scale: 1.0,
-        targetX: 0.5,
-        targetY: 0.5,
+        targetX: clampedCur.x,
+        targetY: clampedCur.y,
         easing: "cubic",
       });
       prevHoldEndMs = endMs;

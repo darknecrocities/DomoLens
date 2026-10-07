@@ -876,8 +876,8 @@ export const useEditor = create<EditorState>((set, get) => ({
         id: `kf-in-${now}`,
         timeMs: startMs,
         scale: 1.0,
-        targetX: 0.5,
-        targetY: 0.5,
+        targetX: clamped.x,
+        targetY: clamped.y,
         easing: "cubic",
       },
       {
@@ -911,8 +911,8 @@ export const useEditor = create<EditorState>((set, get) => ({
         id: `kf-out-${now}`,
         timeMs: outMs,
         scale: 1.0,
-        targetX: 0.5,
-        targetY: 0.5,
+        targetX: clamped.x,
+        targetY: clamped.y,
         easing: "cubic",
       },
     ];
