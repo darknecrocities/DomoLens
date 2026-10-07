@@ -339,4 +339,25 @@ describe("useEditor store", () => {
     expect(project?.audioSettings?.musicDuckingEnabled).toBe(true);
     expect(project?.keyframes?.some((kf) => kf.sound === "click")).toBe(true);
   });
+
+  it("autoZoom plots multiple zoom blocks across the entire timeline when recording has only one click at the end", async () => {
+    await useEditor.getState().loadProject("proj-test");
+    useEditor.setState((s) => ({
+      durationMs: 22000,
+      project: s.project ? {
+        ...s.project,
+        clicks: [{ id: "c-stop", timestampMs: 20500, x: 0.5, y: 0.5, button: "left" }],
+        interactions: [{ id: "c-stop", type: "click", timestampMs: 20500, x: 0.5, y: 0.5, button: "left" }],
+        zoomBlocks: [],
+        keyframes: [],
+      } : null,
+    }));
+
+    useEditor.getState().autoZoom();
+    const zoomBlocks = useEditor.getState().project?.zoomBlocks ?? [];
+    expect(zoomBlocks.length).toBeGreaterThan(1);
+    // Verify that zooms exist in the first half of the timeline as well
+    const earlyZooms = zoomBlocks.filter((b) => b.startTimeMs < 15000);
+    expect(earlyZooms.length).toBeGreaterThan(0);
+  });
 });

@@ -49,7 +49,7 @@ export function createLiveStreamMotionTracker(
   video.autoplay = true;
   video.playsInline = true;
   video.style.cssText =
-    "position:fixed;top:-9999px;left:-9999px;width:160px;height:90px;opacity:0.001;pointer-events:none;z-index:-9999;";
+    "position:fixed;bottom:0;right:0;width:2px;height:2px;opacity:0.01;pointer-events:none;z-index:999999;";
   document.body.appendChild(video);
   video.srcObject = stream;
 
@@ -71,93 +71,104 @@ export function createLiveStreamMotionTracker(
     count: number;
   } | null = null;
 
+  const processFrame = () => {
+    if (!isRunning || !ctx || (video.readyState < 1 && video.videoWidth === 0)) return;
+
+    try {
+      ctx.drawImage(video, 0, 0, width, height);
+      const imageData = ctx.getImageData(0, 0, width, height);
+      const currLuma = extractLuminanceBuffer(imageData.data, width, height);
+
+      if (!prevLuma) {
+        prevLuma = currLuma;
+        return;
+      }
+
+      const diff = analyzeFrameDifference(prevLuma, currLuma, width, height, threshold);
+      prevLuma = currLuma;
+
+      if (diff.motionEnergy >= minEnergy) {
+        const centroid = calculateOpticalCentroid(diff.diffMap, width, height);
+        const now = Date.now();
+
+        // Report moving cursor / activity point
+        if (callbacks.onPoint) {
+          callbacks.onPoint({
+            x: centroid.x,
+            y: centroid.y,
+            timestampMs: now,
+          });
+        }
+
+        const kind = classifyFrameActivity(diff.motionEnergy, centroid.spread, minEnergy, maxSpread);
+
+        if (callbacks.onInteraction) {
+          const isLocalized = centroid.spread <= maxSpread * 1.25;
+
+          if (isLocalized) {
+            if (
+              activeTypingBurst &&
+              now - activeTypingBurst.lastTime <= 1500 &&
+              Math.hypot(centroid.x - activeTypingBurst.x, centroid.y - activeTypingBurst.y) <= 0.12
+            ) {
+              activeTypingBurst.lastTime = now;
+              activeTypingBurst.count++;
+              callbacks.onInteraction({
+                id: activeTypingBurst.id,
+                type: "typing",
+                timestampMs: activeTypingBurst.startTime,
+                x: activeTypingBurst.x,
+                y: activeTypingBurst.y,
+                snippet: "Text Input",
+                durationMs: activeTypingBurst.lastTime - activeTypingBurst.startTime,
+              });
+            } else {
+              if (now - lastInteractionTime >= 700) {
+                lastInteractionTime = now;
+                const newBurstId = `opt-type-${now}`;
+                activeTypingBurst = {
+                  id: newBurstId,
+                  startTime: now,
+                  lastTime: now,
+                  x: centroid.x,
+                  y: centroid.y,
+                  count: 1,
+                };
+                if (kind === "click" && diff.motionEnergy >= minEnergy * 1.8) {
+                  callbacks.onInteraction({
+                    id: `opt-act-${now}`,
+                    type: "click",
+                    timestampMs: now,
+                    x: centroid.x,
+                    y: centroid.y,
+                    button: "left",
+                  });
+                }
+              }
+            }
+          } else {
+            activeTypingBurst = null;
+          }
+        }
+      }
+    } catch {
+      // Ignore canvas read errors during track transitions
+    }
+  };
+
   const startTracking = () => {
     if (!isRunning || timer) return;
 
-    timer = setInterval(() => {
-      if (!ctx || (video.readyState < 1 && video.videoWidth === 0)) return;
-
-      try {
-        ctx.drawImage(video, 0, 0, width, height);
-        const imageData = ctx.getImageData(0, 0, width, height);
-        const currLuma = extractLuminanceBuffer(imageData.data, width, height);
-
-        if (!prevLuma) {
-          prevLuma = currLuma;
-          return;
-        }
-
-        const diff = analyzeFrameDifference(prevLuma, currLuma, width, height, threshold);
-        prevLuma = currLuma;
-
-        if (diff.motionEnergy >= minEnergy) {
-          const centroid = calculateOpticalCentroid(diff.diffMap, width, height);
-          const now = Date.now();
-
-          // Report moving cursor / activity point
-          if (callbacks.onPoint) {
-            callbacks.onPoint({
-              x: centroid.x,
-              y: centroid.y,
-              timestampMs: now,
-            });
-          }
-
-          const kind = classifyFrameActivity(diff.motionEnergy, centroid.spread, minEnergy, maxSpread);
-
-          if (callbacks.onInteraction) {
-            const isLocalized = centroid.spread <= maxSpread * 1.25;
-
-            if (isLocalized) {
-              if (
-                activeTypingBurst &&
-                now - activeTypingBurst.lastTime <= 1500 &&
-                Math.hypot(centroid.x - activeTypingBurst.x, centroid.y - activeTypingBurst.y) <= 0.12
-              ) {
-                activeTypingBurst.lastTime = now;
-                activeTypingBurst.count++;
-                callbacks.onInteraction({
-                  id: activeTypingBurst.id,
-                  type: "typing",
-                  timestampMs: activeTypingBurst.startTime,
-                  x: activeTypingBurst.x,
-                  y: activeTypingBurst.y,
-                  snippet: "Text Input",
-                  durationMs: activeTypingBurst.lastTime - activeTypingBurst.startTime,
-                });
-              } else {
-                if (now - lastInteractionTime >= 700) {
-                  lastInteractionTime = now;
-                  const newBurstId = `opt-type-${now}`;
-                  activeTypingBurst = {
-                    id: newBurstId,
-                    startTime: now,
-                    lastTime: now,
-                    x: centroid.x,
-                    y: centroid.y,
-                    count: 1,
-                  };
-                  if (kind === "click" && diff.motionEnergy >= minEnergy * 1.8) {
-                    callbacks.onInteraction({
-                      id: `opt-act-${now}`,
-                      type: "click",
-                      timestampMs: now,
-                      x: centroid.x,
-                      y: centroid.y,
-                      button: "left",
-                    });
-                  }
-                }
-              }
-            } else {
-              activeTypingBurst = null;
-            }
-          }
-        }
-      } catch {
-        // Ignore canvas read errors during track transitions
-      }
-    }, sampleIntervalMs);
+    if ("requestVideoFrameCallback" in video) {
+      const onFrame = () => {
+        if (!isRunning) return;
+        processFrame();
+        (video as unknown as { requestVideoFrameCallback: (cb: () => void) => void }).requestVideoFrameCallback(onFrame);
+      };
+      (video as unknown as { requestVideoFrameCallback: (cb: () => void) => void }).requestVideoFrameCallback(onFrame);
+    } else {
+      timer = setInterval(processFrame, sampleIntervalMs);
+    }
   };
 
   void video.play().then(startTracking).catch(startTracking);

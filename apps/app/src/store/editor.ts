@@ -515,10 +515,11 @@ export const useEditor = create<EditorState>((set, get) => ({
       eventsToUse.length === 2 &&
       Boolean(eventsToUse[0]?.id?.startsWith("c-auto-")) &&
       Boolean(eventsToUse[1]?.id?.startsWith("c-auto-"));
+    const dur = state.durationMs || 10000;
+    const isOnlyTailEnd = eventsToUse.length === 1 && dur >= 4000 && eventsToUse[0]!.timestampMs >= dur - 2500;
 
-    if (eventsToUse.length === 0 || isOldDummy) {
+    if (eventsToUse.length === 0 || isOldDummy || isOnlyTailEnd) {
       isFallback = true;
-      const dur = state.durationMs || 10000;
       const trajectory = state.project.cursorTrajectory;
       const autoEvents: InteractionEvent[] = [];
 
@@ -526,7 +527,7 @@ export const useEditor = create<EditorState>((set, get) => ({
         // Center auto-zooms strictly on the user's real cursor trajectory and activity locations
         const stepMs = Math.max(2200, Math.min(4200, Math.round(dur / 7)));
         for (let t = 1200; t < dur - 1000; t += stepMs) {
-          const pt = interpolateCursorAtTime(t, trajectory, 0.5, 0.5);
+          const pt = interpolateCursorAtTime(t, trajectory, 0.5, 0.45);
           autoEvents.push({
             id: `act-auto-traj-${t}`,
             type: "click",
@@ -537,15 +538,24 @@ export const useEditor = create<EditorState>((set, get) => ({
           });
         }
       } else {
-        // If no trajectory is available, place balanced zooms at center
-        const stepMs = Math.max(2800, Math.min(4500, Math.round(dur / 5)));
-        for (let t = 2000; t < dur - 1200; t += stepMs) {
+        // Distribute balanced zooms across focal center and common content area
+        const stepMs = Math.max(2500, Math.min(4200, Math.round(dur / 5)));
+        const focalSeq = [
+          { x: 0.50, y: 0.42 }, // Primary search / input area
+          { x: 0.50, y: 0.50 }, // Central canvas
+          { x: 0.46, y: 0.44 },
+          { x: 0.54, y: 0.48 },
+        ];
+        let seqIdx = 0;
+        for (let t = 1800; t < dur - 1200; t += stepMs) {
+          const fp = focalSeq[seqIdx % focalSeq.length]!;
+          seqIdx++;
           autoEvents.push({
             id: `act-auto-${t}`,
             type: "click",
             timestampMs: t,
-            x: 0.50,
-            y: 0.50,
+            x: fp.x,
+            y: fp.y,
             button: "left",
           });
         }

@@ -742,8 +742,8 @@ export const useRecorder = create<RecorderStore>((set, get) => ({
     }
 
     const duration = Math.max(1000, get().elapsedMs);
-    // Filter out clicks that happened within the last 500ms of recording (stop artifacts)
-    const cutoffTime = Math.max(0, duration - 500);
+    // Filter out clicks that happened within the last 1000ms of recording (stop artifacts)
+    const cutoffTime = Math.max(0, duration - 1000);
     const rawClicks = get().clicks.filter((c) => c.timestampMs <= cutoffTime);
     const rawInteractions = get().interactions.filter((i) => i.timestampMs <= cutoffTime);
     void platform.setAlwaysOnTop?.(false);
@@ -793,26 +793,37 @@ export const useRecorder = create<RecorderStore>((set, get) => ({
       }
     }
 
-    // Synthesize focal interactions from trajectory if no discrete clicks were logged
+    // Synthesize focal interactions from trajectory or screen centers if no discrete clicks were logged
     let interactionsForPlotting = finalInteractions;
-    if (interactionsForPlotting.length === 0 && finalTrajectory.length >= 8) {
+    const isSparse = interactionsForPlotting.length <= 1 && duration >= 4000;
+    if (interactionsForPlotting.length === 0 || isSparse) {
       const stepMs = Math.max(2200, Math.min(4200, Math.round(duration / 6)));
       const synth: InteractionEvent[] = [];
-      for (let t = 1000; t < duration - 800; t += stepMs) {
-        const pt = interpolateCursorAtTime(t, finalTrajectory, 0.5, 0.5);
-        if (Math.abs(pt.x - 0.5) > 0.03 || Math.abs(pt.y - 0.5) > 0.03) {
-          synth.push({
-            id: `act-auto-traj-${t}`,
-            type: "click",
-            timestampMs: t,
-            x: pt.x,
-            y: pt.y,
-            button: "left",
-          });
-        }
+      const focalSeq = [
+        { x: 0.50, y: 0.42 }, // Primary search / input area
+        { x: 0.50, y: 0.50 }, // Central canvas
+        { x: 0.46, y: 0.44 },
+        { x: 0.54, y: 0.48 },
+      ];
+      let seqIdx = 0;
+      for (let t = 1500; t < duration - 1000; t += stepMs) {
+        const pt = finalTrajectory.length >= 2
+          ? interpolateCursorAtTime(t, finalTrajectory, 0.5, 0.45)
+          : focalSeq[seqIdx++ % focalSeq.length]!;
+        synth.push({
+          id: `act-auto-${t}`,
+          type: "click",
+          timestampMs: t,
+          x: pt.x,
+          y: pt.y,
+          button: "left",
+        });
       }
       if (synth.length > 0) {
-        interactionsForPlotting = synth;
+        const kept = isSparse
+          ? interactionsForPlotting.filter((e) => e.timestampMs < duration - 2000)
+          : [];
+        interactionsForPlotting = [...kept, ...synth].sort((a, b) => a.timestampMs - b.timestampMs);
       }
     }
 
@@ -828,7 +839,8 @@ export const useRecorder = create<RecorderStore>((set, get) => ({
               scale: 1.85,
               fallbackIfEmpty: false,
               continuousGlide: false,
-              autoFillGaps: false,
+              autoFillGaps: true,
+              maxGapMs: 3800,
               maxClusterDistance: 0.22,
               minRestMs: 800,
               enableRevealDip: false,
