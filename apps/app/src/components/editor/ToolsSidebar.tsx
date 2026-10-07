@@ -301,6 +301,15 @@ export function ToolsSidebar() {
                     }
                     className="w-full accent-white cursor-pointer h-1.5 bg-ink-800 rounded-lg"
                   />
+                  <div className="flex justify-between text-[10px] text-fg-muted pt-1">
+                    <span>Focal Target:</span>
+                    <span className="font-mono text-white">
+                      ({Math.round(selectedBlock.targetX * 100)}%, {Math.round(selectedBlock.targetY * 100)}%)
+                    </span>
+                  </div>
+                  <p className="text-[10px] text-fg-faint leading-tight">
+                    Tip: Click directly on the preview video canvas to center this zoom on any button, search bar, or element.
+                  </p>
                 </div>
               )}
 

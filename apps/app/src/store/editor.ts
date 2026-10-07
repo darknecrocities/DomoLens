@@ -802,13 +802,17 @@ export const useEditor = create<EditorState>((set, get) => ({
         b.id === activeBlock.id ? { ...b, targetX: clamped.x, targetY: clamped.y } : b,
       );
 
-      let updatedKfs = state.project.keyframes ? [...state.project.keyframes] : [];
+      // Lock all keyframes in this zoom block directly on the newly selected interaction coordinates
+      let updatedKfs = (state.project.keyframes ? [...state.project.keyframes] : []).map((k) => {
+        if (k.timeMs >= activeBlock.startTimeMs && k.timeMs <= activeBlock.endTimeMs) {
+          return { ...k, targetX: clamped.x, targetY: clamped.y };
+        }
+        return k;
+      });
+
       const nearbyKf = updatedKfs.find((k) => Math.abs(k.timeMs - time) <= 150);
       let selectedKfId: string;
       if (nearbyKf) {
-        updatedKfs = updatedKfs.map((k) =>
-          k.id === nearbyKf.id ? { ...k, targetX: clamped.x, targetY: clamped.y } : k,
-        );
         selectedKfId = nearbyKf.id;
       } else {
         const newKf: KeyframeNode = {

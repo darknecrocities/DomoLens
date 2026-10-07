@@ -360,4 +360,45 @@ describe("useEditor store", () => {
     const earlyZooms = zoomBlocks.filter((b) => b.startTimeMs < 15000);
     expect(earlyZooms.length).toBeGreaterThan(0);
   });
+
+  it("shiftCameraTarget inside an active zoom block updates block and all its keyframes to the clicked element coordinates", async () => {
+    await useEditor.getState().loadProject("proj-test");
+    useEditor.setState((s) => ({
+      currentTimeMs: 2000,
+      project: s.project
+        ? {
+            ...s.project,
+            zoomBlocks: [
+              {
+                id: "b1",
+                startTimeMs: 1000,
+                endTimeMs: 4000,
+                targetX: 0.5,
+                targetY: 0.5,
+                scale: 1.85,
+                enabled: true,
+              },
+            ],
+            keyframes: [
+              { id: "kf-in", timeMs: 1000, scale: 1.0, targetX: 0.5, targetY: 0.5, easing: "cubic" },
+              { id: "kf-peak", timeMs: 1800, scale: 1.85, targetX: 0.5, targetY: 0.5, easing: "spring" },
+              { id: "kf-out", timeMs: 4000, scale: 1.0, targetX: 0.5, targetY: 0.5, easing: "cubic" },
+            ],
+          }
+        : null,
+    }));
+
+    useEditor.getState().shiftCameraTarget(0.85, 0.65);
+    const proj = useEditor.getState().project;
+    const block = proj?.zoomBlocks.find((b) => b.id === "b1");
+    expect(block?.targetX).toBeCloseTo(0.85, 2);
+    expect(block?.targetY).toBeCloseTo(0.65, 2);
+
+    const blockKfs = proj?.keyframes?.filter((k) => k.timeMs >= 1000 && k.timeMs <= 4000) ?? [];
+    expect(blockKfs.length).toBeGreaterThanOrEqual(3);
+    for (const kf of blockKfs) {
+      expect(kf.targetX).toBeCloseTo(0.85, 2);
+      expect(kf.targetY).toBeCloseTo(0.65, 2);
+    }
+  });
 });

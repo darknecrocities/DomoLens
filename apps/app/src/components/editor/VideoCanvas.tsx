@@ -3,7 +3,6 @@ import { Film, FolderOpen, Sparkles, Video, Wand2 } from "lucide-react";
 import {
   calculateActiveEffectsState,
   calculateCameraAtTime,
-  clampCameraToBounds,
   screenToVideoCoordinates,
   smoothCursorTrajectory,
   type ProjectData,
@@ -70,10 +69,7 @@ export function VideoCanvas({ project, currentTimeMs: propTimeMs }: VideoCanvasP
       alreadySmoothed: true,
     } as const;
     return (tMs: number) => {
-      const raw = calculateCameraAtTime(tMs, zoomBlocks, 1000, 400, smoothedTrajectory, keyframes, opts);
-      // Frame-fill clamp: never translate past the video edge (prevents black void)
-      const filled = clampCameraToBounds(raw.x, raw.y, raw.scale, "strict");
-      return { ...raw, x: filled.x, y: filled.y };
+      return calculateCameraAtTime(tMs, zoomBlocks, 1000, 400, smoothedTrajectory, keyframes, opts);
     };
   }, [
     zoomBlocks,

@@ -161,16 +161,10 @@ export function createLiveStreamMotionTracker(
   const startTracking = () => {
     if (!isRunning || timer) return;
 
-    if ("requestVideoFrameCallback" in video) {
-      const onFrame = () => {
-        if (!isRunning) return;
-        processFrame();
-        (video as unknown as { requestVideoFrameCallback: (cb: () => void) => void }).requestVideoFrameCallback(onFrame);
-      };
-      (video as unknown as { requestVideoFrameCallback: (cb: () => void) => void }).requestVideoFrameCallback(onFrame);
-    } else {
-      timer = setInterval(processFrame, sampleIntervalMs);
-    }
+    // In browsers, requestVideoFrameCallback is paused when the tab is hidden / in background.
+    // An interval ensures continuous processing of the incoming MediaStream so interaction
+    // coordinates and cursor trajectory continue tracking accurately even when recording another window or app.
+    timer = setInterval(processFrame, sampleIntervalMs);
   };
 
   void video.play().then(startTracking).catch(startTracking);
@@ -253,7 +247,7 @@ export async function scanVideoElementForActivity(
           resolve();
         };
         const onSeeked = () => cleanup();
-        const timeoutId = setTimeout(cleanup, 75);
+        const timeoutId = setTimeout(cleanup, 120);
         video.addEventListener("seeked", onSeeked, { once: true });
         try {
           video.currentTime = targetSec;

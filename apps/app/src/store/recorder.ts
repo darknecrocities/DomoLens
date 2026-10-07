@@ -12,7 +12,7 @@ import { toast } from "./toast";
 import { useProjects } from "./projects";
 import { useNav } from "./nav";
 import { platform } from "../platform";
-import { createLiveStreamMotionTracker } from "../lib/video-activity-detector";
+import { createLiveStreamMotionTracker, scanVideoElementForActivity } from "../lib/video-activity-detector";
 import { sfx } from "../lib/sound-effects";
 
 let cursorTrajectoryBuffer: import("@domolens/core").CursorTrajectoryPoint[] = [];
@@ -778,9 +778,9 @@ export const useRecorder = create<RecorderStore>((set, get) => ({
     set({ state: "idle" });
 
     // Strictly preserve real user clicks without synthetic filler
-    const finalClicks = rawClicks;
-    const finalInteractions = rawInteractions;
-    const finalTrajectory = get().cursorTrajectory;
+    let finalClicks = rawClicks;
+    let finalInteractions = rawInteractions;
+    let finalTrajectory = get().cursorTrajectory;
 
     const id = `rec-${Date.now()}`;
     const name = `Recording ${new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`;
@@ -820,41 +820,62 @@ export const useRecorder = create<RecorderStore>((set, get) => ({
       }
     }
 
-    // Synthesize focal interactions from trajectory or screen centers if no discrete clicks were logged
-    let interactionsForPlotting = finalInteractions;
-    const isSparse = interactionsForPlotting.length <= 1 && duration >= 4000;
-    if (interactionsForPlotting.length === 0 || isSparse) {
-      const stepMs = Math.max(2200, Math.min(4200, Math.round(duration / 6)));
-      const synth: InteractionEvent[] = [];
-      const focalSeq = [
-        { x: 0.50, y: 0.42 }, // Primary search / input area
-        { x: 0.50, y: 0.50 }, // Central canvas
-        { x: 0.46, y: 0.44 },
-        { x: 0.54, y: 0.48 },
-      ];
-      let seqIdx = 0;
-      for (let t = 1500; t < duration - 1000; t += stepMs) {
-        const pt = finalTrajectory.length >= 2
-          ? interpolateCursorAtTime(t, finalTrajectory, 0.5, 0.45)
-          : focalSeq[seqIdx++ % focalSeq.length]!;
-        synth.push({
-          id: `act-auto-${t}`,
-          type: "click",
-          timestampMs: t,
-          x: pt.x,
-          y: pt.y,
-          button: "left",
+    // If no DOM interactions were logged (e.g. browser tab recording outside DOM),
+    // scan the recorded video for real optical activity points so zooms focus on where the user interacted!
+    if (finalInteractions.length === 0 && mediaUrl && typeof document !== "undefined") {
+      try {
+        const scanVideo = document.createElement("video");
+        scanVideo.muted = true;
+        scanVideo.preload = "auto";
+        scanVideo.src = platform.mediaUrl(mediaUrl);
+        await new Promise<void>((resolve) => {
+          scanVideo.onloadedmetadata = () => resolve();
+          scanVideo.onerror = () => resolve();
+          setTimeout(resolve, 1200);
         });
-      }
-      if (synth.length > 0) {
-        const kept = isSparse
-          ? interactionsForPlotting.filter((e) => e.timestampMs < duration - 2000)
-          : [];
-        interactionsForPlotting = [...kept, ...synth].sort((a, b) => a.timestampMs - b.timestampMs);
+        if (scanVideo.duration > 0) {
+          const scanned = await scanVideoElementForActivity(scanVideo, {
+            sampleStepMs: 250,
+            maxDurationMs: duration,
+          });
+          if (scanned.interactions.length > 0) {
+            finalInteractions = scanned.interactions;
+          }
+          if (scanned.clicks.length > 0) {
+            finalClicks = scanned.clicks;
+          }
+          if (scanned.cursorTrajectory.length > 0 && finalTrajectory.length === 0) {
+            finalTrajectory = scanned.cursorTrajectory;
+          }
+        }
+      } catch (scanErr) {
+        console.warn("Post-recording optical scan error:", scanErr);
       }
     }
 
-    // Plot zooms using real interactions or trajectory focal points
+    // Zoom strictly on real user interactions!
+    let interactionsForPlotting = finalInteractions;
+    if (interactionsForPlotting.length === 0 && finalTrajectory.length >= 8) {
+      // If no clicks were detected but cursor motion is present, focus on real activity stops
+      const synth: InteractionEvent[] = [];
+      const stepMs = Math.max(3000, Math.round(duration / 4));
+      for (let t = 1200; t < duration - 1000; t += stepMs) {
+        const pt = interpolateCursorAtTime(t, finalTrajectory, 0.5, 0.5);
+        if (Math.abs(pt.x - 0.5) > 0.05 || Math.abs(pt.y - 0.5) > 0.05) {
+          synth.push({
+            id: `act-auto-traj-${t}`,
+            type: "click",
+            timestampMs: t,
+            x: pt.x,
+            y: pt.y,
+            button: "left",
+          });
+        }
+      }
+      interactionsForPlotting = synth;
+    }
+
+    // Plot zooms strictly on where the user interacted with
     const { keyframes, zoomBlocks } =
       interactionsForPlotting.length > 0
         ? plotInteractionsToKeyframesAndZoomBlocks(
