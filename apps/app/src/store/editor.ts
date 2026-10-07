@@ -112,6 +112,13 @@ interface EditorState {
     continuousGlide?: boolean;
     maxGlideGapMs?: number;
   }) => void;
+  autoZoom: (options?: {
+    holdDurationMs?: number;
+    scale?: number;
+    continuousGlide?: boolean;
+    maxGlideGapMs?: number;
+  }) => void;
+  autoAfx: () => void;
 
   // Cinematic camera tour shift walkthrough across focal elements
   createTourCameraShift: (options?: {
@@ -564,13 +571,13 @@ export const useEditor = create<EditorState>((set, get) => ({
       {
         continuousGlide: false,
         leadInMs: 1000,
-        holdDurationMs: 1200,
-        scale: 1.80,
+        holdDurationMs: 1800,
+        scale: 1.85,
         maxClusterDistance: 0.22,
         minRestMs: 800,
         enableRevealDip: false,
         cursorTrajectory: state.project.cursorTrajectory,
-        typingZoomOut: true,
+        typingZoomOut: false,
         ...options,
       },
     );
@@ -597,6 +604,68 @@ export const useEditor = create<EditorState>((set, get) => ({
         ? `Auto-generated ${zoomBlocks.length} zooms applied across timeline!`
         : `Plotted ${zoomBlocks.length} zooms and applied to current moment!`,
     );
+  },
+
+  autoZoom: (options) => {
+    get().plotInteractions(options);
+  },
+
+  autoAfx: () => {
+    const state = get();
+    if (!state.project) return;
+    const project = state.project;
+
+    // 1. Enable click sound, typing sound, ducking, and set balanced volume profiles
+    const updatedAudioSettings: ProjectAudioSettings = {
+      ...project.audioSettings,
+      clickSoundEnabled: true,
+      clickSoundPreset: project.audioSettings?.clickSoundPreset || "bop",
+      clickSoundVolume: project.audioSettings?.clickSoundVolume || 0.65,
+      typingSoundEnabled: true,
+      typingSoundPreset: project.audioSettings?.typingSoundPreset || "mechanical",
+      typingSoundVolume: project.audioSettings?.typingSoundVolume || 0.55,
+      musicDuckingEnabled: true,
+      duckingAmount: project.audioSettings?.duckingAmount || 0.35,
+    };
+
+    // 2. Attach sound tags to keyframes synchronized with clicks and typing
+    const clicks = project.clicks || [];
+    const interactions = project.interactions || [];
+    const updatedKeyframes = (project.keyframes || []).map((kf) => {
+      if (kf.sound) return kf;
+      const matchedClick = clicks.find((c) => Math.abs(c.timestampMs - kf.timeMs) <= 180);
+      const matchedInteraction = interactions.find((i) => Math.abs(i.timestampMs - kf.timeMs) <= 180);
+
+      if (matchedInteraction?.type === "typing") {
+        return {
+          ...kf,
+          sound: "typing" as const,
+          soundPreset: updatedAudioSettings.typingSoundPreset,
+          soundVolume: updatedAudioSettings.typingSoundVolume,
+        };
+      }
+      if (matchedClick || matchedInteraction?.type === "click") {
+        return {
+          ...kf,
+          sound: "click" as const,
+          soundPreset: updatedAudioSettings.clickSoundPreset,
+          soundVolume: updatedAudioSettings.clickSoundVolume,
+        };
+      }
+      return kf;
+    });
+
+    set({
+      ...pushHistory(state),
+      project: {
+        ...project,
+        audioSettings: updatedAudioSettings,
+        keyframes: updatedKeyframes,
+      },
+    });
+
+    sfx.playClickBop(updatedAudioSettings.clickSoundPreset, 0.7);
+    toast.success("Auto AFX enabled: Click bops, typing audio, and ducking synchronized.");
   },
 
   createTourCameraShift: (options) => {

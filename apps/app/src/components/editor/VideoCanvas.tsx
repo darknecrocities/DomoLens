@@ -228,7 +228,7 @@ export function VideoCanvas({ project, currentTimeMs: propTimeMs }: VideoCanvasP
       }
     }
 
-    // Zero-latency edge-triggered typing sound bursts
+    // Zero-latency edge-triggered typing sound bursts (only if not already attached to keyframes)
     if (typingSoundEnabled && project.interactions) {
       for (const interaction of project.interactions) {
         if (
@@ -238,8 +238,18 @@ export function VideoCanvas({ project, currentTimeMs: propTimeMs }: VideoCanvasP
           interaction.timestampMs <= currentTimeMs + 45
         ) {
           triggeredEventsRef.current.add(interaction.id);
-          const keystrokesCount = Math.min(8, Math.max(3, interaction.snippet ? interaction.snippet.length : 4));
-          sfx.playTypingBurst(keystrokesCount, 85, audioSettings?.typingSoundPreset || "mechanical", audioSettings?.typingSoundVolume || 0.6);
+          const hasKeyframeTyping = keyframes?.some(
+            (k) => k.sound === "typing" && Math.abs(k.timeMs - interaction.timestampMs) < 400,
+          );
+          if (!hasKeyframeTyping) {
+            const keystrokesCount = Math.min(4, Math.max(2, interaction.snippet ? interaction.snippet.length : 3));
+            sfx.playTypingBurst(
+              keystrokesCount,
+              110,
+              audioSettings?.typingSoundPreset || "mechanical",
+              audioSettings?.typingSoundVolume || 0.55,
+            );
+          }
           if (audioSettings?.musicDuckingEnabled) {
             sfx.duckMusic(550, audioSettings.duckingAmount);
           }
@@ -258,11 +268,10 @@ export function VideoCanvas({ project, currentTimeMs: propTimeMs }: VideoCanvasP
         ) {
           triggeredEventsRef.current.add(`kf-${kf.id}`);
           if (kf.sound === "typing" && typingSoundEnabled) {
-            sfx.playTypingBurst(
-              5,
-              85,
+            sfx.playKeystroke(
               (kf.soundPreset as any) || audioSettings?.typingSoundPreset || "mechanical",
-              kf.soundVolume || audioSettings?.typingSoundVolume || 0.65,
+              kf.soundVolume || audioSettings?.typingSoundVolume || 0.55,
+              false,
             );
           } else if (kf.sound === "click" && clickSoundEnabled) {
             sfx.playClickBop(

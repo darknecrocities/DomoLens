@@ -110,6 +110,10 @@ export function createTauriPlatform(opts: { isMobile: boolean; isTouch: boolean;
       return lazyOff(listen<{ x: number; y: number; norm_x: number; norm_y: number; button: string }>("global-click", (ev) => callback(ev.payload)));
     },
 
+    onGlobalMouseUp(callback) {
+      return lazyOff(listen<{ x: number; y: number; norm_x: number; norm_y: number; button: string }>("global-mouse-up", (ev) => callback(ev.payload)));
+    },
+
     onGlobalMouseMove(callback) {
       return lazyOff(listen<{ x: number; y: number; norm_x: number; norm_y: number }>("global-mouse-move", (ev) => callback(ev.payload)));
     },

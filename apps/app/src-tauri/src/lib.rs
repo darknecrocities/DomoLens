@@ -45,6 +45,16 @@ pub struct GlobalMouseMovePayload {
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct GlobalMouseUpPayload {
+    pub x: f64,
+    pub y: f64,
+    pub norm_x: f64,
+    pub norm_y: f64,
+    pub button: String,
+    pub timestamp_ms: i64,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct GlobalTypingPayload {
     pub x: f64,
     pub y: f64,
@@ -470,6 +480,25 @@ pub fn run() {
                                     timestamp_ms: now_ms,
                                 },
                             );
+                        } else if event_type == 2 || event_type == 4 || event_type == 26 {
+                            let btn = if event_type == 4 {
+                                "right"
+                            } else if event_type == 26 {
+                                "middle"
+                            } else {
+                                "left"
+                            };
+                            let _ = handle.emit(
+                                "global-mouse-up",
+                                GlobalMouseUpPayload {
+                                    x: loc.x,
+                                    y: loc.y,
+                                    norm_x,
+                                    norm_y,
+                                    button: btn.to_string(),
+                                    timestamp_ms: now_ms,
+                                },
+                            );
                         } else if event_type == 5 || event_type == 6 || event_type == 7 {
                             let should_emit = if let Ok(mut last_emit) = LAST_MOVE_EMIT_MS.lock() {
                                 if now_ms - *last_emit >= 25 {
@@ -513,7 +542,7 @@ pub fn run() {
                 std::thread::spawn(move || {
                     unsafe {
                         let input_mask: u64 =
-                            (1 << 1) | (1 << 3) | (1 << 5) | (1 << 6) | (1 << 7) | (1 << 10) | (1 << 25);
+                            (1 << 1) | (1 << 2) | (1 << 3) | (1 << 4) | (1 << 5) | (1 << 6) | (1 << 7) | (1 << 10) | (1 << 25) | (1 << 26);
                         let handle_box = Box::new(handle_clone);
                         let handle_ptr = Box::into_raw(handle_box);
 

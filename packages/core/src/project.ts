@@ -51,13 +51,15 @@ export interface ClickEvent {
 /** User interaction (click, button press, or typing input) to trigger auto-zoom. */
 export interface InteractionEvent {
   id: string;
-  type: "click" | "typing";
+  type: "click" | "typing" | "highlight";
   timestampMs: number;
   x: number;
   y: number;
   snippet?: string;
   button?: "left" | "right" | "middle";
   durationMs?: number;
+  xEnd?: number;
+  yEnd?: number;
 }
 
 /** A single cursor/mouse coordinate sample recorded over time. */

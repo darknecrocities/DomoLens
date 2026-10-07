@@ -315,4 +315,28 @@ describe("useEditor store", () => {
     expect(looks?.cursorStyle).toBe("hidden");
     expect(looks?.showCursor).toBe(false);
   });
+
+  it("autoZoom and autoAfx trigger automatic camera zoom and synchronized audio effects", async () => {
+    await useEditor.getState().loadProject("proj-test");
+    useEditor.setState((s) => ({
+      project: s.project ? {
+        ...s.project,
+        clicks: [{ id: "c1", timestampMs: 2000, x: 0.4, y: 0.5, button: "left" }],
+        interactions: [{ id: "c1", type: "click", timestampMs: 2000, x: 0.4, y: 0.5, button: "left" }],
+        keyframes: [{ id: "kf1", timeMs: 2000, scale: 1.85, targetX: 0.4, targetY: 0.5, easing: "cubic" as const }],
+      } : null,
+    }));
+
+    // Test autoZoom
+    useEditor.getState().autoZoom();
+    expect(useEditor.getState().project?.zoomBlocks.length).toBeGreaterThanOrEqual(1);
+
+    // Test autoAfx
+    useEditor.getState().autoAfx();
+    const project = useEditor.getState().project;
+    expect(project?.audioSettings?.clickSoundEnabled).toBe(true);
+    expect(project?.audioSettings?.typingSoundEnabled).toBe(true);
+    expect(project?.audioSettings?.musicDuckingEnabled).toBe(true);
+    expect(project?.keyframes?.some((kf) => kf.sound === "click")).toBe(true);
+  });
 });

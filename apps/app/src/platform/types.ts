@@ -53,6 +53,8 @@ export interface Platform {
   stopGlobalInputCapture?(): Promise<void>;
   /** Subscribes to global mouse clicks outside the app anywhere on screen. */
   onGlobalClick?(callback: (payload: { x: number; y: number; norm_x: number; norm_y: number; button: string }) => void): Off;
+  /** Subscribes to global mouse up events outside the app anywhere on screen. */
+  onGlobalMouseUp?(callback: (payload: { x: number; y: number; norm_x: number; norm_y: number; button: string }) => void): Off;
   /** Subscribes to global mouse moves outside the app anywhere on screen. */
   onGlobalMouseMove?(callback: (payload: { x: number; y: number; norm_x: number; norm_y: number }) => void): Off;
   /** Subscribes to global keystrokes outside the app anywhere on screen. */

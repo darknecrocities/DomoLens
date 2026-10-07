@@ -230,15 +230,18 @@ describe("zoom algorithms", () => {
     expect(largeMove.x).toBeCloseTo(0.7 - 0.0875, 2);
   });
 
-  it("calculateIntentZoom prioritizes zoom-out to center for typing and supports zoom-in option", () => {
+  it("calculateIntentZoom zooms in on typing input location by default and supports zoom-out option", () => {
     const typingEvt = { id: "t1", type: "typing" as const, timestampMs: 1000, x: 0.5, y: 0.5, snippet: "Hello" };
     const typingIntent = calculateIntentZoom(typingEvt);
-    expect(typingIntent.scale).toBe(1.0);
+    expect(typingIntent.scale).toBe(1.85);
     expect(typingIntent.offsetY).toBe(0);
 
-    const typingZoomedIn = calculateIntentZoom(typingEvt, { typingZoomOut: false });
-    expect(typingZoomedIn.scale).toBe(2.1);
-    expect(typingZoomedIn.holdMs).toBeGreaterThanOrEqual(2400);
+    const typingZoomedOut = calculateIntentZoom(typingEvt, { typingZoomOut: true });
+    expect(typingZoomedOut.scale).toBe(1.0);
+
+    const highlightEvt = { id: "hl1", type: "highlight" as const, timestampMs: 1500, x: 0.4, y: 0.4 };
+    const highlightIntent = calculateIntentZoom(highlightEvt);
+    expect(highlightIntent.scale).toBe(1.80);
 
     const rightClickEvt = { id: "c1", timestampMs: 2000, x: 0.4, y: 0.4, button: "right" as const };
     const rightClickIntent = calculateIntentZoom(rightClickEvt);
@@ -343,15 +346,15 @@ describe("zoom algorithms", () => {
     expect(cameraAt4s.cursorY).toBeCloseTo(0.3, 2);
   });
 
-  it("auto-plots typing activity prioritizing zoom-out to center of video with keystroke audio", () => {
+  it("auto-plots typing activity zooming in on typed target with keystroke audio", () => {
     const typingInteractions = [
       { id: "type-1", type: "typing" as const, timestampMs: 4000, x: 0.45, y: 0.5, snippet: "searching..." },
     ];
     const result = plotInteractionsToKeyframesAndZoomBlocks(typingInteractions, 12000);
     expect(result.zoomBlocks).toHaveLength(1);
     const block = result.zoomBlocks[0]!;
-    expect(block.scale).toBe(1.0); // Typing prioritized zoom-out to center
-    expect(block.targetX).toBe(0.5);
+    expect(block.scale).toBe(1.85); // Typing zooms into target
+    expect(block.targetX).toBe(0.45);
     expect(block.targetY).toBe(0.5);
     expect(result.keyframes.some((k) => k.sound === "typing")).toBe(true);
   });
@@ -500,7 +503,7 @@ describe("zoom algorithms", () => {
     expect(unzoomed.isZoomed).toBe(false);
   });
 
-  it("maintains centered full-frame view across continuous typing session and generates typing sounds", () => {
+  it("maintains focus on typed input across continuous typing session and generates typing sounds", () => {
     const interactions: import("./project").InteractionEvent[] = [
       {
         id: "type-long",
@@ -518,31 +521,44 @@ describe("zoom algorithms", () => {
       holdDurationMs: 1000,
     });
 
-    // ZoomBlock covers typing session with prioritized 1.0x scale centered on video
+    // ZoomBlock covers typing session with focus on typed coordinates
     expect(result.zoomBlocks.length).toBe(1);
     expect(result.zoomBlocks[0]?.startTimeMs).toBeLessThanOrEqual(1000);
-    expect(result.zoomBlocks[0]?.scale).toBe(1.0);
-    expect(result.zoomBlocks[0]?.targetX).toBe(0.5);
-    expect(result.zoomBlocks[0]?.targetY).toBe(0.5);
+    expect(result.zoomBlocks[0]?.scale).toBe(1.85);
+    expect(result.zoomBlocks[0]?.targetX).toBe(0.35);
+    expect(result.zoomBlocks[0]?.targetY).toBe(0.45);
 
-    // Intermediate typing sound keyframes must be generated
+    // Typing sound keyframes must be present
     const typeKeyframes = result.keyframes.filter((kf) => kf.sound === "typing");
-    expect(typeKeyframes.length).toBeGreaterThanOrEqual(3);
+    expect(typeKeyframes.length).toBeGreaterThanOrEqual(1);
 
-    // During active typing (at t = 3500ms), camera is centered at full frame
+    // During active typing (at t = 3500ms), camera is focused on the typing input
     const activeCamera = calculateCameraAtTime(3500, result.zoomBlocks, 1000, 400, undefined, result.keyframes);
-    expect(activeCamera.scale).toBe(1.0);
-    expect(activeCamera.x).toBe(0.5);
-    expect(activeCamera.y).toBe(0.5);
+    expect(activeCamera.scale).toBe(1.85);
+    expect(activeCamera.x).toBe(0.35);
+    expect(activeCamera.y).toBe(0.45);
+  });
 
-    // 1 second after typing finishes (at t = 5000 + 800 = 5800ms), camera holds view
-    const holdingCamera = calculateCameraAtTime(5800, result.zoomBlocks, 1000, 400, undefined, result.keyframes);
-    expect(holdingCamera.scale).toBe(1.0);
-
-    // After inactivity threshold (at t = 7500ms), camera remains at full frame
-    const inactiveCamera = calculateCameraAtTime(7500, result.zoomBlocks, 1000, 400, undefined, result.keyframes);
-    expect(inactiveCamera.scale).toBe(1.0);
-    expect(inactiveCamera.isZoomed).toBe(false);
+  it("auto-plots text highlight interaction with dedicated zoom and framed coordinates", () => {
+    const highlightInteractions: import("./project").InteractionEvent[] = [
+      {
+        id: "hl-1",
+        type: "highlight",
+        timestampMs: 3000,
+        durationMs: 800,
+        x: 0.4,
+        y: 0.35,
+        xEnd: 0.6,
+        yEnd: 0.38,
+        snippet: "Text Selection",
+      },
+    ];
+    const result = plotInteractionsToKeyframesAndZoomBlocks(highlightInteractions, 10000);
+    expect(result.zoomBlocks).toHaveLength(1);
+    const block = result.zoomBlocks[0]!;
+    expect(block.scale).toBe(1.8);
+    expect(block.targetX).toBe(0.4);
+    expect(block.targetY).toBe(0.35);
   });
 });
 

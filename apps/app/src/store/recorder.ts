@@ -42,6 +42,14 @@ interface RecorderStore {
   stopRecording: () => Promise<ProjectSummary | null>;
   cancelRecording: () => void;
   recordClick: (x: number, y: number, button?: "left" | "right" | "middle") => void;
+  recordHighlight: (
+    startX: number,
+    startY: number,
+    endX: number,
+    endY: number,
+    startMs: number,
+    durationMs: number,
+  ) => void;
   recordTyping: (x: number, y: number, snippet?: string, existingId?: string) => void;
   recordCursorPoint: (x: number, y: number) => void;
 }
@@ -207,6 +215,33 @@ export const useRecorder = create<RecorderStore>((set, get) => ({
       clicks: [...s.clicks, newClick],
       interactions: [...s.interactions, newInteraction],
       cursorTrajectory: [...s.cursorTrajectory, point],
+    }));
+  },
+
+  recordHighlight: (startX, startY, endX, endY, startMs, durationMs) => {
+    if (get().state !== "recording") return;
+    const clampedStartX = Math.min(1, Math.max(0, startX));
+    const clampedStartY = Math.min(1, Math.max(0, startY));
+    const clampedEndX = Math.min(1, Math.max(0, endX));
+    const clampedEndY = Math.min(1, Math.max(0, endY));
+    const centerX = (clampedStartX + clampedEndX) / 2;
+    const centerY = (clampedStartY + clampedEndY) / 2;
+    const hlId = `hl-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+
+    const newInteraction: InteractionEvent = {
+      id: hlId,
+      type: "highlight",
+      timestampMs: startMs,
+      durationMs,
+      x: centerX,
+      y: centerY,
+      xEnd: clampedEndX,
+      yEnd: clampedEndY,
+      snippet: "Text Highlight",
+    };
+
+    set((s) => ({
+      interactions: [...s.interactions, newInteraction],
     }));
   },
 
@@ -422,11 +457,28 @@ export const useRecorder = create<RecorderStore>((set, get) => ({
 
     // Attach native OS-level global mouse & typing listeners for full screen capture outside the app
     void platform.startGlobalInputCapture?.();
+    let globalDragStart: { x: number; y: number; timeMs: number } | null = null;
     const offClick = platform.onGlobalClick?.((payload) => {
       if (get().state !== "recording") return;
       lastX = payload.norm_x;
       lastY = payload.norm_y;
+      const nowRel = Math.max(0, Date.now() - recordingStartTimestamp);
+      globalDragStart = { x: payload.norm_x, y: payload.norm_y, timeMs: nowRel };
       get().recordClick(payload.norm_x, payload.norm_y, (payload.button as "left" | "right" | "middle") || "left");
+    });
+    const offMouseUp = platform.onGlobalMouseUp?.((payload) => {
+      if (get().state !== "recording") return;
+      lastX = payload.norm_x;
+      lastY = payload.norm_y;
+      if (globalDragStart) {
+        const nowRel = Math.max(0, Date.now() - recordingStartTimestamp);
+        const dist = Math.hypot(payload.norm_x - globalDragStart.x, payload.norm_y - globalDragStart.y);
+        const dur = Math.max(0, nowRel - globalDragStart.timeMs);
+        if (dist >= 0.05 && dur >= 200) {
+          get().recordHighlight(globalDragStart.x, globalDragStart.y, payload.norm_x, payload.norm_y, globalDragStart.timeMs, dur);
+        }
+        globalDragStart = null;
+      }
     });
     const offMove = platform.onGlobalMouseMove?.((payload) => {
       if (get().state !== "recording") return;
@@ -510,19 +562,37 @@ export const useRecorder = create<RecorderStore>((set, get) => ({
       }
     };
 
-    const handleClick = (e: MouseEvent) => {
-      if (get().state === "recording") {
-        // Ignore clicks inside the DomoLens recorder HUD/action controls
-        const target = e.target as HTMLElement | null;
-        if (target && target.closest("[data-recorder-ui]")) {
-          return;
-        }
+    let inAppDragStart: { x: number; y: number; timeMs: number } | null = null;
+    const handleMouseDown = (e: MouseEvent) => {
+      if (get().state !== "recording") return;
+      const target = e.target as HTMLElement | null;
+      if (target && target.closest("[data-recorder-ui]")) {
+        return;
+      }
 
-        const x = e.clientX / window.innerWidth;
-        const y = e.clientY / window.innerHeight;
-        lastX = x;
-        lastY = y;
-        get().recordClick(x, y, e.button === 2 ? "right" : "left");
+      const x = e.clientX / window.innerWidth;
+      const y = e.clientY / window.innerHeight;
+      lastX = x;
+      lastY = y;
+      const nowRel = Math.max(0, Date.now() - recordingStartTimestamp);
+      inAppDragStart = { x, y, timeMs: nowRel };
+      get().recordClick(x, y, e.button === 2 ? "right" : "left");
+    };
+
+    const handleMouseUp = (e: MouseEvent) => {
+      if (get().state !== "recording") return;
+      const x = e.clientX / window.innerWidth;
+      const y = e.clientY / window.innerHeight;
+      lastX = x;
+      lastY = y;
+      if (inAppDragStart) {
+        const nowRel = Math.max(0, Date.now() - recordingStartTimestamp);
+        const dist = Math.hypot(x - inAppDragStart.x, y - inAppDragStart.y);
+        const dur = Math.max(0, nowRel - inAppDragStart.timeMs);
+        if (dist >= 0.05 && dur >= 200) {
+          get().recordHighlight(inAppDragStart.x, inAppDragStart.y, x, y, inAppDragStart.timeMs, dur);
+        }
+        inAppDragStart = null;
       }
     };
 
@@ -554,11 +624,13 @@ export const useRecorder = create<RecorderStore>((set, get) => ({
 
     const cleanupListeners = () => {
       window.removeEventListener("mousemove", handlePointerMove);
-      window.removeEventListener("mousedown", handleClick);
+      window.removeEventListener("mousedown", handleMouseDown);
+      window.removeEventListener("mouseup", handleMouseUp);
       window.removeEventListener("keydown", handleKeyDown);
       void platform.stopGlobalInputCapture?.();
       offHud?.();
       offClick?.();
+      offMouseUp?.();
       offMove?.();
       offTyping?.();
       if (stopMotionTracker) {
@@ -571,7 +643,8 @@ export const useRecorder = create<RecorderStore>((set, get) => ({
     recorderCleanupFn = cleanupListeners;
 
     window.addEventListener("mousemove", handlePointerMove, { passive: true });
-    window.addEventListener("mousedown", handleClick);
+    window.addEventListener("mousedown", handleMouseDown);
+    window.addEventListener("mouseup", handleMouseUp);
     window.addEventListener("keydown", handleKeyDown);
   },
 

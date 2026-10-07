@@ -67,6 +67,7 @@ export function ToolsSidebar() {
   const updateAudioTrack = useEditor((s) => s.updateAudioTrack);
   const deleteAudioTrack = useEditor((s) => s.deleteAudioTrack);
   const updateAudioSettings = useEditor((s) => s.updateAudioSettings);
+  const autoAfx = useEditor((s) => s.autoAfx);
   const playClickSoundPreview = useEditor((s) => s.playClickSoundPreview);
   const playTypingSoundPreview = useEditor((s) => s.playTypingSoundPreview);
   const updateLooks = useEditor((s) => s.updateLooks);
@@ -229,7 +230,7 @@ export function ToolsSidebar() {
                   className="w-full rounded-lg bg-white py-2 text-center text-xs font-bold text-black hover:bg-neutral-200 transition-colors shadow-sm flex items-center justify-center gap-1.5"
                 >
                   <Sparkles className="size-3.5 fill-black" />
-                  Auto-Plot (Zoom In & Out)
+                  Auto Zoom (In & Out)
                 </button>
 
                 <button
@@ -908,6 +909,25 @@ export function ToolsSidebar() {
         {/* TAB 3: AUDIO & MUSIC */}
         {activeToolTab === "audio" && (
           <div className="space-y-4">
+            {/* 0. Auto AFX Master Generator */}
+            <div className="rounded-xl border border-neutral-700 bg-neutral-900 p-3 shadow-sm">
+              <div className="flex items-center gap-2 mb-1.5">
+                <Volume2 className="size-4 text-white" />
+                <span className="font-semibold text-white text-xs">Auto AFX Generator</span>
+              </div>
+              <p className="text-[11px] text-fg-muted leading-relaxed mb-3">
+                Automatically attaches tactile click bops to clicks, clean mechanical typing sounds, and enables background music ducking.
+              </p>
+              <button
+                type="button"
+                onClick={autoAfx}
+                className="w-full rounded-lg bg-white py-2 text-center text-xs font-bold text-black hover:bg-neutral-200 transition-colors shadow-sm flex items-center justify-center gap-1.5"
+              >
+                <Sparkles className="size-3.5 fill-black" />
+                Apply Auto AFX
+              </button>
+            </div>
+
             {/* 1. Click Sound Effects */}
             <div className="rounded-xl border border-ink-800 bg-ink-900/80 p-3 shadow-sm space-y-3">
               <div className="flex items-center justify-between">

@@ -187,7 +187,8 @@ export function calculateDeadzoneCamera(
 
 /**
  * Calculates adaptive zoom scale and hold parameters based on user interaction intent.
- * When typing occurs, prioritizes zooming out to 1.0x (full frame) centered on video.
+ * Typing zooms in smoothly centered on the input area.
+ * Highlights zoom in smoothly centered on the highlighted selection.
  */
 export function calculateIntentZoom(
   event: import("./project").InteractionEvent | import("./project").ClickEvent,
@@ -195,10 +196,18 @@ export function calculateIntentZoom(
 ): { scale: number; holdMs: number; offsetY: number } {
   const isTyping = "type" in event && event.type === "typing";
   if (isTyping) {
-    const zoomOut = options?.typingZoomOut ?? true;
+    const zoomOut = options?.typingZoomOut === true;
     return {
-      scale: zoomOut ? 1.0 : 2.1,
-      holdMs: zoomOut ? 1600 : 2600,
+      scale: zoomOut ? 1.0 : 1.85,
+      holdMs: zoomOut ? 1600 : 2200,
+      offsetY: 0,
+    };
+  }
+  const isHighlight = "type" in event && event.type === "highlight";
+  if (isHighlight) {
+    return {
+      scale: 1.80,
+      holdMs: 2400,
       offsetY: 0,
     };
   }
@@ -940,7 +949,8 @@ export function plotInteractionsToKeyframesAndZoomBlocks(
     const lastEvt = cluster[cluster.length - 1]!;
 
     const hasTyping = cluster.some((e) => "type" in e && e.type === "typing");
-    const isTypingCluster = hasTyping && (options.typingZoomOut ?? true);
+    const isTypingCluster = hasTyping && options.typingZoomOut === true;
+    const highlightEvt = cluster.find((e) => "type" in e && e.type === "highlight");
     const intent = isTypingCluster
       ? calculateIntentZoom(
           { id: firstEvt.id, type: "typing", timestampMs: firstEvt.timestampMs, x: firstEvt.x, y: firstEvt.y },
@@ -948,7 +958,7 @@ export function plotInteractionsToKeyframesAndZoomBlocks(
         )
       : calculateIntentZoom(firstEvt, { typingZoomOut: options.typingZoomOut });
     const clusterScale = isTypingCluster ? 1.0 : (options.scale ?? intent.scale);
-    const clusterHoldMs = options.holdDurationMs ?? (isTypingCluster ? 1600 : 1000);
+    const clusterHoldMs = options.holdDurationMs ?? (isTypingCluster ? 1600 : highlightEvt ? 2000 : hasTyping ? 1800 : 1000);
 
     const rawStart = Math.max(0, firstEvt.timestampMs - leadInMs);
     let startMs = rawStart;
@@ -986,9 +996,10 @@ export function plotInteractionsToKeyframesAndZoomBlocks(
     const span = endMs - startMs;
     if (span < 800) continue;
 
+    const focalEvt = highlightEvt || firstEvt;
     const clampedFirst = isTypingCluster
       ? { x: 0.5, y: 0.5 }
-      : clampCameraToBounds(firstEvt.x, firstEvt.y + intent.offsetY, clusterScale, "center");
+      : clampCameraToBounds(focalEvt.x, focalEvt.y + intent.offsetY, clusterScale, "center");
 
     // Check if next cluster is eligible for continuous glide
     const maxGlideGap = options.maxGlideGapMs ?? 3800;
@@ -1043,8 +1054,10 @@ export function plotInteractionsToKeyframesAndZoomBlocks(
         targetY: clampedFirst.y,
         easing: "spring",
         ...(firstEvt.type === "typing"
-          ? { sound: "typing", soundPreset: "mechanical", soundVolume: 0.65 }
-          : { sound: "click", soundPreset: "bop", soundVolume: 0.70 }),
+          ? { sound: "typing", soundPreset: "mechanical", soundVolume: 0.55 }
+          : firstEvt.type === "highlight"
+            ? { sound: "click", soundPreset: "bop", soundVolume: 0.40 }
+            : { sound: "click", soundPreset: "bop", soundVolume: 0.70 }),
       });
 
       // Video Editor Showcase Arc: after focusing tightly on the button click,
@@ -1068,39 +1081,41 @@ export function plotInteractionsToKeyframesAndZoomBlocks(
       }
     }
 
-    // If first interaction is a continuous typing session with durationMs > 600ms,
-    // add intermediate tracking keyframes across the typing duration with typing sound effects
-    if (firstEvt.type === "typing" && (firstEvt.durationMs ?? 0) > 600) {
+    // If first interaction is a continuous typing session with durationMs > 800ms,
+    // add at most ONE intermediate keyframe to prevent keyframe spam/lag
+    if (firstEvt.type === "typing" && (firstEvt.durationMs ?? 0) > 800) {
       const typeDuration = firstEvt.durationMs!;
-      const step = Math.max(300, Math.min(600, Math.round(typeDuration / 3)));
-      for (let tOffset = step; tOffset <= typeDuration; tOffset += step) {
-        const typingTime = firstEvt.timestampMs + tOffset;
-        if (typingTime < endMs - effLeadOut - 100) {
-          keyframes.push({
-            id: `kf-type-${firstEvt.id}-${tOffset}`,
-            timeMs: typingTime,
-            scale: clusterScale,
-            targetX: clampedFirst.x,
-            targetY: clampedFirst.y,
-            easing: "cubic",
-            sound: "typing",
-            soundPreset: "mechanical",
-            soundVolume: 0.60,
-          });
-        }
+      const midTime = firstEvt.timestampMs + Math.round(typeDuration / 2);
+      if (midTime < endMs - effLeadOut - 100) {
+        keyframes.push({
+          id: `kf-type-${firstEvt.id}-mid`,
+          timeMs: midTime,
+          scale: clusterScale,
+          targetX: clampedFirst.x,
+          targetY: clampedFirst.y,
+          easing: "cubic",
+        });
       }
     }
 
-    // Intermediate tracking keyframes for multiple actions in cluster
+    // Intermediate tracking keyframes for multiple actions in cluster (decimated to prevent lag)
+    let lastTrackTime = firstEvt.timestampMs;
     for (let j = 1; j < cluster.length; j++) {
       const midEvt = cluster[j]!;
-      const isMidTyping = midEvt.type === "typing" && (options.typingZoomOut ?? true);
+      const isMidTyping = midEvt.type === "typing" && options.typingZoomOut === true;
       const clampedMid = isMidTyping
         ? { x: 0.5, y: 0.5 }
         : clampCameraToBounds(midEvt.x, midEvt.y, clusterScale, "center");
       const trackMin = firstEvt.timestampMs + 60;
       const trackMax = Math.max(trackMin, endMs - effLeadOut - 100);
       const trackTime = Math.max(trackMin, Math.min(trackMax, midEvt.timestampMs));
+
+      // Decimate micro-keyframes: enforce at least 300ms gap between consecutive keyframes unless significant movement > 0.08
+      const distFromPrev = Math.hypot(midEvt.x - firstEvt.x, midEvt.y - firstEvt.y);
+      if (trackTime - lastTrackTime < 300 && distFromPrev < 0.08) {
+        continue;
+      }
+      lastTrackTime = trackTime;
 
       keyframes.push({
         id: `kf-track-${midEvt.id}`,
@@ -1110,21 +1125,34 @@ export function plotInteractionsToKeyframesAndZoomBlocks(
         targetY: clampedMid.y,
         easing: "spring",
         ...(midEvt.type === "typing"
-          ? { sound: "typing", soundPreset: "mechanical", soundVolume: 0.65 }
+          ? { sound: "typing", soundPreset: "mechanical", soundVolume: 0.55 }
           : { sound: "click", soundPreset: "bop", soundVolume: 0.70 }),
       });
     }
 
     // Highlight / Drag Trajectory Detection:
-    // If the cursor traversed a sustained path (> 0.14 normalized screen distance) during the interaction
-    // (e.g. dragging across text to highlight, or moving an element across the screen),
-    // add an intentional guided camera shift keyframe along the drag vector.
-    if (options.cursorTrajectory && options.cursorTrajectory.length > 0) {
+    // If the cluster has a highlight event or the cursor traversed a sustained path (> 0.08 normalized distance)
+    // during the interaction, add an intentional guided camera shift keyframe along the drag vector.
+    if (highlightEvt && highlightEvt.xEnd !== undefined && highlightEvt.yEnd !== undefined) {
+      const shiftTime = Math.round(highlightEvt.timestampMs + (highlightEvt.durationMs ?? 600) / 2);
+      const clampedShift = clampCameraToBounds(highlightEvt.xEnd, highlightEvt.yEnd, clusterScale, "center");
+      if (shiftTime > firstEvt.timestampMs + 80 && shiftTime < endMs - effLeadOut - 80) {
+        keyframes.push({
+          id: `kf-highlight-shift-${highlightEvt.id}`,
+          timeMs: shiftTime,
+          scale: clusterScale,
+          targetX: clampedShift.x,
+          targetY: clampedShift.y,
+          easing: "cubic",
+        });
+      }
+    } else if (options.cursorTrajectory && options.cursorTrajectory.length > 0) {
+      const effectiveEnd = Math.max(clusterEndTime, firstEvt.timestampMs + 400);
       const pStart = interpolateCursorAtTime(firstEvt.timestampMs, options.cursorTrajectory, firstEvt.x, firstEvt.y);
-      const pEnd = interpolateCursorAtTime(clusterEndTime, options.cursorTrajectory, lastEvt.x, lastEvt.y);
+      const pEnd = interpolateCursorAtTime(effectiveEnd, options.cursorTrajectory, lastEvt.x, lastEvt.y);
       const sweepDist = Math.hypot(pEnd.x - pStart.x, pEnd.y - pStart.y);
-      if (sweepDist > 0.14) {
-        const shiftTime = Math.round((firstEvt.timestampMs + clusterEndTime) / 2);
+      if (sweepDist > 0.08) {
+        const shiftTime = Math.round((firstEvt.timestampMs + effectiveEnd) / 2);
         const clampedShift = clampCameraToBounds(pEnd.x, pEnd.y, clusterScale, "center");
         if (shiftTime > firstEvt.timestampMs + 80 && shiftTime < endMs - effLeadOut - 80) {
           keyframes.push({
@@ -1169,7 +1197,7 @@ export function plotInteractionsToKeyframesAndZoomBlocks(
       // Connect seamlessly to next cluster via continuous glide
       const nextFirst = nextCluster![0]!;
       const nextHasTyping = nextCluster!.some((e) => "type" in e && e.type === "typing");
-      const nextIsTyping = nextHasTyping && (options.typingZoomOut ?? true);
+      const nextIsTyping = nextHasTyping && options.typingZoomOut === true;
       const nextIntent = nextIsTyping
         ? calculateIntentZoom(
             { id: nextFirst.id, type: "typing", timestampMs: nextFirst.timestampMs, x: nextFirst.x, y: nextFirst.y },
@@ -1206,7 +1234,7 @@ export function plotInteractionsToKeyframesAndZoomBlocks(
         targetY: clampedNext.y,
         easing: "spring",
         ...(nextFirst.type === "typing"
-          ? { sound: "typing", soundPreset: "mechanical", soundVolume: 0.65 }
+          ? { sound: "typing", soundPreset: "mechanical", soundVolume: 0.55 }
           : { sound: "click", soundPreset: "bop", soundVolume: 0.70 }),
       });
 
@@ -1228,10 +1256,24 @@ export function plotInteractionsToKeyframesAndZoomBlocks(
     }
   }
 
-  // Deduplicate and sort keyframes chronologically
-  const uniqueKeyframes = keyframes
+  // Deduplicate and filter out redundant micro-keyframes too close in time
+  const sortedKf = keyframes
     .filter((kf, index, arr) => arr.findIndex((k) => k.id === kf.id) === index)
     .sort((a, b) => a.timeMs - b.timeMs);
+
+  const uniqueKeyframes: import("./project").KeyframeNode[] = [];
+  for (const kf of sortedKf) {
+    const prev = uniqueKeyframes[uniqueKeyframes.length - 1];
+    if (
+      prev &&
+      Math.abs(kf.timeMs - prev.timeMs) < 120 &&
+      Math.abs(kf.scale - prev.scale) < 0.05 &&
+      Math.hypot(kf.targetX - prev.targetX, kf.targetY - prev.targetY) < 0.04
+    ) {
+      continue;
+    }
+    uniqueKeyframes.push(kf);
+  }
 
   return { keyframes: uniqueKeyframes, zoomBlocks };
 }

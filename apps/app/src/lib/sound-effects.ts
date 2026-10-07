@@ -11,6 +11,8 @@ class SoundEffectsEngine {
   private currentMusicUrl: string | null = null;
   private isDucked = false;
   private musicVolume = 0.5;
+  private lastKeystrokeTime = 0;
+  private activeBurstTimers: number[] = [];
 
   private getContext(): AudioContext | null {
     if (typeof window === "undefined") return null;
@@ -72,13 +74,20 @@ class SoundEffectsEngine {
 
   /**
    * Plays a single realistic keystroke sound (mechanical thock, laptop chiclet, or typewriter).
+   * Throttled to prevent buzzing or crackle during fast keystrokes.
    */
   public playKeystroke(
     preset: TypingSoundPreset = "mechanical",
-    volume = 0.6,
+    volume = 0.55,
     isSpaceOrEnter = false,
   ): void {
     if (preset === "none" || volume <= 0) return;
+    const nowTime = typeof performance !== "undefined" ? performance.now() : Date.now();
+    if (nowTime - this.lastKeystrokeTime < 85 && !isSpaceOrEnter) {
+      return;
+    }
+    this.lastKeystrokeTime = nowTime;
+
     const ctx = this.getContext();
     if (!ctx) return;
 
@@ -102,7 +111,7 @@ class SoundEffectsEngine {
     noiseFilter.frequency.setValueAtTime(profile.noiseCutoff * jitter, now);
 
     const noiseGain = ctx.createGain();
-    const peakNoise = Math.min(1.0, volume * 0.45);
+    const peakNoise = Math.min(1.0, volume * 0.40);
     noiseGain.gain.setValueAtTime(peakNoise, now);
     noiseGain.gain.exponentialRampToValueAtTime(0.001, now + 0.015);
 
@@ -119,7 +128,7 @@ class SoundEffectsEngine {
     osc.frequency.exponentialRampToValueAtTime(baseThock * 0.5, now + profile.durationSec);
 
     const bodyGain = ctx.createGain();
-    const peakBody = Math.min(1.0, volume * (isSpaceOrEnter ? 0.7 : 0.5));
+    const peakBody = Math.min(1.0, volume * (isSpaceOrEnter ? 0.65 : 0.45));
     bodyGain.gain.setValueAtTime(peakBody, now);
     bodyGain.gain.exponentialRampToValueAtTime(0.0001, now + profile.durationSec);
 
@@ -131,20 +140,29 @@ class SoundEffectsEngine {
 
   /**
    * Plays a burst of typing keystrokes matching typed text length or count.
+   * Cancels prior bursts to avoid chaotic overlapping sound.
    */
   public playTypingBurst(
-    count = 4,
-    intervalMs = 95,
+    count = 3,
+    intervalMs = 110,
     preset: TypingSoundPreset = "mechanical",
-    volume = 0.6,
+    volume = 0.55,
   ): void {
     if (preset === "none" || volume <= 0) return;
-    for (let i = 0; i < count; i++) {
-      const delay = i * intervalMs + (Math.random() - 0.5) * 35;
-      setTimeout(() => {
-        const isLast = i === count - 1;
+    if (typeof window === "undefined") return;
+
+    // Clear any previous burst timers so bursts never pile up into chaotic crackle
+    this.activeBurstTimers.forEach((t) => window.clearTimeout(t));
+    this.activeBurstTimers = [];
+
+    const safeCount = Math.min(4, Math.max(1, count));
+    for (let i = 0; i < safeCount; i++) {
+      const delay = i * intervalMs;
+      const tId = window.setTimeout(() => {
+        const isLast = i === safeCount - 1;
         this.playKeystroke(preset, volume, isLast);
-      }, Math.max(0, delay));
+      }, delay);
+      this.activeBurstTimers.push(tId);
     }
   }
 

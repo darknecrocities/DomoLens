@@ -85,6 +85,8 @@ export function Timeline({ project }: TimelineProps) {
   const addTextOverlay = useEditor((s) => s.addTextOverlay);
   const addAudioTrack = useEditor((s) => s.addAudioTrack);
   const plotInteractions = useEditor((s) => s.plotInteractions);
+  const autoZoom = useEditor((s) => s.autoZoom);
+  const autoAfx = useEditor((s) => s.autoAfx);
   const undo = useEditor((s) => s.undo);
   const redo = useEditor((s) => s.redo);
 
@@ -151,17 +153,28 @@ export function Timeline({ project }: TimelineProps) {
           <TimelineTimeDisplay durationMs={durationMs} />
         </div>
 
-        {/* Multi-Track Editing Actions: Auto-Plot, Keyframe, Split, Text, Music, Undo/Redo */}
+        {/* Multi-Track Editing Actions: Auto Zoom, Auto AFX, Keyframe, Split, Text, Music, Undo/Redo */}
         <div className="flex shrink-0 items-center gap-1 sm:gap-1.5">
-          {/* Quick Auto-Plot Button */}
+          {/* Auto Zoom Button */}
           <button
             type="button"
-            onClick={() => plotInteractions({ holdDurationMs: 2400, scale: 1.85 })}
+            onClick={() => autoZoom({ holdDurationMs: 1800, scale: 1.85 })}
             className="flex items-center gap-1.5 rounded-lg border border-neutral-700 bg-neutral-800 px-2 sm:px-2.5 py-1 text-xs font-semibold text-white hover:bg-neutral-700 hover:border-white shadow-sm transition-all"
-            title="Auto-plot 2-3s camera zooms on all clicks and typing"
+            title="Auto Zoom: Automatically generates smooth camera zooms centered on typing, clicks, and text highlights"
           >
             <Sparkles className="size-3.5 text-white" />
-            <span className="hidden sm:inline">Auto-Plot</span>
+            <span className="hidden sm:inline">Auto Zoom</span>
+          </button>
+
+          {/* Auto AFX Button */}
+          <button
+            type="button"
+            onClick={() => autoAfx()}
+            className="flex items-center gap-1.5 rounded-lg border border-neutral-700 bg-neutral-800 px-2 sm:px-2.5 py-1 text-xs font-semibold text-white hover:bg-neutral-700 hover:border-white shadow-sm transition-all"
+            title="Auto AFX: Automatically synchronizes click bops, typing audio, and music ducking"
+          >
+            <Volume2 className="size-3.5 text-white" />
+            <span className="hidden sm:inline">Auto AFX</span>
           </button>
 
           <div className="mx-0.5 h-4 w-px bg-ink-800" />
