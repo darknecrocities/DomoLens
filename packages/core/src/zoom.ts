@@ -899,11 +899,12 @@ export function plotInteractionsToKeyframesAndZoomBlocks(
   const leadInMs = options.leadInMs ?? 1000;
   const leadOutMs = options.leadOutMs ?? 400;
   const minDuration = options.minBlockDurationMs ?? 1000;
-  // Actions within 1.5s remain in continuous zoom; if no activity for 1s, camera shifts back to full frame
-  const clusterGapMs = options.inactivityResetMs ?? 1500;
+  // Actions within 1.2s of each other stay in one zoom (camera pans between them);
+  // after 1.2s with no activity the camera returns to full frame
+  const clusterGapMs = options.inactivityResetMs ?? 1200;
 
   const sorted = [...validInteractions].sort((a, b) => a.timestampMs - b.timestampMs);
-  const maxClusterDist = options.maxClusterDistance ?? 0.22;
+  const maxClusterDist = options.maxClusterDistance ?? Number.POSITIVE_INFINITY;
   const minRestMs = options.minRestMs ?? 800;
 
   // Group events into clusters based on temporal proximity and spatial proximity
@@ -919,8 +920,9 @@ export function plotInteractionsToKeyframesAndZoomBlocks(
       const timeDiff = event.timestampMs - prevEffectiveEnd;
       const spatialDist = Math.hypot(event.x - prev.x, event.y - prev.y);
 
-      // Rapid consecutive actions in the same local region stay clustered
-      // Distant actions (> 0.22 screen distance) break into separate zoom cycles
+      // Consecutive actions within the inactivity window stay in ONE zoom session:
+      // the camera pans to each new click instead of zooming out and back in.
+      // Distance only splits clusters when explicitly requested via maxClusterDistance.
       if (timeDiff <= clusterGapMs && spatialDist <= maxClusterDist) {
         currentCluster.push(event);
       } else {
@@ -954,7 +956,7 @@ export function plotInteractionsToKeyframesAndZoomBlocks(
         )
       : calculateIntentZoom(firstEvt, { typingZoomOut: options.typingZoomOut });
     const clusterScale = isTypingCluster ? 1.0 : (options.scale ?? intent.scale);
-    const clusterHoldMs = options.holdDurationMs ?? (isTypingCluster ? 1600 : highlightEvt ? 2000 : hasTyping ? 1800 : 1000);
+    const clusterHoldMs = options.holdDurationMs ?? (isTypingCluster ? 1600 : highlightEvt ? 2000 : hasTyping ? 1800 : 1200);
 
     const rawStart = Math.max(0, firstEvt.timestampMs - leadInMs);
     let startMs = rawStart;
@@ -1098,6 +1100,9 @@ export function plotInteractionsToKeyframesAndZoomBlocks(
 
     // Intermediate tracking keyframes for multiple actions in cluster (decimated to prevent lag)
     let lastTrackTime = firstEvt.timestampMs;
+    let lastTargetX = clampedFirst.x;
+    let lastTargetY = clampedFirst.y;
+
     for (let j = 1; j < cluster.length; j++) {
       const midEvt = cluster[j]!;
       const isMidTyping = midEvt.type === "typing" && options.typingZoomOut === true;
@@ -1108,12 +1113,35 @@ export function plotInteractionsToKeyframesAndZoomBlocks(
       const trackMax = Math.max(trackMin, endMs - effLeadOut - 100);
       const trackTime = Math.max(trackMin, Math.min(trackMax, midEvt.timestampMs));
 
-      // Decimate micro-keyframes: enforce at least 300ms gap between consecutive keyframes unless significant movement > 0.08
-      const distFromPrev = Math.hypot(midEvt.x - firstEvt.x, midEvt.y - firstEvt.y);
-      if (trackTime - lastTrackTime < 300 && distFromPrev < 0.08) {
+      // Shift camera directly to consecutive actions in cluster:
+      // only skip if two actions are virtually identical in time (< 150ms) and position (< 0.03)
+      const prevEvt = cluster[j - 1]!;
+      const distFromPrev = Math.hypot(midEvt.x - prevEvt.x, midEvt.y - prevEvt.y);
+      if (trackTime - lastTrackTime < 150 && distFromPrev < 0.03) {
         continue;
       }
+
+      // If there is a noticeable gap (> 400ms) between consecutive actions, hold camera steady on previous
+      // action before briskly gliding to the next action
+      const gap = trackTime - lastTrackTime;
+      if (gap > 400 && distFromPrev > 0.04) {
+        const panSpan = Math.min(450, Math.round(gap * 0.55));
+        const panStart = trackTime - panSpan;
+        if (panStart > lastTrackTime + 80) {
+          keyframes.push({
+            id: `kf-hold-${prevEvt.id}-before-${midEvt.id}`,
+            timeMs: panStart,
+            scale: clusterScale,
+            targetX: lastTargetX,
+            targetY: lastTargetY,
+            easing: "cubic",
+          });
+        }
+      }
+
       lastTrackTime = trackTime;
+      lastTargetX = clampedMid.x;
+      lastTargetY = clampedMid.y;
 
       keyframes.push({
         id: `kf-track-${midEvt.id}`,

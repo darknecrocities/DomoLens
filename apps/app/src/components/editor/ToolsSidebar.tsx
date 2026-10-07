@@ -77,7 +77,7 @@ export function ToolsSidebar() {
   const selectText = useEditor((s) => s.selectText);
   const setExportModalOpen = useEditor((s) => s.setExportModalOpen);
 
-  const [holdDurationSec, setHoldDurationSec] = useState(1.0);
+  const [holdDurationSec, setHoldDurationSec] = useState(1.2);
   const [zoomScale, setZoomScale] = useState(1.85);
 
   if (!isRightSidebarOpen) {
@@ -172,7 +172,7 @@ export function ToolsSidebar() {
                 )}
               </div>
               <p className="text-[11px] text-fg-muted leading-relaxed mb-3">
-                Starts smooth zoom 0.5s before click or typing, auto-tracks the cursor, and shifts back to full-screen frame after 1.0s of inactivity.
+                Starts smooth zoom 0.5s before click or typing, auto-tracks the cursor, and shifts back to full-screen frame after 1.2s of inactivity.
               </p>
 
               <div className="space-y-2 mb-3 bg-ink-950/60 rounded-lg p-2 border border-ink-800">
@@ -224,6 +224,7 @@ export function ToolsSidebar() {
                   onClick={() =>
                     plotInteractions({
                       holdDurationMs: Math.round(holdDurationSec * 1000),
+                      inactivityResetMs: Math.round(holdDurationSec * 1000),
                       scale: zoomScale,
                     })
                   }

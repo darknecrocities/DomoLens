@@ -108,12 +108,14 @@ interface EditorState {
   // Interaction auto-plotting (translates recorded click/typing data into 2-3s zoom loops with keyframes)
   plotInteractions: (options?: {
     holdDurationMs?: number;
+    inactivityResetMs?: number;
     scale?: number;
     continuousGlide?: boolean;
     maxGlideGapMs?: number;
   }) => void;
   autoZoom: (options?: {
     holdDurationMs?: number;
+    inactivityResetMs?: number;
     scale?: number;
     continuousGlide?: boolean;
     maxGlideGapMs?: number;
@@ -566,10 +568,9 @@ export const useEditor = create<EditorState>((set, get) => ({
       }
     }
 
-    // Ensure the current moment has a zoom applied immediately if playhead is active
+    // If no interactions exist at all, apply zoom at the active playhead
     const currentMs = state.currentTimeMs;
-    const hasEventNearCurrent = eventsToUse.some((e) => Math.abs(e.timestampMs - currentMs) <= 800);
-    if (currentMs > 200 && currentMs < state.durationMs - 350 && !hasEventNearCurrent) {
+    if (eventsToUse.length === 0 && currentMs > 200 && currentMs < state.durationMs - 350) {
       const cur = interpolateCursorAtTime(currentMs, state.project.cursorTrajectory, 0.5, 0.5);
       eventsToUse.push({
         id: `act-now-${Date.now()}`,
@@ -588,9 +589,9 @@ export const useEditor = create<EditorState>((set, get) => ({
       {
         continuousGlide: false,
         leadInMs: 1000,
-        holdDurationMs: 1800,
+        holdDurationMs: 1200,
+        inactivityResetMs: 1200,
         scale: 1.85,
-        maxClusterDistance: 0.22,
         minRestMs: 800,
         enableRevealDip: false,
         cursorTrajectory: state.project.cursorTrajectory,

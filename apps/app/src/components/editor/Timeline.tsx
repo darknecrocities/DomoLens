@@ -158,7 +158,7 @@ export function Timeline({ project }: TimelineProps) {
           {/* Auto Zoom Button */}
           <button
             type="button"
-            onClick={() => autoZoom({ holdDurationMs: 1800, scale: 1.85 })}
+            onClick={() => autoZoom({ holdDurationMs: 1200, inactivityResetMs: 1200, scale: 1.85 })}
             className="flex items-center gap-1.5 rounded-lg border border-neutral-700 bg-neutral-800 px-2 sm:px-2.5 py-1 text-xs font-semibold text-white hover:bg-neutral-700 hover:border-white shadow-sm transition-all"
             title="Auto Zoom: Automatically generates smooth camera zooms centered on typing, clicks, and text highlights"
           >

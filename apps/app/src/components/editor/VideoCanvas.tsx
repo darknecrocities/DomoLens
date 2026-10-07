@@ -61,27 +61,21 @@ export function VideoCanvas({ project, currentTimeMs: propTimeMs }: VideoCanvasP
   }, [project.cursorTrajectory, looks.cursorSmoothing, clicks]);
 
   // Calculate live camera frame with real-time mouse cursor auto-tracking and keyframes
-  const camera = useMemo(() => {
-    const raw = calculateCameraAtTime(
-      currentTimeMs,
-      zoomBlocks,
-      1000,
-      400,
-      smoothedTrajectory,
-      keyframes,
-      {
-        autoTrackCursor: Boolean(looks.autoTrackCursor),
-        autoTrackScale: looks.autoTrackScale || 1.6,
-        cursorSmoothing: looks.cursorSmoothing || "smooth",
-        clicks,
-        alreadySmoothed: true,
-      },
-    );
-    // Frame-fill clamp: never translate past the video edge (prevents black void)
-    const filled = clampCameraToBounds(raw.x, raw.y, raw.scale, "strict");
-    return { ...raw, x: filled.x, y: filled.y };
+  const computeCamera = useMemo(() => {
+    const opts = {
+      autoTrackCursor: Boolean(looks.autoTrackCursor),
+      autoTrackScale: looks.autoTrackScale || 1.6,
+      cursorSmoothing: looks.cursorSmoothing || "smooth",
+      clicks,
+      alreadySmoothed: true,
+    } as const;
+    return (tMs: number) => {
+      const raw = calculateCameraAtTime(tMs, zoomBlocks, 1000, 400, smoothedTrajectory, keyframes, opts);
+      // Frame-fill clamp: never translate past the video edge (prevents black void)
+      const filled = clampCameraToBounds(raw.x, raw.y, raw.scale, "strict");
+      return { ...raw, x: filled.x, y: filled.y };
+    };
   }, [
-    currentTimeMs,
     zoomBlocks,
     smoothedTrajectory,
     keyframes,
@@ -90,6 +84,11 @@ export function VideoCanvas({ project, currentTimeMs: propTimeMs }: VideoCanvasP
     looks.cursorSmoothing,
     clicks,
   ]);
+  const computeCameraRef = useRef(computeCamera);
+  computeCameraRef.current = computeCamera;
+  const zoomLayerRef = useRef<HTMLDivElement>(null);
+
+  const camera = useMemo(() => computeCamera(currentTimeMs), [computeCamera, currentTimeMs]);
 
   // Real-time video effects calculation (Spotlight, Vignette, Blur, Color Grade, Glow, Speed)
   const effectsState = useMemo(() => {
@@ -132,6 +131,7 @@ export function VideoCanvas({ project, currentTimeMs: propTimeMs }: VideoCanvasP
     let active = true;
     let rVfcId: number | null = null;
     let rafId: number | null = null;
+    let lastStoreWrite = 0;
 
     const onFrame = () => {
       if (!active) return;
@@ -150,7 +150,19 @@ export function VideoCanvas({ project, currentTimeMs: propTimeMs }: VideoCanvasP
         return;
       }
 
-      useEditor.getState().setCurrentTime(frameMs);
+      // Smooth 60fps camera without React: write transform straight to the layer
+      const layer = zoomLayerRef.current;
+      if (layer) {
+        const cam = computeCameraRef.current(frameMs);
+        layer.style.transform = `scale(${cam.scale}) translate3d(${(0.5 - cam.x) * 100}%, ${(0.5 - cam.y) * 100}%, 0)`;
+      }
+
+      // Throttle global store updates (timeline playhead, sounds) to ~12Hz
+      const now = performance.now();
+      if (now - lastStoreWrite >= 80) {
+        lastStoreWrite = now;
+        useEditor.getState().setCurrentTime(frameMs);
+      }
 
       if ("requestVideoFrameCallback" in video) {
         rVfcId = (video as unknown as { requestVideoFrameCallback: (cb: () => void) => number }).requestVideoFrameCallback(onFrame);
@@ -221,7 +233,7 @@ export function VideoCanvas({ project, currentTimeMs: propTimeMs }: VideoCanvasP
         if (
           !triggeredEventsRef.current.has(click.id) &&
           click.timestampMs >= prev &&
-          click.timestampMs <= currentTimeMs + 35
+          click.timestampMs <= currentTimeMs + 90
         ) {
           triggeredEventsRef.current.add(click.id);
           sfx.playClickBop(audioSettings?.clickSoundPreset || "bop", audioSettings?.clickSoundVolume || 0.7);
@@ -239,7 +251,7 @@ export function VideoCanvas({ project, currentTimeMs: propTimeMs }: VideoCanvasP
           interaction.type === "typing" &&
           !triggeredEventsRef.current.has(interaction.id) &&
           interaction.timestampMs >= prev &&
-          interaction.timestampMs <= currentTimeMs + 45
+          interaction.timestampMs <= currentTimeMs + 90
         ) {
           triggeredEventsRef.current.add(interaction.id);
           const hasKeyframeTyping = keyframes?.some(
@@ -268,7 +280,7 @@ export function VideoCanvas({ project, currentTimeMs: propTimeMs }: VideoCanvasP
           kf.sound &&
           !triggeredEventsRef.current.has(`kf-${kf.id}`) &&
           kf.timeMs >= prev &&
-          kf.timeMs <= currentTimeMs + 45
+          kf.timeMs <= currentTimeMs + 90
         ) {
           triggeredEventsRef.current.add(`kf-${kf.id}`);
           if (kf.sound === "typing" && typingSoundEnabled) {
@@ -371,6 +383,7 @@ export function VideoCanvas({ project, currentTimeMs: propTimeMs }: VideoCanvasP
       >
         {/* Dynamic Zooming Video Container: zero latency with hardware accelerated 3D transform */}
         <div
+          ref={zoomLayerRef}
           className="relative size-full origin-center will-change-transform"
           style={{
             transform: `scale(${camera.scale}) translate3d(${(0.5 - camera.x) * 100}%, ${(0.5 - camera.y) * 100}%, 0)`,

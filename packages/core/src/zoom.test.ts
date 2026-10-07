@@ -291,8 +291,8 @@ describe("zoom algorithms", () => {
     const lastKf = result.keyframes[result.keyframes.length - 1]!;
     expect(firstKf.timeMs).toBeLessThanOrEqual(22000);
     expect(firstKf.scale).toBe(1.0);
-    // 22000ms + 1000ms inactivity hold + 400ms leadout = 23400ms (smoothly returns to 1.0x)
-    expect(lastKf.timeMs).toBe(23400);
+    // 22000ms + 1200ms inactivity hold + 400ms leadout = 23600ms (smoothly returns to 1.0x)
+    expect(lastKf.timeMs).toBe(23600);
     expect(lastKf.scale).toBe(1.0);
   });
 
