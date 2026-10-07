@@ -308,8 +308,6 @@ export const useRecorder = create<RecorderStore>((set, get) => ({
             video: {
               displaySurface: targetSurface,
               frameRate: { ideal: 60, max: 60 },
-              width: { ideal: 1920, max: 3840 },
-              height: { ideal: 1080, max: 2160 },
             } as MediaTrackConstraints,
             audio: get().systemAudioEnabled,
             preferCurrentTab: false,

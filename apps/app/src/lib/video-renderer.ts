@@ -219,11 +219,31 @@ export async function renderProjectVideo(options: RenderOptions): Promise<Render
   const paddingPx = (looks.padding || 0) * baseScale;
   const radiusPx = (looks.borderRadius || 0) * baseScale;
 
-  // Window rect inside canvas
-  const winX = paddingPx;
-  const winY = paddingPx;
-  const winW = width - 2 * paddingPx;
-  const winH = height - 2 * paddingPx;
+  // Window rect inside canvas: adapt to video's native aspect ratio when available
+  const availW = Math.max(100, width - 2 * paddingPx);
+  const availH = Math.max(100, height - 2 * paddingPx);
+  let winW = availW;
+  let winH = availH;
+  let winX = paddingPx;
+  let winY = paddingPx;
+
+  const rawWidth = video.videoWidth || project.summary.width || 0;
+  const rawHeight = video.videoHeight || project.summary.height || 0;
+  if (rawWidth > 0 && rawHeight > 0 && (!looks.aspectRatio || looks.aspectRatio === "16:9")) {
+    const videoAspect = rawWidth / rawHeight;
+    const availAspect = availW / availH;
+    if (availAspect > videoAspect) {
+      winH = availH;
+      winW = Math.round(availH * videoAspect);
+      winX = Math.round((width - winW) / 2);
+      winY = paddingPx;
+    } else {
+      winW = availW;
+      winH = Math.round(availW / videoAspect);
+      winX = paddingPx;
+      winY = Math.round((height - winH) / 2);
+    }
+  }
 
   recorder.start(250);
 

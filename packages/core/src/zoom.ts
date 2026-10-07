@@ -503,11 +503,19 @@ export function calculateCameraAtTime(
           cursorY: defaultCursor.y,
         };
       }
-      let finalX = firstKf.targetX;
-      let finalY = firstKf.targetY;
+      if (firstKf.scale <= 1.05) {
+        return {
+          x: 0.5,
+          y: 0.5,
+          scale: 1.0,
+          isZoomed: false,
+          cursorX: defaultCursor.x,
+          cursorY: defaultCursor.y,
+        };
+      }
       return {
-        x: finalX,
-        y: finalY,
+        x: firstKf.targetX,
+        y: firstKf.targetY,
         scale: firstKf.scale,
         isZoomed: firstKf.scale > 1.05,
         cursorX: defaultCursor.x,
@@ -516,6 +524,16 @@ export function calculateCameraAtTime(
     }
 
     if (timeMs >= lastKf.timeMs) {
+      if (lastKf.scale <= 1.05) {
+        return {
+          x: 0.5,
+          y: 0.5,
+          scale: 1.0,
+          isZoomed: false,
+          cursorX: defaultCursor.x,
+          cursorY: defaultCursor.y,
+        };
+      }
       return {
         x: lastKf.targetX,
         y: lastKf.targetY,
@@ -541,13 +559,13 @@ export function calculateCameraAtTime(
         let finalY = baseTargetY;
 
         if (k1.scale <= 1.05 && k2.scale > 1.05) {
-          // Zooming in from full frame: directly zoom into target interaction coordinates
-          finalX = k2.targetX;
-          finalY = k2.targetY;
+          // Zooming in from full frame: smoothly glide from unzoomed center (0.5, 0.5) to peak interaction target
+          finalX = 0.5 + (k2.targetX - 0.5) * progress;
+          finalY = 0.5 + (k2.targetY - 0.5) * progress;
         } else if (k2.scale <= 1.05 && k1.scale > 1.05) {
-          // Zooming out to full frame: directly zoom out maintaining target focal coordinate
-          finalX = k1.targetX;
-          finalY = k1.targetY;
+          // Zooming out to full frame: smoothly glide back from interaction target to unzoomed center (0.5, 0.5)
+          finalX = k1.targetX + (0.5 - k1.targetX) * progress;
+          finalY = k1.targetY + (0.5 - k1.targetY) * progress;
         } else if (scale > 1.05) {
           // Actively zoomed in: Camera Shift Tour or steady hold
           const shiftDist = Math.hypot(k2.targetX - k1.targetX, k2.targetY - k1.targetY);
@@ -646,8 +664,8 @@ export function calculateCameraAtTime(
       const target = clampCameraToBounds(block.targetX, block.targetY, block.scale, "center");
       const currentScale = 1.0 + (block.scale - 1.0) * progress;
       return {
-        x: target.x,
-        y: target.y,
+        x: 0.5 + (target.x - 0.5) * progress,
+        y: 0.5 + (target.y - 0.5) * progress,
         scale: currentScale,
         isZoomed: currentScale > 1.05,
         cursorX: currentCursor.x,
@@ -714,8 +732,8 @@ export function calculateCameraAtTime(
       const target = clampCameraToBounds(block.targetX, block.targetY, block.scale, "center");
       const currentScale = block.scale + (1.0 - block.scale) * progress;
       return {
-        x: target.x,
-        y: target.y,
+        x: target.x + (0.5 - target.x) * progress,
+        y: target.y + (0.5 - target.y) * progress,
         scale: currentScale,
         isZoomed: currentScale > 1.05,
         cursorX: currentCursor.x,
@@ -1035,8 +1053,8 @@ export function plotInteractionsToKeyframesAndZoomBlocks(
         id: `kf-start-${firstEvt.id}`,
         timeMs: startMs,
         scale: 1.0,
-        targetX: clampedFirst.x,
-        targetY: clampedFirst.y,
+        targetX: 0.5,
+        targetY: 0.5,
         easing: "cubic",
       });
 
@@ -1272,8 +1290,8 @@ export function plotInteractionsToKeyframesAndZoomBlocks(
         id: `kf-out-${lastEvt.id}`,
         timeMs: endMs,
         scale: 1.0,
-        targetX: clampedLast.x,
-        targetY: clampedLast.y,
+        targetX: 0.5,
+        targetY: 0.5,
         easing: "cubic",
       });
 
@@ -1354,8 +1372,8 @@ export function zoomBlocksToKeyframes(
         id: `kf-start-${b.id}`,
         timeMs: startMs,
         scale: 1.0,
-        targetX: b.targetX,
-        targetY: b.targetY,
+        targetX: 0.5,
+        targetY: 0.5,
         easing: "cubic",
       });
     }
@@ -1395,8 +1413,8 @@ export function zoomBlocksToKeyframes(
         id: `kf-out-${b.id}`,
         timeMs: endMs,
         scale: 1.0,
-        targetX: b.targetX,
-        targetY: b.targetY,
+        targetX: 0.5,
+        targetY: 0.5,
         easing: "cubic",
       });
     }
@@ -1440,15 +1458,13 @@ export function generateTourShiftSequence(
   // Initial lead-in zoom from 1.0x full frame into first element
   const first = sorted[0]!;
   const firstStartMs = Math.max(0, first.timestampMs - leadInMs);
-  const firstScale = first.type === "typing" ? 2.1 : defaultScale;
-  const clampedFirst = clampCameraToBounds(first.x, first.y, firstScale, "center");
 
   keyframes.push({
     id: `tour-kf-start`,
     timeMs: firstStartMs,
     scale: 1.0,
-    targetX: clampedFirst.x,
-    targetY: clampedFirst.y,
+    targetX: 0.5,
+    targetY: 0.5,
     easing: "cubic",
   });
 
@@ -1520,8 +1536,8 @@ export function generateTourShiftSequence(
         id: `tour-kf-out`,
         timeMs: endMs,
         scale: 1.0,
-        targetX: clampedCur.x,
-        targetY: clampedCur.y,
+        targetX: 0.5,
+        targetY: 0.5,
         easing: "cubic",
       });
       prevHoldEndMs = endMs;

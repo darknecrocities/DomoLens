@@ -396,9 +396,21 @@ describe("useEditor store", () => {
 
     const blockKfs = proj?.keyframes?.filter((k) => k.timeMs >= 1000 && k.timeMs <= 4000) ?? [];
     expect(blockKfs.length).toBeGreaterThanOrEqual(3);
-    for (const kf of blockKfs) {
+    
+    // Zoomed keyframes must lock directly on the new focal coordinates
+    const zoomedKfs = blockKfs.filter((k) => k.scale > 1.05);
+    expect(zoomedKfs.length).toBeGreaterThanOrEqual(1);
+    for (const kf of zoomedKfs) {
       expect(kf.targetX).toBeCloseTo(0.85, 2);
       expect(kf.targetY).toBeCloseTo(0.65, 2);
+    }
+
+    // Full frame lead-in and lead-out keyframes must remain dead center (0.5, 0.5) to prevent jumping
+    const fullFrameKfs = blockKfs.filter((k) => k.scale <= 1.05);
+    expect(fullFrameKfs.length).toBeGreaterThanOrEqual(2);
+    for (const kf of fullFrameKfs) {
+      expect(kf.targetX).toBeCloseTo(0.5, 2);
+      expect(kf.targetY).toBeCloseTo(0.5, 2);
     }
   });
 });

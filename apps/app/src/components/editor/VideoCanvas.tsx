@@ -335,7 +335,18 @@ export function VideoCanvas({ project, currentTimeMs: propTimeMs }: VideoCanvasP
   }, [rawMedia, isExplicitSample]);
 
   const thumbnailSrc = summary.thumbnail ? platform.mediaUrl(summary.thumbnail) : null;
-  const [naturalAspectRatio, setNaturalAspectRatio] = useState<string | null>(null);
+  const [naturalAspectRatio, setNaturalAspectRatio] = useState<string | null>(() => {
+    if (summary.width && summary.height && summary.width > 0 && summary.height > 0) {
+      return `${summary.width} / ${summary.height}`;
+    }
+    return null;
+  });
+
+  useEffect(() => {
+    if (summary.width && summary.height && summary.width > 0 && summary.height > 0) {
+      setNaturalAspectRatio(`${summary.width} / ${summary.height}`);
+    }
+  }, [summary.width, summary.height]);
 
   const viewportAspectRatio = useMemo(() => {
     if (looks.aspectRatio) {
@@ -343,11 +354,11 @@ export function VideoCanvas({ project, currentTimeMs: propTimeMs }: VideoCanvasP
       if (looks.aspectRatio === "1:1") return "1 / 1";
       if (looks.aspectRatio === "4:3") return "4 / 3";
       if (looks.aspectRatio === "16:9") {
-        return naturalAspectRatio || "16 / 9";
+        return naturalAspectRatio || (summary.width && summary.height ? `${summary.width} / ${summary.height}` : "16 / 9");
       }
     }
-    return naturalAspectRatio || "16 / 9";
-  }, [looks.aspectRatio, naturalAspectRatio]);
+    return naturalAspectRatio || (summary.width && summary.height ? `${summary.width} / ${summary.height}` : "16 / 9");
+  }, [looks.aspectRatio, naturalAspectRatio, summary.width, summary.height]);
 
   // Shadow styling lookup
   const shadowStyles: Record<string, string> = {
@@ -383,7 +394,7 @@ export function VideoCanvas({ project, currentTimeMs: propTimeMs }: VideoCanvasP
           className="relative size-full origin-center will-change-transform"
           style={{
             transform: `scale(${camera.scale}) translate3d(${(0.5 - camera.x) * 100}%, ${(0.5 - camera.y) * 100}%, 0)`,
-            transition: isPlaying ? "none" : "transform 0.35s cubic-bezier(0.16, 1, 0.3, 1)",
+            transition: isPlaying ? "none" : "transform 0.1s ease-out",
           }}
         >
           {resolvedMediaSrc ? (
@@ -395,7 +406,7 @@ export function VideoCanvas({ project, currentTimeMs: propTimeMs }: VideoCanvasP
               muted
               preload="auto"
               style={{ filter: effectsState.filterStyle || undefined }}
-              className="size-full object-contain pointer-events-none"
+              className="size-full object-cover pointer-events-none"
               onLoadedMetadata={(e) => {
                 const v = e.currentTarget;
                 if (v.videoWidth && v.videoHeight) {
@@ -423,7 +434,7 @@ export function VideoCanvas({ project, currentTimeMs: propTimeMs }: VideoCanvasP
               src={thumbnailSrc}
               alt=""
               style={{ filter: effectsState.filterStyle || undefined }}
-              className="size-full object-contain pointer-events-none"
+              className="size-full object-cover pointer-events-none"
             />
           ) : (
             <div className="flex size-full flex-col items-center justify-center bg-ink-950 p-6 text-center text-fg-muted">

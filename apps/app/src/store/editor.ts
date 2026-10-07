@@ -802,9 +802,9 @@ export const useEditor = create<EditorState>((set, get) => ({
         b.id === activeBlock.id ? { ...b, targetX: clamped.x, targetY: clamped.y } : b,
       );
 
-      // Lock all keyframes in this zoom block directly on the newly selected interaction coordinates
+      // Lock all zoomed keyframes in this zoom block directly on the newly selected interaction coordinates
       let updatedKfs = (state.project.keyframes ? [...state.project.keyframes] : []).map((k) => {
-        if (k.timeMs >= activeBlock.startTimeMs && k.timeMs <= activeBlock.endTimeMs) {
+        if (k.timeMs >= activeBlock.startTimeMs && k.timeMs <= activeBlock.endTimeMs && k.scale > 1.05) {
           return { ...k, targetX: clamped.x, targetY: clamped.y };
         }
         return k;
@@ -880,8 +880,8 @@ export const useEditor = create<EditorState>((set, get) => ({
         id: `kf-in-${now}`,
         timeMs: startMs,
         scale: 1.0,
-        targetX: clamped.x,
-        targetY: clamped.y,
+        targetX: 0.5,
+        targetY: 0.5,
         easing: "cubic",
       },
       {
@@ -915,8 +915,8 @@ export const useEditor = create<EditorState>((set, get) => ({
         id: `kf-out-${now}`,
         timeMs: outMs,
         scale: 1.0,
-        targetX: clamped.x,
-        targetY: clamped.y,
+        targetX: 0.5,
+        targetY: 0.5,
         easing: "cubic",
       },
     ];
