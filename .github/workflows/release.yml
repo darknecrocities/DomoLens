@@ -19,21 +19,13 @@ on:
         default: ''
 
 jobs:
-  release:
+  create-release:
     permissions:
       contents: write
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - platform: 'macos-latest'
-            args: '--bundles app,dmg'
-          - platform: 'ubuntu-22.04'
-            args: '--bundles appimage,deb'
-          - platform: 'windows-latest'
-            args: '--bundles nsis'
-
-    runs-on: ${{ matrix.platform }}
+    runs-on: ubuntu-22.04
+    outputs:
+      tag: ${{ steps.tag.outputs.val }}
+      ver: ${{ steps.tag.outputs.ver }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -52,6 +44,43 @@ jobs:
           VER="${TAG#v}"
           echo "val=$TAG" >> $GITHUB_OUTPUT
           echo "ver=$VER" >> $GITHUB_OUTPUT
+
+      - name: Ensure GitHub Release Exists
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="${{ steps.tag.outputs.val }}"
+          echo "Ensuring release $TAG exists..."
+          gh release view "$TAG" >/dev/null 2>&1 || \
+          gh release create "$TAG" \
+            --title "DomoLens $TAG" \
+            --notes "DomoLens Automated Release $TAG
+          - macOS (.dmg, .app)
+          - Windows (.exe installer)
+          - Linux (.AppImage, .deb)"
+
+  release:
+    needs: create-release
+    permissions:
+      contents: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: 'macos-latest'
+            args: '--bundles app,dmg'
+          - platform: 'ubuntu-22.04'
+            args: '--bundles appimage,deb'
+          - platform: 'windows-latest'
+            args: '--bundles nsis'
+
+    runs-on: ${{ matrix.platform }}
+    env:
+      TAG: ${{ needs.create-release.outputs.tag }}
+      VER: ${{ needs.create-release.outputs.ver }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
@@ -74,7 +103,6 @@ jobs:
       - name: Synchronize Version Across Project and Tauri Config
         shell: bash
         run: |
-          VER="${{ steps.tag.outputs.ver }}"
           echo "Synchronizing project files to release version $VER"
           node -e "
             const fs = require('fs');
@@ -93,7 +121,6 @@ jobs:
               if (!conf.bundle) conf.bundle = {};
               if (!conf.bundle.macOS) conf.bundle.macOS = {};
               conf.bundle.macOS.signingIdentity = conf.bundle.macOS.signingIdentity || '-';
-              conf.bundle.createUpdaterArtifacts = true;
               fs.writeFileSync(tauriPath, JSON.stringify(conf, null, 2) + '\n');
             }
             const cargoPath = 'apps/app/src-tauri/Cargo.toml';
@@ -111,16 +138,6 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
         with:
           projectPath: './apps/app'
-          tagName: ${{ steps.tag.outputs.val }}
-          releaseName: 'DomoLens ${{ steps.tag.outputs.val }}'
-          releaseBody: |
-            DomoLens Automated Release ${{ steps.tag.outputs.val }}
-            - macOS (.dmg, .app)
-            - Windows (.exe installer)
-            - Linux (.AppImage, .deb)
-            - Auto-updater manifest (latest.json)
-          releaseDraft: false
-          prerelease: false
           args: ${{ matrix.args }}
 
       - name: Verify macOS Code Signature and Publish Canonical Artifacts
@@ -146,7 +163,7 @@ jobs:
           echo "Publishing canonical DMG release assets..."
           cp "$DMG_FILE" DomoLens-Universal.dmg
           cp "$DMG_FILE" DomoLens-macOS.dmg
-          gh release upload "${{ steps.tag.outputs.val }}" DomoLens-Universal.dmg DomoLens-macOS.dmg --clobber
+          gh release upload "$TAG" DomoLens-Universal.dmg DomoLens-macOS.dmg "$DMG_FILE" --clobber
           echo "Successfully published DomoLens-Universal.dmg and DomoLens-macOS.dmg to release."
 
       - name: Publish Windows Canonical Artifact
@@ -159,7 +176,7 @@ jobs:
           if [[ -n "$EXE_FILE" && -f "$EXE_FILE" ]]; then
             echo "Publishing canonical Windows installer..."
             cp "$EXE_FILE" DomoLens-Windows-Setup.exe
-            gh release upload "${{ steps.tag.outputs.val }}" DomoLens-Windows-Setup.exe --clobber
+            gh release upload "$TAG" DomoLens-Windows-Setup.exe "$EXE_FILE" --clobber
             echo "Successfully published DomoLens-Windows-Setup.exe to release."
           fi
 
@@ -173,7 +190,7 @@ jobs:
           if [[ -n "$APPIMAGE_FILE" && -f "$APPIMAGE_FILE" ]]; then
             echo "Publishing canonical Linux AppImage..."
             cp "$APPIMAGE_FILE" DomoLens-Linux.AppImage
-            gh release upload "${{ steps.tag.outputs.val }}" DomoLens-Linux.AppImage --clobber
+            gh release upload "$TAG" DomoLens-Linux.AppImage "$APPIMAGE_FILE" --clobber
             echo "Successfully published DomoLens-Linux.AppImage to release."
           fi
 
@@ -181,7 +198,6 @@ jobs:
           if [[ -n "$DEB_FILE" && -f "$DEB_FILE" ]]; then
             echo "Publishing canonical Linux DEB package..."
             cp "$DEB_FILE" DomoLens-Linux.deb
-            gh release upload "${{ steps.tag.outputs.val }}" DomoLens-Linux.deb --clobber
+            gh release upload "$TAG" DomoLens-Linux.deb "$DEB_FILE" --clobber
             echo "Successfully published DomoLens-Linux.deb to release."
           fi
-

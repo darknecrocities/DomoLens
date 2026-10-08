@@ -147,7 +147,7 @@ export function TemplatePickerModal({ open, onClose }: TemplatePickerModalProps)
         {/* 2-Column Main Selector */}
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
           {/* Left: Template Cards List (7 Cols) */}
-          <div className="lg:col-span-7 h-[490px] overflow-y-auto pr-1 space-y-2.5">
+          <div className="lg:col-span-7 h-[550px] overflow-y-auto pr-1 space-y-2.5">
             {filteredTemplates.map((tpl) => {
               const isSelected = selectedTemplate.id === tpl.id;
               const isCurrentActive = activeTemplateId === tpl.id;
@@ -225,128 +225,133 @@ export function TemplatePickerModal({ open, onClose }: TemplatePickerModalProps)
           </div>
 
           {/* Right: Selected Template Live Preview & Customizer (5 Cols) */}
-          <div className="lg:col-span-5 h-[490px] overflow-y-auto flex flex-col rounded-xl border border-white/10 bg-neutral-950/70 p-4 space-y-3.5">
-            {/* Live Dynamic Video Canvas Preview Engine */}
-            <TemplateVideoPreview
-              template={selectedTemplate}
-              customFields={customFields}
-            />
-
-            {/* Template Specs Grid */}
-            <div className="grid grid-cols-2 gap-2 text-xs">
-              {selectedTemplate.motionSignature && (
-                <div className="col-span-2 rounded-lg bg-indigo-950/40 p-2 border border-indigo-500/30 flex items-center justify-between">
-                  <div className="truncate pr-2">
-                    <span className="block text-indigo-300/80 font-medium text-[9px] uppercase font-mono tracking-wider">
-                      Signature Motion Choreography
-                    </span>
-                    <span className="text-white font-semibold text-xs truncate">
-                      {selectedTemplate.motionSignature.label}
-                    </span>
-                  </div>
-                  <span className="shrink-0 rounded bg-indigo-500/25 text-indigo-300 px-2 py-0.5 text-[9px] font-mono font-bold border border-indigo-500/40">
-                    {selectedTemplate.motionSignature.badge}
-                  </span>
-                </div>
-              )}
-
-              <div className="rounded-lg bg-neutral-800/60 p-2 border border-neutral-700/40">
-                <span className="block text-neutral-400 font-medium text-[10px] uppercase">
-                  Window Shell
-                </span>
-                <span className="text-white font-semibold text-xs capitalize">
-                  {selectedTemplate.looks.windowFrame || "macOS"}
-                </span>
-              </div>
-              <div className="rounded-lg bg-neutral-800/60 p-2 border border-neutral-700/40">
-                <span className="block text-neutral-400 font-medium text-[10px] uppercase">
-                  Camera 3D Pitch
-                </span>
-                <span className="text-white font-semibold text-xs">
-                  {selectedTemplate.looks.tiltAngle ? `${selectedTemplate.looks.tiltAngle}° Tilt` : "Flat 2D"}
-                </span>
-              </div>
-              <div className="rounded-lg bg-neutral-800/60 p-2 border border-neutral-700/40">
-                <span className="block text-neutral-400 font-medium text-[10px] uppercase">
-                  Physics Easing
-                </span>
-                <span className="text-white font-semibold text-xs capitalize">
-                  {selectedTemplate.looks.cameraPhysics || "Spring"}
-                </span>
-              </div>
-              <div className="rounded-lg bg-neutral-800/60 p-2 border border-neutral-700/40 flex items-center justify-between">
-                <div>
-                  <span className="block text-neutral-400 font-medium text-[10px] uppercase">
-                    Mechanical Audio
-                  </span>
-                  <span className="text-amber-300 font-semibold text-xs capitalize">
-                    {selectedTemplate.audioSettings.typingSoundPreset || "Creamy"}
-                  </span>
-                </div>
-                <button
-                  type="button"
-                  onClick={(e) => handlePlaySound(selectedTemplate, e)}
-                  className="rounded bg-neutral-700 hover:bg-neutral-600 p-1 text-amber-300 transition-colors cursor-pointer"
-                  title="Audition sound"
-                >
-                  <Volume2 className="size-3.5" />
-                </button>
-              </div>
+          <div className="lg:col-span-5 h-[550px] flex flex-col rounded-xl border border-white/10 bg-neutral-950/70 p-3.5 gap-3 overflow-hidden">
+            {/* Live Dynamic Video Canvas Preview Engine (Pinned at Top - Guaranteed Full Height) */}
+            <div className="w-full shrink-0">
+              <TemplateVideoPreview
+                template={selectedTemplate}
+                customFields={customFields}
+              />
             </div>
 
-            {/* Quick Template Wording Customizer */}
-            <div className="space-y-2.5 pt-2 border-t border-neutral-800">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-semibold text-white">
-                  Customize Text & Accent
-                </span>
-                <span className="text-[10px] text-neutral-400 font-mono">Live updates</span>
+            {/* Scrollable Specs & Live Customizer */}
+            <div className="flex-1 min-h-0 overflow-y-auto pr-1 space-y-3 scrollbar-thin">
+              {/* Template Specs Grid */}
+              <div className="grid grid-cols-2 gap-2 text-xs">
+                {selectedTemplate.motionSignature && (
+                  <div className="col-span-2 rounded-lg bg-indigo-950/40 p-2 border border-indigo-500/30 flex items-center justify-between">
+                    <div className="truncate pr-2">
+                      <span className="block text-indigo-300/80 font-medium text-[9px] uppercase font-mono tracking-wider">
+                        Signature Motion Choreography
+                      </span>
+                      <span className="text-white font-semibold text-xs truncate">
+                        {selectedTemplate.motionSignature.label}
+                      </span>
+                    </div>
+                    <span className="shrink-0 rounded bg-indigo-500/25 text-indigo-300 px-2 py-0.5 text-[9px] font-mono font-bold border border-indigo-500/40">
+                      {selectedTemplate.motionSignature.badge}
+                    </span>
+                  </div>
+                )}
+
+                <div className="rounded-lg bg-neutral-800/60 p-2 border border-neutral-700/40">
+                  <span className="block text-neutral-400 font-medium text-[10px] uppercase">
+                    Window Shell
+                  </span>
+                  <span className="text-white font-semibold text-xs capitalize">
+                    {selectedTemplate.looks.windowFrame || "macOS"}
+                  </span>
+                </div>
+                <div className="rounded-lg bg-neutral-800/60 p-2 border border-neutral-700/40">
+                  <span className="block text-neutral-400 font-medium text-[10px] uppercase">
+                    Camera 3D Pitch
+                  </span>
+                  <span className="text-white font-semibold text-xs">
+                    {selectedTemplate.looks.tiltAngle ? `${selectedTemplate.looks.tiltAngle}° Tilt` : "Flat 2D"}
+                  </span>
+                </div>
+                <div className="rounded-lg bg-neutral-800/60 p-2 border border-neutral-700/40">
+                  <span className="block text-neutral-400 font-medium text-[10px] uppercase">
+                    Physics Easing
+                  </span>
+                  <span className="text-white font-semibold text-xs capitalize">
+                    {selectedTemplate.looks.cameraPhysics || "Spring"}
+                  </span>
+                </div>
+                <div className="rounded-lg bg-neutral-800/60 p-2 border border-neutral-700/40 flex items-center justify-between">
+                  <div>
+                    <span className="block text-neutral-400 font-medium text-[10px] uppercase">
+                      Mechanical Audio
+                    </span>
+                    <span className="text-amber-300 font-semibold text-xs capitalize">
+                      {selectedTemplate.audioSettings.typingSoundPreset || "Creamy"}
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={(e) => handlePlaySound(selectedTemplate, e)}
+                    className="rounded bg-neutral-700 hover:bg-neutral-600 p-1 text-amber-300 transition-colors cursor-pointer"
+                    title="Audition sound"
+                  >
+                    <Volume2 className="size-3.5" />
+                  </button>
+                </div>
               </div>
 
-              {selectedTemplate.customizableFields.map((field) => (
-                <div key={field.id} className="space-y-1">
-                  <label className="text-[11px] font-medium text-neutral-300 flex items-center justify-between">
-                    <span>{field.label}</span>
-                    {field.type === "color" && (
-                      <span
-                        className="size-3.5 rounded border border-neutral-600 inline-block shadow-sm"
-                        style={{ backgroundColor: customFields[field.id] || field.defaultValue }}
-                      />
-                    )}
-                  </label>
+              {/* Quick Template Wording Customizer */}
+              <div className="space-y-2.5 pt-2 border-t border-neutral-800">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-semibold text-white">
+                    Customize Text & Accent
+                  </span>
+                  <span className="text-[10px] text-neutral-400 font-mono">Live updates</span>
+                </div>
 
-                  {field.type === "color" ? (
-                    <div className="flex items-center gap-2">
-                      <input
-                        type="color"
-                        value={customFields[field.id] || field.defaultValue}
-                        onChange={(e) =>
-                          setCustomFields((prev) => ({ ...prev, [field.id]: e.target.value }))
-                        }
-                        className="size-7 rounded cursor-pointer bg-neutral-800 border border-neutral-700 p-0.5"
-                      />
+                {selectedTemplate.customizableFields.map((field) => (
+                  <div key={field.id} className="space-y-1">
+                    <label className="text-[11px] font-medium text-neutral-300 flex items-center justify-between">
+                      <span>{field.label}</span>
+                      {field.type === "color" && (
+                        <span
+                          className="size-3.5 rounded border border-neutral-600 inline-block shadow-sm"
+                          style={{ backgroundColor: customFields[field.id] || field.defaultValue }}
+                        />
+                      )}
+                    </label>
+
+                    {field.type === "color" ? (
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="color"
+                          value={customFields[field.id] || field.defaultValue}
+                          onChange={(e) =>
+                            setCustomFields((prev) => ({ ...prev, [field.id]: e.target.value }))
+                          }
+                          className="size-7 rounded cursor-pointer bg-neutral-800 border border-neutral-700 p-0.5"
+                        />
+                        <input
+                          type="text"
+                          value={customFields[field.id] || field.defaultValue}
+                          onChange={(e) =>
+                            setCustomFields((prev) => ({ ...prev, [field.id]: e.target.value }))
+                          }
+                          className="flex-1 rounded-lg border border-neutral-700 bg-neutral-800/90 px-3 py-1.5 text-xs text-white font-mono focus:border-white focus:outline-none"
+                        />
+                      </div>
+                    ) : (
                       <input
                         type="text"
-                        value={customFields[field.id] || field.defaultValue}
+                        placeholder={field.placeholder}
+                        value={customFields[field.id] !== undefined ? customFields[field.id] : field.defaultValue}
                         onChange={(e) =>
                           setCustomFields((prev) => ({ ...prev, [field.id]: e.target.value }))
                         }
-                        className="flex-1 rounded-lg border border-neutral-700 bg-neutral-800/90 px-3 py-1.5 text-xs text-white font-mono focus:border-white focus:outline-none"
+                        className="w-full rounded-lg border border-neutral-700 bg-neutral-800/90 px-3 py-1.5 text-xs text-white focus:border-white focus:outline-none placeholder:text-neutral-500"
                       />
-                    </div>
-                  ) : (
-                    <input
-                      type="text"
-                      placeholder={field.placeholder}
-                      value={customFields[field.id] !== undefined ? customFields[field.id] : field.defaultValue}
-                      onChange={(e) =>
-                        setCustomFields((prev) => ({ ...prev, [field.id]: e.target.value }))
-                      }
-                      className="w-full rounded-lg border border-neutral-700 bg-neutral-800/90 px-3 py-1.5 text-xs text-white focus:border-white focus:outline-none placeholder:text-neutral-500"
-                    />
-                  )}
-                </div>
-              ))}
+                    )}
+                  </div>
+                ))}
+              </div>
             </div>
           </div>
         </div>

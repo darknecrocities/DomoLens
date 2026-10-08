@@ -140,4 +140,22 @@ describe("Motion Templates Live Application & Synchronization Integration Tests"
     expect(evaluateCameraPhysicsProgress(0, "snappy")).toBe(0);
     expect(evaluateCameraPhysicsProgress(1, "snappy")).toBe(1);
   });
+
+  it("reflects template motion onto keyframes and zoom blocks upon application", () => {
+    useEditor.getState().applyTemplate("saas-launch-hero");
+
+    const state = useEditor.getState();
+    expect(state.project?.keyframes).toBeDefined();
+    expect(state.project?.keyframes?.length).toBeGreaterThanOrEqual(3);
+    expect(state.project?.zoomBlocks?.length).toBeGreaterThanOrEqual(1);
+
+    // Opening camera move reflects template physics
+    const firstKf = state.project?.keyframes?.[0];
+    const punchKf = state.project?.keyframes?.[1];
+    expect(firstKf?.timeMs).toBe(0);
+    expect(firstKf?.scale).toBe(1.0);
+    expect(punchKf?.scale).toBeGreaterThan(1.0);
+    expect(punchKf?.easing).toBe("spring");
+    expect(punchKf?.soundPreset).toBe("bop");
+  });
 });

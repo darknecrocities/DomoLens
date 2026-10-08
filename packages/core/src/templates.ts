@@ -1,10 +1,14 @@
 import type {
   CameraPhysicsPreset,
+  ClickEvent,
+  InteractionEvent,
+  KeyframeNode,
   ProjectAudioSettings,
   ProjectLooks,
   TemplateBadgeStyle,
   TemplateTypography,
   TextOverlay,
+  ZoomBlock,
 } from "./project";
 
 export type { TemplateBadgeStyle, TemplateTypography };
@@ -963,3 +967,495 @@ export const STUDIO_MOTION_TEMPLATES: MotionTemplate[] = [
     ],
   },
 ];
+
+export interface GenerateTemplateKeyframesOptions {
+  existingKeyframes?: KeyframeNode[];
+  existingZoomBlocks?: ZoomBlock[];
+  existingClicks?: ClickEvent[];
+  existingInteractions?: InteractionEvent[];
+}
+
+export interface TemplateKeyframeResult {
+  keyframes: KeyframeNode[];
+  zoomBlocks: ZoomBlock[];
+}
+
+/**
+ * Converts a template's camera physics preset to a keyframe easing curve.
+ */
+export function templatePhysicsToEasing(physics?: CameraPhysicsPreset): "spring" | "cubic" | "linear" {
+  switch (physics) {
+    case "smooth":
+      return "cubic";
+    case "linear":
+      return "linear";
+    case "snappy":
+    case "spring":
+    default:
+      return "spring";
+  }
+}
+
+/**
+ * Generates or harmonizes timeline keyframes and zoom blocks reflecting a motion template's
+ * camera lead-in, zoom scale, easing physics, video effects, and tactile keyboard soundscapes.
+ */
+export function generateTemplateKeyframes(
+  template: MotionTemplate,
+  videoDurationMs: number,
+  options: GenerateTemplateKeyframesOptions = {}
+): TemplateKeyframeResult {
+  const duration = Math.max(3000, videoDurationMs || 6000);
+  const easing = templatePhysicsToEasing(template.looks.cameraPhysics);
+  const targetScale = template.looks.autoTrackScale || 1.5;
+  const leadIn = Math.min(600, Math.max(100, template.transitionTiming?.cameraLeadInMs || 250));
+
+  // If existing keyframes already exist on the project, harmonize their easing, sound preset, and scale
+  if (options.existingKeyframes && options.existingKeyframes.length > 0) {
+    const harmonizedKeyframes: KeyframeNode[] = options.existingKeyframes.map((kf) => {
+      const updated: KeyframeNode = {
+        ...kf,
+        easing,
+      };
+      if (kf.sound) {
+        updated.sound = kf.sound === "typing" && template.audioSettings.typingSoundPreset !== "none" ? "typing" : "click";
+        updated.soundPreset =
+          updated.sound === "typing"
+            ? template.audioSettings.typingSoundPreset || "creamy"
+            : template.audioSettings.clickSoundPreset || "bop";
+      }
+      return updated;
+    });
+
+    const harmonizedBlocks: ZoomBlock[] = (options.existingZoomBlocks || []).map((b) => ({
+      ...b,
+      scale: Math.max(1.15, Math.min(2.5, b.scale > 1 ? targetScale : b.scale)),
+    }));
+
+    return { keyframes: harmonizedKeyframes, zoomBlocks: harmonizedBlocks };
+  }
+
+  // Generate signature choreography keyframes tailored to the template's motionSignature
+  const sigType = template.motionSignature?.type || "3d-gyro-float";
+  const idPrefix = `kf-${template.id}`;
+  const blockId = `zb-${template.id}-${Date.now()}`;
+
+  let signatureNodes: KeyframeNode[] = [];
+  let zoomBlock: ZoomBlock | null = null;
+
+  switch (sigType) {
+    case "3d-gyro-float": {
+      const outMs = Math.min(4800, Math.round(duration * 0.85));
+      signatureNodes = [
+        { id: `${idPrefix}-0`, timeMs: 0, scale: 1.0, targetX: 0.5, targetY: 0.5, easing },
+        {
+          id: `${idPrefix}-1`,
+          timeMs: leadIn,
+          scale: targetScale,
+          targetX: 0.49,
+          targetY: 0.46,
+          easing,
+          sound: "click",
+          soundPreset: "bop",
+          soundVolume: 0.7,
+        },
+        {
+          id: `${idPrefix}-2`,
+          timeMs: Math.round(leadIn + (outMs - leadIn) * 0.45),
+          scale: Number((targetScale * 1.03).toFixed(2)),
+          targetX: 0.52,
+          targetY: 0.5,
+          easing,
+        },
+        { id: `${idPrefix}-3`, timeMs: outMs, scale: 1.0, targetX: 0.5, targetY: 0.5, easing },
+      ];
+      zoomBlock = {
+        id: blockId,
+        startTimeMs: leadIn,
+        endTimeMs: outMs,
+        targetX: 0.5,
+        targetY: 0.48,
+        scale: targetScale,
+        enabled: true,
+      };
+      break;
+    }
+
+    case "cinematic-push": {
+      const outMs = Math.min(5400, Math.round(duration * 0.9));
+      signatureNodes = [
+        { id: `${idPrefix}-0`, timeMs: 0, scale: 1.0, targetX: 0.5, targetY: 0.5, easing: "cubic" },
+        {
+          id: `${idPrefix}-1`,
+          timeMs: leadIn,
+          scale: targetScale,
+          targetX: 0.5,
+          targetY: 0.42,
+          easing: "cubic",
+          effect: "spotlight",
+          effectIntensity: 0.25,
+          sound: "click",
+          soundPreset: "tap",
+          soundVolume: 0.65,
+        },
+        {
+          id: `${idPrefix}-2`,
+          timeMs: Math.round(leadIn + (outMs - leadIn) * 0.55),
+          scale: Number((targetScale * 1.05).toFixed(2)),
+          targetX: 0.54,
+          targetY: 0.46,
+          easing: "cubic",
+        },
+        { id: `${idPrefix}-3`, timeMs: outMs, scale: 1.0, targetX: 0.5, targetY: 0.5, easing: "cubic" },
+      ];
+      zoomBlock = {
+        id: blockId,
+        startTimeMs: leadIn,
+        endTimeMs: outMs,
+        targetX: 0.52,
+        targetY: 0.44,
+        scale: targetScale,
+        enabled: true,
+      };
+      break;
+    }
+
+    case "rhythmic-punch": {
+      const outMs = Math.min(3400, Math.round(duration * 0.7));
+      signatureNodes = [
+        { id: `${idPrefix}-0`, timeMs: 0, scale: 1.0, targetX: 0.5, targetY: 0.5, easing: "spring" },
+        {
+          id: `${idPrefix}-1`,
+          timeMs: leadIn,
+          scale: targetScale,
+          targetX: 0.48,
+          targetY: 0.38,
+          easing: "spring",
+          effect: "glow",
+          effectIntensity: 0.4,
+          sound: "click",
+          soundPreset: "thock",
+          soundVolume: 0.8,
+        },
+        {
+          id: `${idPrefix}-2`,
+          timeMs: Math.round(leadIn + (outMs - leadIn) * 0.48),
+          scale: Number((targetScale * 0.96).toFixed(2)),
+          targetX: 0.53,
+          targetY: 0.56,
+          easing: "spring",
+          sound: "click",
+          soundPreset: "thock",
+          soundVolume: 0.75,
+        },
+        { id: `${idPrefix}-3`, timeMs: outMs, scale: 1.0, targetX: 0.5, targetY: 0.5, easing: "spring" },
+      ];
+      zoomBlock = {
+        id: blockId,
+        startTimeMs: leadIn,
+        endTimeMs: outMs,
+        targetX: 0.5,
+        targetY: 0.45,
+        scale: targetScale,
+        enabled: true,
+      };
+      break;
+    }
+
+    case "kinetic-phone": {
+      const outMs = Math.min(3200, Math.round(duration * 0.75));
+      signatureNodes = [
+        { id: `${idPrefix}-0`, timeMs: 0, scale: 1.0, targetX: 0.5, targetY: 0.5, easing: "spring" },
+        {
+          id: `${idPrefix}-1`,
+          timeMs: leadIn,
+          scale: targetScale,
+          targetX: 0.5,
+          targetY: 0.32,
+          easing: "spring",
+          sound: "click",
+          soundPreset: "bop",
+          soundVolume: 0.7,
+        },
+        {
+          id: `${idPrefix}-2`,
+          timeMs: Math.round(leadIn + (outMs - leadIn) * 0.48),
+          scale: Number((targetScale * 0.95).toFixed(2)),
+          targetX: 0.5,
+          targetY: 0.6,
+          easing: "spring",
+        },
+        { id: `${idPrefix}-3`, timeMs: outMs, scale: 1.0, targetX: 0.5, targetY: 0.5, easing: "spring" },
+      ];
+      zoomBlock = {
+        id: blockId,
+        startTimeMs: leadIn,
+        endTimeMs: outMs,
+        targetX: 0.5,
+        targetY: 0.45,
+        scale: targetScale,
+        enabled: true,
+      };
+      break;
+    }
+
+    case "cli-scanlines": {
+      const outMs = Math.min(3800, Math.round(duration * 0.8));
+      signatureNodes = [
+        { id: `${idPrefix}-0`, timeMs: 0, scale: 1.0, targetX: 0.5, targetY: 0.5, easing: "linear" },
+        {
+          id: `${idPrefix}-1`,
+          timeMs: leadIn,
+          scale: targetScale,
+          targetX: 0.45,
+          targetY: 0.35,
+          easing: "linear",
+          effect: "glow",
+          effectIntensity: 0.3,
+          sound: "typing",
+          soundPreset: "mechanical",
+          soundVolume: 0.75,
+        },
+        {
+          id: `${idPrefix}-2`,
+          timeMs: Math.round(leadIn + (outMs - leadIn) * 0.5),
+          scale: targetScale,
+          targetX: 0.48,
+          targetY: 0.45,
+          easing: "linear",
+          sound: "typing",
+          soundPreset: "mechanical",
+          soundVolume: 0.75,
+        },
+        { id: `${idPrefix}-3`, timeMs: outMs, scale: 1.0, targetX: 0.5, targetY: 0.5, easing: "linear" },
+      ];
+      zoomBlock = {
+        id: blockId,
+        startTimeMs: leadIn,
+        endTimeMs: outMs,
+        targetX: 0.46,
+        targetY: 0.4,
+        scale: targetScale,
+        enabled: true,
+      };
+      break;
+    }
+
+    case "step-focus": {
+      const outMs = Math.min(4400, Math.round(duration * 0.85));
+      signatureNodes = [
+        { id: `${idPrefix}-0`, timeMs: 0, scale: 1.0, targetX: 0.5, targetY: 0.5, easing: "cubic" },
+        {
+          id: `${idPrefix}-1`,
+          timeMs: leadIn,
+          scale: targetScale,
+          targetX: 0.35,
+          targetY: 0.3,
+          easing: "cubic",
+          effect: "spotlight",
+          effectIntensity: 0.5,
+          sound: "click",
+          soundPreset: "creamy",
+          soundVolume: 0.7,
+        },
+        {
+          id: `${idPrefix}-2`,
+          timeMs: Math.round(leadIn + (outMs - leadIn) * 0.5),
+          scale: targetScale,
+          targetX: 0.65,
+          targetY: 0.55,
+          easing: "cubic",
+          effect: "spotlight",
+          effectIntensity: 0.5,
+          sound: "click",
+          soundPreset: "creamy",
+          soundVolume: 0.7,
+        },
+        { id: `${idPrefix}-3`, timeMs: outMs, scale: 1.0, targetX: 0.5, targetY: 0.5, easing: "cubic" },
+      ];
+      zoomBlock = {
+        id: blockId,
+        startTimeMs: leadIn,
+        endTimeMs: outMs,
+        targetX: 0.5,
+        targetY: 0.45,
+        scale: targetScale,
+        enabled: true,
+      };
+      break;
+    }
+
+    case "isometric-upvote": {
+      const outMs = Math.min(3800, Math.round(duration * 0.8));
+      signatureNodes = [
+        { id: `${idPrefix}-0`, timeMs: 0, scale: 1.0, targetX: 0.5, targetY: 0.5, easing: "spring" },
+        {
+          id: `${idPrefix}-1`,
+          timeMs: leadIn,
+          scale: targetScale,
+          targetX: 0.54,
+          targetY: 0.44,
+          easing: "spring",
+          effect: "glow",
+          effectIntensity: 0.4,
+          sound: "click",
+          soundPreset: "bop",
+          soundVolume: 0.75,
+        },
+        {
+          id: `${idPrefix}-2`,
+          timeMs: Math.round(leadIn + (outMs - leadIn) * 0.48),
+          scale: Number((targetScale * 1.04).toFixed(2)),
+          targetX: 0.5,
+          targetY: 0.4,
+          easing: "spring",
+        },
+        { id: `${idPrefix}-3`, timeMs: outMs, scale: 1.0, targetX: 0.5, targetY: 0.5, easing: "spring" },
+      ];
+      zoomBlock = {
+        id: blockId,
+        startTimeMs: leadIn,
+        endTimeMs: outMs,
+        targetX: 0.52,
+        targetY: 0.42,
+        scale: targetScale,
+        enabled: true,
+      };
+      break;
+    }
+
+    case "radar-scan": {
+      const outMs = Math.min(4200, Math.round(duration * 0.85));
+      signatureNodes = [
+        { id: `${idPrefix}-0`, timeMs: 0, scale: 1.0, targetX: 0.5, targetY: 0.5, easing: "cubic" },
+        {
+          id: `${idPrefix}-1`,
+          timeMs: leadIn,
+          scale: targetScale,
+          targetX: 0.5,
+          targetY: 0.4,
+          easing: "cubic",
+          effect: "vignette",
+          effectIntensity: 0.4,
+          sound: "click",
+          soundPreset: "tap",
+          soundVolume: 0.65,
+        },
+        {
+          id: `${idPrefix}-2`,
+          timeMs: Math.round(leadIn + (outMs - leadIn) * 0.5),
+          scale: targetScale,
+          targetX: 0.55,
+          targetY: 0.52,
+          easing: "cubic",
+        },
+        { id: `${idPrefix}-3`, timeMs: outMs, scale: 1.0, targetX: 0.5, targetY: 0.5, easing: "cubic" },
+      ];
+      zoomBlock = {
+        id: blockId,
+        startTimeMs: leadIn,
+        endTimeMs: outMs,
+        targetX: 0.52,
+        targetY: 0.46,
+        scale: targetScale,
+        enabled: true,
+      };
+      break;
+    }
+
+    case "click-ripples": {
+      const outMs = Math.min(3200, Math.round(duration * 0.75));
+      signatureNodes = [
+        { id: `${idPrefix}-0`, timeMs: 0, scale: 1.0, targetX: 0.5, targetY: 0.5, easing: "spring" },
+        {
+          id: `${idPrefix}-1`,
+          timeMs: leadIn,
+          scale: targetScale,
+          targetX: 0.46,
+          targetY: 0.36,
+          easing: "spring",
+          sound: "click",
+          soundPreset: "bop",
+          soundVolume: 0.8,
+        },
+        {
+          id: `${idPrefix}-2`,
+          timeMs: Math.round(leadIn + (outMs - leadIn) * 0.48),
+          scale: targetScale,
+          targetX: 0.56,
+          targetY: 0.6,
+          easing: "spring",
+          sound: "click",
+          soundPreset: "bop",
+          soundVolume: 0.8,
+        },
+        { id: `${idPrefix}-3`, timeMs: outMs, scale: 1.0, targetX: 0.5, targetY: 0.5, easing: "spring" },
+      ];
+      zoomBlock = {
+        id: blockId,
+        startTimeMs: leadIn,
+        endTimeMs: outMs,
+        targetX: 0.51,
+        targetY: 0.48,
+        scale: targetScale,
+        enabled: true,
+      };
+      break;
+    }
+
+    case "curved-cursor":
+    default: {
+      const outMs = Math.min(4600, Math.round(duration * 0.85));
+      signatureNodes = [
+        { id: `${idPrefix}-0`, timeMs: 0, scale: 1.0, targetX: 0.5, targetY: 0.5, easing: "cubic" },
+        {
+          id: `${idPrefix}-1`,
+          timeMs: leadIn,
+          scale: targetScale,
+          targetX: 0.48,
+          targetY: 0.46,
+          easing: "cubic",
+          effect: "blur",
+          effectIntensity: 0.15,
+          sound: "typing",
+          soundPreset: "creamy",
+          soundVolume: 0.65,
+        },
+        {
+          id: `${idPrefix}-2`,
+          timeMs: Math.round(leadIn + (outMs - leadIn) * 0.5),
+          scale: Number((targetScale * 1.02).toFixed(2)),
+          targetX: 0.54,
+          targetY: 0.5,
+          easing: "cubic",
+        },
+        { id: `${idPrefix}-3`, timeMs: outMs, scale: 1.0, targetX: 0.5, targetY: 0.5, easing: "cubic" },
+      ];
+      zoomBlock = {
+        id: blockId,
+        startTimeMs: leadIn,
+        endTimeMs: outMs,
+        targetX: 0.51,
+        targetY: 0.48,
+        scale: targetScale,
+        enabled: true,
+      };
+      break;
+    }
+  }
+
+  // Ensure timestamps are strictly non-decreasing and within duration
+  signatureNodes.forEach((node, i) => {
+    if (i > 0 && node.timeMs <= signatureNodes[i - 1]!.timeMs) {
+      node.timeMs = signatureNodes[i - 1]!.timeMs + 50;
+    }
+    if (node.timeMs > duration) {
+      node.timeMs = duration;
+    }
+  });
+
+  return {
+    keyframes: signatureNodes,
+    zoomBlocks: zoomBlock ? [zoomBlock] : [],
+  };
+}

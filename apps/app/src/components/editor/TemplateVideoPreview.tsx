@@ -119,14 +119,14 @@ export function TemplateVideoPreview({ template, customFields }: TemplateVideoPr
   const getAspectDimensions = () => {
     switch (template.aspectRatio) {
       case "9:16":
-        return "aspect-[9/16] h-[215px] w-auto max-w-[130px]";
+        return "aspect-[9/16] h-[185px] w-auto max-w-[110px]";
       case "1:1":
-        return "aspect-square h-[200px] w-auto max-w-[200px]";
+        return "aspect-square h-[175px] w-auto max-w-[175px]";
       case "4:3":
-        return "aspect-[4/3] h-[195px] w-auto max-w-[260px]";
+        return "aspect-[4/3] h-[170px] w-auto max-w-[230px]";
       case "16:9":
       default:
-        return "aspect-video w-[82%] max-w-[340px]";
+        return "aspect-video w-[88%] max-w-[340px]";
     }
   };
 
@@ -289,10 +289,10 @@ export function TemplateVideoPreview({ template, customFields }: TemplateVideoPr
   };
 
   return (
-    <div className="relative flex flex-col rounded-xl border border-white/10 bg-neutral-950/80 shadow-2xl overflow-hidden group">
+    <div className="relative flex flex-col rounded-xl border border-white/10 bg-neutral-950/80 shadow-2xl overflow-hidden group shrink-0 w-full">
       {/* Stage Backdrop matching template's backgroundValue or gradient */}
       <div
-        className="relative w-full h-[290px] flex items-center justify-center p-3 overflow-hidden transition-all duration-500"
+        className="relative w-full h-[240px] shrink-0 flex items-center justify-center p-2.5 overflow-hidden transition-all duration-500"
         style={{
           background:
             template.looks.backgroundValue ||
@@ -320,21 +320,22 @@ export function TemplateVideoPreview({ template, customFields }: TemplateVideoPr
 
         {/* Top Badges & Motion Signature Info Bar */}
         <div className="absolute top-2 inset-x-2.5 flex items-center justify-between z-30 pointer-events-none">
-          <div className="flex items-center gap-1.5 rounded-full bg-black/65 backdrop-blur-md px-2.5 py-0.5 border border-white/10 shadow-lg">
+          <div className="flex items-center gap-1.5 rounded-full bg-black/75 backdrop-blur-md px-2.5 py-0.5 border border-white/15 shadow-lg">
             <Sparkles className="size-3 text-amber-400 shrink-0" />
             <span className="text-[10px] font-mono text-neutral-200 uppercase font-semibold truncate max-w-[150px]">
               {template.name}
             </span>
             {motionSig && (
               <span
-                className="hidden sm:inline-block rounded-full px-1.5 py-0.2 text-[8px] font-mono font-bold uppercase tracking-wider"
+                className="hidden sm:inline-flex items-center gap-1 rounded-full px-1.5 py-0.2 text-[8px] font-mono font-bold uppercase tracking-wider"
                 style={{
                   backgroundColor: `${accentColor}30`,
                   color: accentColor,
                   border: `1px solid ${accentColor}50`,
                 }}
               >
-                {motionSig.badge}
+                <span>✦</span>
+                <span>{motionSig.badge}</span>
               </span>
             )}
           </div>
@@ -354,7 +355,7 @@ export function TemplateVideoPreview({ template, customFields }: TemplateVideoPr
         {/* 3D Tilted / Animated Video Stage Container */}
         <motion.div
           {...getStageMotionProps()}
-          className={`relative ${getAspectDimensions()} rounded-lg overflow-hidden border border-white/15 bg-black shadow-2xl transition-all duration-300 z-10 flex flex-col justify-between`}
+          className={`relative ${getAspectDimensions()} shrink-0 rounded-lg overflow-hidden border border-white/15 bg-black shadow-2xl transition-all duration-300 z-10 flex flex-col justify-between`}
           style={{
             perspective: 900,
             boxShadow: `0 22px 50px -10px rgba(0,0,0,0.85), 0 0 35px ${accentColor}25`,
@@ -575,7 +576,7 @@ export function TemplateVideoPreview({ template, customFields }: TemplateVideoPr
       </div>
 
       {/* Video Preview Control Bar */}
-      <div className="flex items-center justify-between border-t border-white/10 bg-neutral-900/95 px-3 py-1.5 z-20">
+      <div className="flex items-center justify-between border-t border-white/10 bg-neutral-900/95 px-3 py-1.5 z-20 shrink-0">
         <div className="flex items-center gap-1.5">
           {/* Play / Pause Button */}
           <button

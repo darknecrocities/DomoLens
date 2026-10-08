@@ -2,6 +2,9 @@ import { describe, expect, it } from "vitest";
 import {
   STUDIO_MOTION_TEMPLATES,
   TYPING_SOUND_PROFILES,
+  generateTemplateKeyframes,
+  templatePhysicsToEasing,
+  type KeyframeNode,
   type MotionTemplate,
 } from "./index";
 
@@ -197,5 +200,83 @@ describe("Studio Motion Templates & Expanded Audio Engine", () => {
 
     // Guarantees all 10 templates have distinct motion signatures
     expect(signatureTypes.size).toBe(10);
+  });
+
+  it("generateTemplateKeyframes creates strictly monotonic keyframes and zoom blocks for all 10 templates", () => {
+    for (const tpl of STUDIO_MOTION_TEMPLATES) {
+      const result = generateTemplateKeyframes(tpl, 8000);
+
+      // Keyframes must exist and have at least 3 nodes
+      expect(result.keyframes.length).toBeGreaterThanOrEqual(3);
+      expect(result.zoomBlocks.length).toBe(1);
+
+      // Verify strictly monotonic timestamps and bounds
+      for (let i = 0; i < result.keyframes.length; i++) {
+        const kf = result.keyframes[i]!;
+        expect(kf.timeMs).toBeGreaterThanOrEqual(0);
+        expect(kf.timeMs).toBeLessThanOrEqual(8000);
+        expect(kf.scale).toBeGreaterThanOrEqual(1.0);
+        expect(kf.targetX).toBeGreaterThanOrEqual(0);
+        expect(kf.targetX).toBeLessThanOrEqual(1);
+        expect(kf.targetY).toBeGreaterThanOrEqual(0);
+        expect(kf.targetY).toBeLessThanOrEqual(1);
+        expect(["spring", "cubic", "linear"]).toContain(kf.easing);
+
+        if (i > 0) {
+          expect(kf.timeMs).toBeGreaterThan(result.keyframes[i - 1]!.timeMs);
+        }
+      }
+
+      // Check zoom block validity
+      const zb = result.zoomBlocks[0]!;
+      expect(zb.endTimeMs).toBeGreaterThan(zb.startTimeMs);
+      expect(zb.endTimeMs - zb.startTimeMs).toBeGreaterThanOrEqual(500);
+      expect(zb.enabled).toBe(true);
+      expect(zb.scale).toBeGreaterThanOrEqual(1.15);
+    }
+  });
+
+  it("generateTemplateKeyframes reflects template camera leadIn, zoom scale, and audio presets", () => {
+    const keynoteTpl = STUDIO_MOTION_TEMPLATES.find((t) => t.id === "apple-keynote-polish")!;
+    const keynoteRes = generateTemplateKeyframes(keynoteTpl, 10000);
+
+    // Easing matches smooth physics -> cubic
+    expect(keynoteRes.keyframes[0]?.easing).toBe("cubic");
+    expect(keynoteRes.keyframes[1]?.timeMs).toBe(keynoteTpl.transitionTiming?.cameraLeadInMs);
+    expect(keynoteRes.keyframes[1]?.effect).toBe("spotlight");
+
+    const cliTpl = STUDIO_MOTION_TEMPLATES.find((t) => t.id === "developer-cli")!;
+    const cliRes = generateTemplateKeyframes(cliTpl, 10000);
+    expect(cliRes.keyframes[1]?.sound).toBe("typing");
+    expect(cliRes.keyframes[1]?.soundPreset).toBe("mechanical");
+    expect(cliRes.keyframes[0]?.easing).toBe("linear");
+
+    const saasTpl = STUDIO_MOTION_TEMPLATES.find((t) => t.id === "saas-launch-hero")!;
+    const saasRes = generateTemplateKeyframes(saasTpl, 10000);
+    expect(saasRes.keyframes[0]?.easing).toBe("spring");
+    expect(saasRes.keyframes[1]?.sound).toBe("click");
+    expect(saasRes.keyframes[1]?.soundPreset).toBe("bop");
+  });
+
+  it("generateTemplateKeyframes harmonizes existing keyframes and zoom blocks to match template easing and scale", () => {
+    const existingKfs: KeyframeNode[] = [
+      { id: "existing-1", timeMs: 500, scale: 1.0, targetX: 0.5, targetY: 0.5, easing: "linear" },
+      { id: "existing-2", timeMs: 1500, scale: 2.0, targetX: 0.3, targetY: 0.4, easing: "linear", sound: "click", soundPreset: "old" },
+    ];
+    const existingBlocks = [
+      { id: "block-1", startTimeMs: 1000, endTimeMs: 3000, targetX: 0.3, targetY: 0.4, scale: 2.0, enabled: true },
+    ];
+
+    const keynoteTpl = STUDIO_MOTION_TEMPLATES.find((t) => t.id === "apple-keynote-polish")!;
+    const result = generateTemplateKeyframes(keynoteTpl, 10000, {
+      existingKeyframes: existingKfs,
+      existingZoomBlocks: existingBlocks,
+    });
+
+    expect(result.keyframes.length).toBe(2);
+    expect(result.keyframes[0]!.easing).toBe("cubic");
+    expect(result.keyframes[1]!.easing).toBe("cubic");
+    expect(result.keyframes[1]!.soundPreset).toBe(keynoteTpl.audioSettings.clickSoundPreset);
+    expect(result.zoomBlocks[0]!.scale).toBe(keynoteTpl.looks.autoTrackScale || 1.5);
   });
 });

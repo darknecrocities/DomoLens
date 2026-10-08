@@ -33,6 +33,7 @@ import {
   type VideoEffectType,
   type ZoomBlock,
   STUDIO_MOTION_TEMPLATES,
+  generateTemplateKeyframes,
   enforceNonOverlappingZoomBlocks,
 } from "@domolens/core";
 import { sfx } from "../lib/sound-effects";
@@ -526,14 +527,30 @@ export const useEditor = create<EditorState>((set, get) => ({
       ...template.audioSettings,
     };
 
+    // Generate or harmonize timeline keyframes & zoom blocks reflecting the template's motion signature
+    const { keyframes: templateKeyframes, zoomBlocks: templateZoomBlocks } = generateTemplateKeyframes(
+      template,
+      state.durationMs || state.project.summary.durationMs || 6000,
+      {
+        existingKeyframes: state.project.keyframes,
+        existingZoomBlocks: state.project.zoomBlocks,
+        existingClicks: state.project.clicks,
+        existingInteractions: state.project.interactions,
+      }
+    );
+
     set({
       ...pushHistory(state),
       activeTemplateId: template.id,
       isTemplateModalOpen: false,
+      selectedKeyframeId: templateKeyframes[1]?.id ?? templateKeyframes[0]?.id ?? null,
+      selectedBlockId: templateZoomBlocks[0]?.id ?? null,
       project: {
         ...state.project,
         looks: updatedLooks,
         audioSettings: updatedAudio,
+        keyframes: templateKeyframes,
+        zoomBlocks: templateZoomBlocks,
         textOverlays: [
           ...(state.project.textOverlays || []).filter((o) => !o.id.startsWith("text-tpl-")),
           ...newTextOverlays,
@@ -548,7 +565,9 @@ export const useEditor = create<EditorState>((set, get) => ({
       sfx.playClickBop(template.audioSettings.clickSoundPreset || "bop", 0.75);
     }
 
-    toast.success(`Applied "${template.name}": ${template.aspectRatio} layout & ${template.audioSettings.typingSoundPreset || "bop"} SFX applied.`);
+    toast.success(
+      `Applied "${template.name}": ${templateKeyframes.length} signature keyframes plotted on timeline.`
+    );
   },
 
   selectBlock: (id) =>
