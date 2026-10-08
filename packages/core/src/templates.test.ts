@@ -182,4 +182,20 @@ describe("Studio Motion Templates & Expanded Audio Engine", () => {
     expect(tpl?.audioSettings.clickSoundPreset).toBe("click");
     expect(tpl?.audioSettings.typingSoundPreset).toBe("laptop");
   });
+
+  it("equips every studio template with a unique motionSignature choreography profile", () => {
+    const signatureTypes = new Set<string>();
+
+    for (const tpl of STUDIO_MOTION_TEMPLATES) {
+      expect(tpl.motionSignature).toBeDefined();
+      expect(tpl.motionSignature?.type).toBeTruthy();
+      expect(tpl.motionSignature?.label).toBeTruthy();
+      expect(tpl.motionSignature?.badge).toBeTruthy();
+      expect(tpl.motionSignature?.description).toBeTruthy();
+      signatureTypes.add(tpl.motionSignature!.type);
+    }
+
+    // Guarantees all 10 templates have distinct motion signatures
+    expect(signatureTypes.size).toBe(10);
+  });
 });

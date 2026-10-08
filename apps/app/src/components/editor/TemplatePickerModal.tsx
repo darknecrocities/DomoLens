@@ -195,6 +195,11 @@ export function TemplatePickerModal({ open, onClose }: TemplatePickerModalProps)
                       <span className="rounded bg-neutral-800 px-2 py-0.5 text-[10px] font-semibold text-neutral-300 border border-neutral-700/50">
                         {tpl.badge}
                       </span>
+                      {tpl.motionSignature && (
+                        <span className="rounded bg-indigo-500/15 px-1.5 py-0.5 text-[9px] font-mono font-bold text-indigo-300 border border-indigo-500/30">
+                          {tpl.motionSignature.badge}
+                        </span>
+                      )}
                       <span className="text-neutral-500">•</span>
                       <span className="text-[11px] text-neutral-400 capitalize">
                         {tpl.looks.windowFrame || "macOS"} Frame
@@ -229,6 +234,22 @@ export function TemplatePickerModal({ open, onClose }: TemplatePickerModalProps)
 
             {/* Template Specs Grid */}
             <div className="grid grid-cols-2 gap-2 text-xs">
+              {selectedTemplate.motionSignature && (
+                <div className="col-span-2 rounded-lg bg-indigo-950/40 p-2 border border-indigo-500/30 flex items-center justify-between">
+                  <div className="truncate pr-2">
+                    <span className="block text-indigo-300/80 font-medium text-[9px] uppercase font-mono tracking-wider">
+                      Signature Motion Choreography
+                    </span>
+                    <span className="text-white font-semibold text-xs truncate">
+                      {selectedTemplate.motionSignature.label}
+                    </span>
+                  </div>
+                  <span className="shrink-0 rounded bg-indigo-500/25 text-indigo-300 px-2 py-0.5 text-[9px] font-mono font-bold border border-indigo-500/40">
+                    {selectedTemplate.motionSignature.badge}
+                  </span>
+                </div>
+              )}
+
               <div className="rounded-lg bg-neutral-800/60 p-2 border border-neutral-700/40">
                 <span className="block text-neutral-400 font-medium text-[10px] uppercase">
                   Window Shell

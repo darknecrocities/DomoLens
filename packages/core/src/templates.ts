@@ -34,6 +34,26 @@ export interface TemplateCustomizableField {
   type: "text" | "color" | "badge";
 }
 
+export type MotionSignatureType =
+  | "3d-gyro-float"
+  | "cinematic-push"
+  | "rhythmic-punch"
+  | "kinetic-phone"
+  | "cli-scanlines"
+  | "step-focus"
+  | "isometric-upvote"
+  | "radar-scan"
+  | "click-ripples"
+  | "curved-cursor";
+
+/** Distinct motion choreography signature definition for studio templates. */
+export interface TemplateMotionSignature {
+  type: MotionSignatureType;
+  label: string;
+  badge: string;
+  description: string;
+}
+
 export interface MotionTemplate {
   id: string;
   name: string;
@@ -47,6 +67,8 @@ export interface MotionTemplate {
   badgeStyle?: TemplateBadgeStyle;
   /** Visual typography styling for headlines and overlays. */
   typography?: TemplateTypography;
+  /** Signature motion choreography profile for live preview and canvas simulation. */
+  motionSignature?: TemplateMotionSignature;
   /** Choreography transition timings for camera moves and entrances. */
   transitionTiming?: TemplateTransitionTiming;
   /** Camera physics motion curve ('smooth' | 'snappy' | 'spring' | 'linear'). */
@@ -71,6 +93,12 @@ export const STUDIO_MOTION_TEMPLATES: MotionTemplate[] = [
       bg: "rgba(99, 102, 241, 0.2)",
       text: "#818cf8",
       border: "rgba(99, 102, 241, 0.45)",
+    },
+    motionSignature: {
+      type: "3d-gyro-float",
+      label: "3D Gyro Float & Specular Sweep",
+      badge: "3D GYRO FLOAT",
+      description: "Continuous 3D gyroscopic camera drift with sweeping specular light sheen across the glass",
     },
     typography: {
       fontFamily: "'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
@@ -155,6 +183,12 @@ export const STUDIO_MOTION_TEMPLATES: MotionTemplate[] = [
       text: "#0071e3",
       border: "rgba(0, 113, 227, 0.3)",
     },
+    motionSignature: {
+      type: "cinematic-push",
+      label: "Cinematic Ken Burns Push",
+      badge: "CINEMATIC PUSH",
+      description: "Silky-smooth slow camera zoom-in with Safari chrome and pristine silver bloom",
+    },
     typography: {
       fontFamily: "-apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text', 'Helvetica Neue', Helvetica, Arial, sans-serif",
       fontWeight: "600",
@@ -238,6 +272,12 @@ export const STUDIO_MOTION_TEMPLATES: MotionTemplate[] = [
       text: "#c084fc",
       border: "rgba(168, 85, 247, 0.45)",
     },
+    motionSignature: {
+      type: "rhythmic-punch",
+      label: "Rhythmic Feature Punch-In",
+      badge: "RHYTHMIC PUNCH",
+      description: "Snappy camera punch zooms with elastic bouncy badge pop-ins and violet spotlight",
+    },
     typography: {
       fontFamily: "'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif",
       fontWeight: "700",
@@ -319,6 +359,12 @@ export const STUDIO_MOTION_TEMPLATES: MotionTemplate[] = [
       bg: "rgba(250, 204, 21, 0.22)",
       text: "#facc15",
       border: "rgba(250, 204, 21, 0.6)",
+    },
+    motionSignature: {
+      type: "kinetic-phone",
+      label: "Floating Phone & Kinetic Captions",
+      badge: "KINETIC SHORT",
+      description: "Vertical handheld phone sway with bold bouncing kinetic typography caption sync",
     },
     typography: {
       fontFamily: "'Inter', system-ui, -apple-system, BlinkMacSystemFont, sans-serif",
@@ -402,6 +448,12 @@ export const STUDIO_MOTION_TEMPLATES: MotionTemplate[] = [
       text: "#4ade80",
       border: "rgba(34, 197, 94, 0.4)",
     },
+    motionSignature: {
+      type: "cli-scanlines",
+      label: "CRT Scanlines & Command Prompt",
+      badge: "CRT SCANLINE",
+      description: "Retro CRT scanlines, terminal window framing, and blinking command line cursor",
+    },
     typography: {
       fontFamily: "'JetBrains Mono', 'Fira Code', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace",
       fontWeight: "700",
@@ -483,6 +535,12 @@ export const STUDIO_MOTION_TEMPLATES: MotionTemplate[] = [
       bg: "rgba(14, 165, 233, 0.2)",
       text: "#38bdf8",
       border: "rgba(14, 165, 233, 0.4)",
+    },
+    motionSignature: {
+      type: "step-focus",
+      label: "Step-by-Step Focus Callout",
+      badge: "STEP FOCUS",
+      description: "Clean sequential step indicator with focused spotlight ring and tutorial callouts",
     },
     typography: {
       fontFamily: "'Inter', system-ui, -apple-system, BlinkMacSystemFont, sans-serif",
@@ -566,6 +624,12 @@ export const STUDIO_MOTION_TEMPLATES: MotionTemplate[] = [
       text: "#fb923c",
       border: "rgba(234, 88, 12, 0.5)",
     },
+    motionSignature: {
+      type: "isometric-upvote",
+      label: "Isometric Pitch & Upvote Burst",
+      badge: "ISOMETRIC BURST",
+      description: "12° dynamic 3D isometric pitch with floating, bouncing upvote badge particles",
+    },
     typography: {
       fontFamily: "'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif",
       fontWeight: "800",
@@ -647,6 +711,12 @@ export const STUDIO_MOTION_TEMPLATES: MotionTemplate[] = [
       bg: "rgba(56, 189, 248, 0.15)",
       text: "#38bdf8",
       border: "rgba(56, 189, 248, 0.35)",
+    },
+    motionSignature: {
+      type: "radar-scan",
+      label: "Radar Grid & Laser Scanner",
+      badge: "RADAR SCAN",
+      description: "Solid corporate framing with high-tech blue laser scan line and radar pulse",
     },
     typography: {
       fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
@@ -730,6 +800,12 @@ export const STUDIO_MOTION_TEMPLATES: MotionTemplate[] = [
       text: "#22d3ee",
       border: "rgba(6, 182, 212, 0.45)",
     },
+    motionSignature: {
+      type: "click-ripples",
+      label: "Tactile Click Shockwaves",
+      badge: "TACTILE RIPPLES",
+      description: "Glassmorphic frame with rhythmic simulated cursor taps and expanding ripple rings",
+    },
     typography: {
       fontFamily: "'Inter', system-ui, -apple-system, BlinkMacSystemFont, sans-serif",
       fontWeight: "700",
@@ -811,6 +887,12 @@ export const STUDIO_MOTION_TEMPLATES: MotionTemplate[] = [
       bg: "rgba(236, 72, 153, 0.18)",
       text: "#db2777",
       border: "rgba(236, 72, 153, 0.35)",
+    },
+    motionSignature: {
+      type: "curved-cursor",
+      label: "Curved Cursor Flow & Pastel Mesh",
+      badge: "CURVED CURSOR",
+      description: "Fluid pastel morph with animated curved cursor gliding and click ripple",
     },
     typography: {
       fontFamily: "'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif",

@@ -104,19 +104,19 @@ function resolvePreviewVideoSrc(project: ProjectData | null): string {
 }
 
 /**
- * Mirror of TemplateVideoPreview aspect dimension calculation
+ * Mirror of TemplateVideoPreview aspect dimension calculation with breathing room
  */
 function getAspectDimensions(aspectRatio: string): string {
   switch (aspectRatio) {
     case "9:16":
-      return "aspect-[9/16] max-h-[300px] w-auto";
+      return "aspect-[9/16] h-[215px] w-auto max-w-[130px]";
     case "1:1":
-      return "aspect-square max-h-[290px] w-auto";
+      return "aspect-square h-[200px] w-auto max-w-[200px]";
     case "4:3":
-      return "aspect-[4/3] max-h-[290px] w-auto";
+      return "aspect-[4/3] h-[195px] w-auto max-w-[260px]";
     case "16:9":
     default:
-      return "aspect-video w-full";
+      return "aspect-video w-[82%] max-w-[340px]";
   }
 }
 
@@ -259,11 +259,11 @@ describe("E2E Motion Video Templates Suite", () => {
         expect(src).toBe("blob://summary-fallback.mp4");
       });
 
-      it("F1-4: maps aspect ratios to exact CSS viewport utility classes", () => {
-        expect(getAspectDimensions("16:9")).toBe("aspect-video w-full");
-        expect(getAspectDimensions("9:16")).toBe("aspect-[9/16] max-h-[300px] w-auto");
-        expect(getAspectDimensions("1:1")).toBe("aspect-square max-h-[290px] w-auto");
-        expect(getAspectDimensions("4:3")).toBe("aspect-[4/3] max-h-[290px] w-auto");
+      it("F1-4: maps aspect ratios to exact CSS viewport utility classes with breathing room", () => {
+        expect(getAspectDimensions("16:9")).toBe("aspect-video w-[82%] max-w-[340px]");
+        expect(getAspectDimensions("9:16")).toBe("aspect-[9/16] h-[215px] w-auto max-w-[130px]");
+        expect(getAspectDimensions("1:1")).toBe("aspect-square h-[200px] w-auto max-w-[200px]");
+        expect(getAspectDimensions("4:3")).toBe("aspect-[4/3] h-[195px] w-auto max-w-[260px]");
       });
 
       it("F1-5: calculates 3D tilt perspective transform strings for non-zero angles", () => {
@@ -753,6 +753,37 @@ describe("E2E Motion Video Templates Suite", () => {
           expect(tpl.looks.backgroundType).toBe("gradient");
           expect(tpl.looks.backgroundValue).toContain("linear-gradient");
         }
+      });
+
+      it("F8-7: equips every studio template with a distinct motionSignature choreography profile", () => {
+        const signatureTypes = new Set<string>();
+        for (const tpl of STUDIO_MOTION_TEMPLATES) {
+          expect(tpl.motionSignature).toBeDefined();
+          expect(tpl.motionSignature?.type).toBeTruthy();
+          expect(tpl.motionSignature?.label).toBeTruthy();
+          expect(tpl.motionSignature?.badge).toBeTruthy();
+          expect(tpl.motionSignature?.description).toBeTruthy();
+          signatureTypes.add(tpl.motionSignature!.type);
+        }
+        expect(signatureTypes.size).toBe(10);
+      });
+
+      it("F8-8: verifies specific signature motion styles for prominent templates", () => {
+        const saas = STUDIO_MOTION_TEMPLATES.find((t) => t.id === "saas-launch-hero")!;
+        expect(saas.motionSignature?.type).toBe("3d-gyro-float");
+        expect(saas.motionSignature?.badge).toBe("3D GYRO FLOAT");
+
+        const keynote = STUDIO_MOTION_TEMPLATES.find((t) => t.id === "apple-keynote-polish")!;
+        expect(keynote.motionSignature?.type).toBe("cinematic-push");
+        expect(keynote.motionSignature?.badge).toBe("CINEMATIC PUSH");
+
+        const tiktok = STUDIO_MOTION_TEMPLATES.find((t) => t.id === "viral-short-tiktok")!;
+        expect(tiktok.motionSignature?.type).toBe("kinetic-phone");
+        expect(tiktok.motionSignature?.badge).toBe("KINETIC SHORT");
+
+        const cli = STUDIO_MOTION_TEMPLATES.find((t) => t.id === "developer-cli")!;
+        expect(cli.motionSignature?.type).toBe("cli-scanlines");
+        expect(cli.motionSignature?.badge).toBe("CRT SCANLINE");
       });
     });
 
@@ -1340,7 +1371,7 @@ describe("E2E Motion Video Templates Suite", () => {
 
       // 3. Audits live preview badge and framing
       const aspectClass = getAspectDimensions(template.aspectRatio);
-      expect(aspectClass).toBe("aspect-[9/16] max-h-[300px] w-auto");
+      expect(aspectClass).toBe("aspect-[9/16] h-[215px] w-auto max-w-[130px]");
 
       // 4. Commits template
       useEditor.getState().applyTemplate(template.id, {
@@ -1467,10 +1498,10 @@ describe("E2E Motion Video Templates Suite", () => {
       expect(formatTime(currentTime)).toBe("0:06.0");
 
       // 4. Verifies aspect ratio switches across all 4 ratios
-      expect(getAspectDimensions("16:9")).toBe("aspect-video w-full");
-      expect(getAspectDimensions("9:16")).toBe("aspect-[9/16] max-h-[300px] w-auto");
-      expect(getAspectDimensions("1:1")).toBe("aspect-square max-h-[290px] w-auto");
-      expect(getAspectDimensions("4:3")).toBe("aspect-[4/3] max-h-[290px] w-auto");
+      expect(getAspectDimensions("16:9")).toBe("aspect-video w-[82%] max-w-[340px]");
+      expect(getAspectDimensions("9:16")).toBe("aspect-[9/16] h-[215px] w-auto max-w-[130px]");
+      expect(getAspectDimensions("1:1")).toBe("aspect-square h-[200px] w-auto max-w-[200px]");
+      expect(getAspectDimensions("4:3")).toBe("aspect-[4/3] h-[195px] w-auto max-w-[260px]");
 
       // 5. Applying template with null project safely no-ops
       useEditor.getState().applyTemplate("product-hunt-teaser");
