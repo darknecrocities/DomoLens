@@ -7,17 +7,15 @@ import {
 
 class SoundEffectsEngine {
   private ctx: AudioContext | null = null;
-  private bgAudio: HTMLAudioElement | null = null;
-  private currentMusicUrl: string | null = null;
-  private isDucked = false;
-  private musicVolume = 0.5;
   private lastKeystrokeTime = 0;
   private activeBurstTimers: number[] = [];
 
   private getContext(): AudioContext | null {
     if (typeof window === "undefined") return null;
     if (!this.ctx) {
-      const AudioCtx = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+      const AudioCtx =
+        window.AudioContext ||
+        (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
       if (AudioCtx) {
         this.ctx = new AudioCtx();
       }
@@ -73,17 +71,17 @@ class SoundEffectsEngine {
   }
 
   /**
-   * Plays a single realistic keystroke sound (mechanical thock, laptop chiclet, or typewriter).
+   * Plays a single realistic keystroke sound (thock, creamy, thack, clicky, thick, etc.).
    * Throttled to prevent buzzing or crackle during fast keystrokes.
    */
   public playKeystroke(
-    preset: TypingSoundPreset = "mechanical",
+    preset: TypingSoundPreset = "creamy",
     volume = 0.55,
     isSpaceOrEnter = false,
   ): void {
     if (preset === "none" || volume <= 0) return;
     const nowTime = typeof performance !== "undefined" ? performance.now() : Date.now();
-    if (nowTime - this.lastKeystrokeTime < 85 && !isSpaceOrEnter) {
+    if (nowTime - this.lastKeystrokeTime < 70 && !isSpaceOrEnter) {
       return;
     }
     this.lastKeystrokeTime = nowTime;
@@ -91,12 +89,16 @@ class SoundEffectsEngine {
     const ctx = this.getContext();
     if (!ctx) return;
 
-    const profile = TYPING_SOUND_PROFILES[preset] || TYPING_SOUND_PROFILES.mechanical;
+    const profile =
+      TYPING_SOUND_PROFILES[preset] ||
+      TYPING_SOUND_PROFILES.creamy ||
+      TYPING_SOUND_PROFILES.mechanical;
     const now = ctx.currentTime;
     const jitter = 1 + (Math.random() - 0.5) * 0.12;
 
-    // 1. High-frequency click impulse (key switch contact)
-    const bufferSize = Math.floor(ctx.sampleRate * 0.015);
+    // 1. High-frequency contact click / switch leaf impulse
+    const noiseDuration = profile.clickLeafSnap ? 0.02 : 0.012;
+    const bufferSize = Math.floor(ctx.sampleRate * noiseDuration);
     const noiseBuffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
     const output = noiseBuffer.getChannelData(0);
     for (let i = 0; i < bufferSize; i++) {
@@ -107,35 +109,80 @@ class SoundEffectsEngine {
     whiteNoise.buffer = noiseBuffer;
 
     const noiseFilter = ctx.createBiquadFilter();
-    noiseFilter.type = "highpass";
+    noiseFilter.type = profile.resonanceFilter === "bandpass" ? "bandpass" : "highpass";
     noiseFilter.frequency.setValueAtTime(profile.noiseCutoff * jitter, now);
+    if (profile.resonanceFilter === "bandpass") {
+      noiseFilter.Q.setValueAtTime(profile.resonanceQ || 1.6, now);
+    }
 
     const noiseGain = ctx.createGain();
-    const peakNoise = Math.min(1.0, volume * 0.40);
-    noiseGain.gain.setValueAtTime(peakNoise, now);
-    noiseGain.gain.exponentialRampToValueAtTime(0.001, now + 0.015);
+    const baseNoiseGain = (profile.noiseGain ?? 0.3) * volume;
+    noiseGain.gain.setValueAtTime(Math.min(1.0, baseNoiseGain), now);
+    noiseGain.gain.exponentialRampToValueAtTime(0.0005, now + noiseDuration);
 
     whiteNoise.connect(noiseFilter);
     noiseFilter.connect(noiseGain);
     noiseGain.connect(ctx.destination);
     whiteNoise.start(now);
 
-    // 2. Body resonance "thock"
+    // If clicky switch, synthesize the distinct click-bar / click-leaf reset snap
+    if (profile.clickLeafSnap) {
+      const snapOsc = ctx.createOscillator();
+      snapOsc.type = "sine";
+      snapOsc.frequency.setValueAtTime(4500 * jitter, now + 0.002);
+      snapOsc.frequency.exponentialRampToValueAtTime(2000, now + 0.012);
+
+      const snapGain = ctx.createGain();
+      snapGain.gain.setValueAtTime(0.0001, now);
+      snapGain.gain.setValueAtTime(Math.min(1.0, volume * 0.42), now + 0.002);
+      snapGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.012);
+
+      snapOsc.connect(snapGain);
+      snapGain.connect(ctx.destination);
+      snapOsc.start(now + 0.002);
+      snapOsc.stop(now + 0.014);
+    }
+
+    // 2. Primary Body resonance "Thock" / housing impact
     const osc = ctx.createOscillator();
     osc.type = "triangle";
-    const baseThock = isSpaceOrEnter ? profile.thockFreq * 0.75 : profile.thockFreq * jitter;
+    const baseThock = isSpaceOrEnter ? profile.thockFreq * 0.72 : profile.thockFreq * jitter;
     osc.frequency.setValueAtTime(baseThock, now);
-    osc.frequency.exponentialRampToValueAtTime(baseThock * 0.5, now + profile.durationSec);
+    osc.frequency.exponentialRampToValueAtTime(baseThock * 0.45, now + profile.durationSec);
+
+    const bodyFilter = ctx.createBiquadFilter();
+    bodyFilter.type = profile.resonanceFilter || "lowpass";
+    bodyFilter.frequency.setValueAtTime((profile.resonanceCutoff || 1400) * jitter, now);
+    bodyFilter.Q.setValueAtTime(profile.resonanceQ || 2.0, now);
 
     const bodyGain = ctx.createGain();
-    const peakBody = Math.min(1.0, volume * (isSpaceOrEnter ? 0.65 : 0.45));
+    const peakBody = Math.min(1.0, volume * (isSpaceOrEnter ? 0.68 : 0.5));
     bodyGain.gain.setValueAtTime(peakBody, now);
     bodyGain.gain.exponentialRampToValueAtTime(0.0001, now + profile.durationSec);
 
-    osc.connect(bodyGain);
+    osc.connect(bodyFilter);
+    bodyFilter.connect(bodyGain);
     bodyGain.connect(ctx.destination);
     osc.start(now);
     osc.stop(now + profile.durationSec);
+
+    // 3. Dual-Harmonic Layer for "Creamy Marbly" switches (adds silky tape-mod foam body)
+    if (profile.harmonicMultiplier) {
+      const harmOsc = ctx.createOscillator();
+      harmOsc.type = "sine";
+      const harmFreq = baseThock * profile.harmonicMultiplier;
+      harmOsc.frequency.setValueAtTime(harmFreq, now);
+      harmOsc.frequency.exponentialRampToValueAtTime(harmFreq * 0.55, now + profile.durationSec * 0.8);
+
+      const harmGain = ctx.createGain();
+      harmGain.gain.setValueAtTime(Math.min(1.0, volume * 0.22), now);
+      harmGain.gain.exponentialRampToValueAtTime(0.0001, now + profile.durationSec * 0.8);
+
+      harmOsc.connect(harmGain);
+      harmGain.connect(ctx.destination);
+      harmOsc.start(now);
+      harmOsc.stop(now + profile.durationSec * 0.8);
+    }
   }
 
   /**
@@ -144,14 +191,13 @@ class SoundEffectsEngine {
    */
   public playTypingBurst(
     count = 3,
-    intervalMs = 110,
-    preset: TypingSoundPreset = "mechanical",
+    intervalMs = 105,
+    preset: TypingSoundPreset = "creamy",
     volume = 0.55,
   ): void {
     if (preset === "none" || volume <= 0) return;
     if (typeof window === "undefined") return;
 
-    // Clear any previous burst timers so bursts never pile up into chaotic crackle
     this.activeBurstTimers.forEach((t) => window.clearTimeout(t));
     this.activeBurstTimers = [];
 
@@ -166,55 +212,11 @@ class SoundEffectsEngine {
     }
   }
 
-  /**
-   * Background Music: play or update background music playback.
-   */
-  public playMusic(url: string, volume = 0.5, loop = true): void {
-    if (typeof window === "undefined") return;
-    this.musicVolume = volume;
-
-    if (!this.bgAudio || this.currentMusicUrl !== url) {
-      if (this.bgAudio) {
-        this.bgAudio.pause();
-        this.bgAudio = null;
-      }
-      this.currentMusicUrl = url;
-      this.bgAudio = new Audio(url);
-      this.bgAudio.loop = loop;
-    }
-
-    this.bgAudio.volume = this.isDucked ? this.musicVolume * 0.4 : this.musicVolume;
-    this.bgAudio.play().catch(() => {});
-  }
-
-  public pauseMusic(): void {
-    if (this.bgAudio) {
-      this.bgAudio.pause();
-    }
-  }
-
-  public setMusicVolume(volume: number): void {
-    this.musicVolume = volume;
-    if (this.bgAudio) {
-      this.bgAudio.volume = this.isDucked ? this.musicVolume * 0.4 : this.musicVolume;
-    }
-  }
-
-  /**
-   * Dynamically ducks background music volume during speech or rapid actions.
-   */
-  public duckMusic(durationMs = 600, duckFactor = 0.4): void {
-    if (!this.bgAudio || this.isDucked) return;
-    this.isDucked = true;
-    this.bgAudio.volume = this.musicVolume * duckFactor;
-
-    setTimeout(() => {
-      this.isDucked = false;
-      if (this.bgAudio) {
-        this.bgAudio.volume = this.musicVolume;
-      }
-    }, durationMs);
-  }
+  // Background Music no-ops
+  public playMusic(_url?: string, _volume?: number, _loop?: boolean): void {}
+  public pauseMusic(): void {}
+  public setMusicVolume(_volume?: number): void {}
+  public duckMusic(_durationMs?: number, _duckFactor?: number): void {}
 }
 
 export const sfx = new SoundEffectsEngine();

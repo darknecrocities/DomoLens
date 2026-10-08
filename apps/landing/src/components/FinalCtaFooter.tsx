@@ -95,18 +95,10 @@ export function FinalCtaFooter() {
               <div className="mt-6 flex flex-wrap gap-3">
                 <a
                   href="https://github.com/darknecrocities/DomoLens/releases/latest/download/DomoLens-Universal.dmg"
-                  download="DomoLens-Universal.dmg"
                   className="inline-flex items-center gap-2 rounded-lg bg-white px-5 py-2.5 font-mono text-xs font-bold text-black uppercase hover:bg-neutral-200"
                 >
                   <Download className="size-4" />
                   <span>Download .DMG (Universal)</span>
-                </a>
-                <a
-                  href="/DomoLens-Universal.dmg"
-                  download="DomoLens-Universal.dmg"
-                  className="flex items-center rounded-lg border border-neutral-800 bg-black px-4 py-2 font-mono text-xs text-neutral-300 hover:text-white"
-                >
-                  <span>Direct Mirror</span>
                 </a>
                 <a
                   href="https://github.com/darknecrocities/DomoLens/releases/latest"
@@ -174,15 +166,22 @@ export function FinalCtaFooter() {
                   className="inline-flex items-center gap-2 rounded-lg bg-white px-5 py-2.5 font-mono text-xs font-bold text-black uppercase hover:bg-neutral-200"
                 >
                   <Download className="size-4" />
-                  <span>Download Linux (.AppImage)</span>
+                  <span>Download .AppImage</span>
+                </a>
+                <a
+                  href="https://github.com/darknecrocities/DomoLens/releases/latest/download/DomoLens-Linux.deb"
+                  className="inline-flex items-center gap-2 rounded-lg border border-neutral-700 bg-neutral-900 px-5 py-2.5 font-mono text-xs font-bold text-neutral-200 uppercase hover:bg-neutral-800 hover:text-white"
+                >
+                  <Download className="size-4" />
+                  <span>Download .DEB (Debian/Ubuntu)</span>
                 </a>
                 <a
                   href="https://github.com/darknecrocities/DomoLens/releases/latest"
                   target="_blank"
                   rel="noreferrer"
-                  className="flex items-center rounded-lg border border-neutral-800 bg-black px-4 py-2 font-mono text-xs text-neutral-300 hover:text-white"
+                  className="flex items-center rounded-lg border border-neutral-800 bg-black px-4 py-2 font-mono text-xs text-neutral-400 hover:text-white"
                 >
-                  <span>GitHub Release (.DEB)</span>
+                  <span>All Releases</span>
                 </a>
               </div>
             </div>

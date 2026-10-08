@@ -2,7 +2,6 @@ import { useState } from "react";
 import {
   Sparkles,
   Type,
-  Music,
   Paintbrush,
   MousePointer,
   Download,
@@ -12,7 +11,6 @@ import {
   Trash2,
   Sliders,
   Volume2,
-  VolumeX,
   Diamond,
   Play,
   Wand2,
@@ -20,9 +18,16 @@ import {
   Circle,
   Crosshair,
   SunMedium,
+  HelpCircle,
 } from "lucide-react";
-import { formatDuration, type ProjectLooks } from "@domolens/core";
+import {
+  formatDuration,
+  type ClickSoundPreset,
+  type ProjectLooks,
+  type TypingSoundPreset,
+} from "@domolens/core";
 import { useEditor, type ToolTab } from "../../store/editor";
+import { useTutorial } from "../../store/tutorial";
 
 function AddKeyframeButton({ zoomScale }: { zoomScale: number }) {
   const currentTimeMs = useEditor((s) => s.currentTimeMs);
@@ -31,7 +36,8 @@ function AddKeyframeButton({ zoomScale }: { zoomScale: number }) {
     <button
       type="button"
       onClick={() => addKeyframeAtCurrentTime(zoomScale)}
-      className="flex items-center gap-1 text-[11px] font-medium text-white hover:text-neutral-300"
+      className="flex items-center gap-1 rounded bg-white text-black font-semibold px-2 py-0.5 text-[10px] hover:bg-neutral-200 transition-colors shadow-sm"
+      title={`Add keyframe diamond at ${formatDuration(currentTimeMs)}`}
     >
       <Plus className="size-3" /> Add at {formatDuration(currentTimeMs)}
     </button>
@@ -63,9 +69,6 @@ export function ToolsSidebar() {
   const addTextOverlay = useEditor((s) => s.addTextOverlay);
   const updateTextOverlay = useEditor((s) => s.updateTextOverlay);
   const deleteTextOverlay = useEditor((s) => s.deleteTextOverlay);
-  const addAudioTrack = useEditor((s) => s.addAudioTrack);
-  const updateAudioTrack = useEditor((s) => s.updateAudioTrack);
-  const deleteAudioTrack = useEditor((s) => s.deleteAudioTrack);
   const updateAudioSettings = useEditor((s) => s.updateAudioSettings);
   const autoAfx = useEditor((s) => s.autoAfx);
   const playClickSoundPreview = useEditor((s) => s.playClickSoundPreview);
@@ -77,7 +80,7 @@ export function ToolsSidebar() {
   const selectText = useEditor((s) => s.selectText);
   const setExportModalOpen = useEditor((s) => s.setExportModalOpen);
 
-  const [holdDurationSec, setHoldDurationSec] = useState(1.2);
+  const [holdDurationSec, setHoldDurationSec] = useState(1.0);
   const [zoomScale, setZoomScale] = useState(1.85);
 
   if (!isRightSidebarOpen) {
@@ -103,7 +106,7 @@ export function ToolsSidebar() {
     { id: "zoom", label: "Zoom", icon: <Sparkles className="size-3.5" /> },
     { id: "effects", label: "Effects", icon: <Wand2 className="size-3.5" /> },
     { id: "text", label: "Text", icon: <Type className="size-3.5" /> },
-    { id: "audio", label: "Audio", icon: <Music className="size-3.5" /> },
+    { id: "audio", label: "Audio", icon: <Volume2 className="size-3.5" /> },
     { id: "looks", label: "Canvas", icon: <Paintbrush className="size-3.5" /> },
     { id: "cursor", label: "Cursor", icon: <MousePointer className="size-3.5" /> },
     { id: "export", label: "Export", icon: <Download className="size-3.5" /> },
@@ -115,18 +118,28 @@ export function ToolsSidebar() {
   const selectedText = project?.textOverlays?.find((t) => t.id === selectedTextId);
 
   return (
-    <aside className="flex h-full w-full md:w-72 lg:w-80 shrink-0 flex-col border-l border-ink-800 bg-ink-950/95 backdrop-blur-md z-10 select-none">
+    <aside data-tutorial-target="tools-panel" className="flex h-full max-h-full min-h-0 w-full md:w-72 lg:w-80 shrink-0 flex-col border-l border-ink-800 bg-ink-950/95 backdrop-blur-md z-10 select-none">
       {/* Sidebar Header & Tab Navigation */}
       <div className="flex h-12 items-center justify-between border-b border-ink-800 px-3">
         <span className="text-xs sm:text-sm font-semibold text-fg">Tools & Effects</span>
-        <button
-          type="button"
-          onClick={toggleRightSidebar}
-          className="rounded p-1 text-fg-muted hover:bg-ink-800 hover:text-fg transition-colors"
-          title="Collapse Tools Panel"
-        >
-          <ChevronRight className="size-4" />
-        </button>
+        <div className="flex items-center gap-1">
+          <button
+            type="button"
+            onClick={() => useTutorial.getState().startTutorial()}
+            className="rounded p-1 text-fg-muted hover:bg-ink-800 hover:text-white transition-colors"
+            title="Studio Walkthrough Tutorial"
+          >
+            <HelpCircle className="size-4" />
+          </button>
+          <button
+            type="button"
+            onClick={toggleRightSidebar}
+            className="rounded p-1 text-fg-muted hover:bg-ink-800 hover:text-fg transition-colors"
+            title="Collapse Tools Panel"
+          >
+            <ChevronRight className="size-4" />
+          </button>
+        </div>
       </div>
 
       {/* Tab Switcher Icons */}
@@ -149,7 +162,7 @@ export function ToolsSidebar() {
       </div>
 
       {/* Tab Content Body */}
-      <div className="flex-1 overflow-y-auto p-3 text-xs space-y-4">
+      <div className="flex-1 min-h-0 overflow-y-auto p-3 text-xs space-y-4">
         {/* TAB 1: ZOOM & KEYFRAMES */}
         {activeToolTab === "zoom" && (
           <div className="space-y-4">
@@ -225,6 +238,7 @@ export function ToolsSidebar() {
                     plotInteractions({
                       holdDurationMs: Math.round(holdDurationSec * 1000),
                       inactivityResetMs: Math.round(holdDurationSec * 1000),
+                      continuousGlide: true,
                       scale: zoomScale,
                     })
                   }
@@ -307,6 +321,36 @@ export function ToolsSidebar() {
                       ({Math.round(selectedBlock.targetX * 100)}%, {Math.round(selectedBlock.targetY * 100)}%)
                     </span>
                   </div>
+                  <div className="grid grid-cols-2 gap-1.5 pt-0.5">
+                    <button
+                      type="button"
+                      onClick={() =>
+                        updateZoomBlock(selectedBlock.id, {
+                          targetX: 0.50,
+                          targetY: 0.38,
+                        })
+                      }
+                      className="flex items-center justify-center gap-1 rounded bg-ink-800 hover:bg-ink-700 py-1 px-1.5 text-[10px] font-medium text-fg hover:text-white transition-colors border border-ink-700"
+                      title="Center on search bar / recording stage (50%, 38%)"
+                    >
+                      <Crosshair className="size-3 text-white" />
+                      Center Stage (50%, 38%)
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        updateZoomBlock(selectedBlock.id, {
+                          targetX: 0.50,
+                          targetY: 0.50,
+                        })
+                      }
+                      className="flex items-center justify-center gap-1 rounded bg-ink-800 hover:bg-ink-700 py-1 px-1.5 text-[10px] font-medium text-fg hover:text-white transition-colors border border-ink-700"
+                      title="Reset focal target to dead center (50%, 50%)"
+                    >
+                      <Crosshair className="size-3 text-fg-muted" />
+                      Dead Center (50%, 50%)
+                    </button>
+                  </div>
                   <p className="text-[10px] text-fg-faint leading-tight">
                     Tip: Click directly on the preview video canvas to center this zoom on any button, search bar, or element.
                   </p>
@@ -353,6 +397,36 @@ export function ToolsSidebar() {
                     <span className="font-mono text-white">
                       ({Math.round(selectedKeyframe.targetX * 100)}%, {Math.round(selectedKeyframe.targetY * 100)}%)
                     </span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-1.5 pt-0.5">
+                    <button
+                      type="button"
+                      onClick={() =>
+                        updateKeyframe(selectedKeyframe.id, {
+                          targetX: 0.50,
+                          targetY: 0.38,
+                        })
+                      }
+                      className="flex items-center justify-center gap-1 rounded bg-ink-800 hover:bg-ink-700 py-1 px-1.5 text-[10px] font-medium text-fg hover:text-white transition-colors border border-ink-700"
+                      title="Center on search bar / recording stage (50%, 38%)"
+                    >
+                      <Crosshair className="size-3 text-white" />
+                      Center Stage
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        updateKeyframe(selectedKeyframe.id, {
+                          targetX: 0.50,
+                          targetY: 0.50,
+                        })
+                      }
+                      className="flex items-center justify-center gap-1 rounded bg-ink-800 hover:bg-ink-700 py-1 px-1.5 text-[10px] font-medium text-fg hover:text-white transition-colors border border-ink-700"
+                      title="Reset focal target to dead center (50%, 50%)"
+                    >
+                      <Crosshair className="size-3 text-fg-muted" />
+                      Dead Center
+                    </button>
                   </div>
 
                   <div className="flex gap-2">
@@ -440,20 +514,31 @@ export function ToolsSidebar() {
                     )}
                   </div>
 
-                  {/* Keyframe Attached Sound Trigger */}
-                  <div className="pt-2 border-t border-ink-800">
-                    <div className="flex items-center justify-between text-[10px] font-semibold text-fg-muted uppercase tracking-wider mb-1.5">
-                      <span>Sound Trigger</span>
+                  {/* Keyframe Attached Sound Trigger & SFX Studio */}
+                  <div className="pt-2 border-t border-ink-800 space-y-2">
+                    <div className="flex items-center justify-between text-[10px] font-semibold text-fg-muted uppercase tracking-wider">
+                      <span className="flex items-center gap-1">
+                        <Volume2 className="size-3 text-fg" />
+                        Keyframe SFX
+                      </span>
                       {selectedKeyframe.sound && (
                         <button
                           type="button"
-                          onClick={() => updateKeyframe(selectedKeyframe.id, { sound: undefined })}
+                          onClick={() =>
+                            updateKeyframe(selectedKeyframe.id, {
+                              sound: undefined,
+                              soundPreset: undefined,
+                              soundVolume: undefined,
+                            })
+                          }
                           className="text-danger hover:underline font-normal text-[9px]"
                         >
-                          Remove
+                          Remove SFX
                         </button>
                       )}
                     </div>
+
+                    {/* SFX Type Selector */}
                     <div className="grid grid-cols-3 gap-1">
                       {[
                         { label: "None", value: undefined },
@@ -463,18 +548,26 @@ export function ToolsSidebar() {
                         <button
                           key={item.label}
                           type="button"
-                          onClick={() =>
+                          onClick={() => {
+                            const newSound = item.value as any;
+                            const preset =
+                              newSound === "typing"
+                                ? "mechanical"
+                                : newSound === "click"
+                                ? "bop"
+                                : undefined;
+                            const vol = newSound ? (newSound === "typing" ? 0.55 : 0.70) : undefined;
                             updateKeyframe(selectedKeyframe.id, {
-                              sound: item.value as any,
-                              soundPreset:
-                                item.value === "typing"
-                                  ? "mechanical"
-                                  : item.value === "click"
-                                  ? "bop"
-                                  : undefined,
-                              soundVolume: item.value ? 0.7 : undefined,
-                            })
-                          }
+                              sound: newSound,
+                              soundPreset: preset,
+                              soundVolume: vol,
+                            });
+                            if (newSound === "typing") {
+                              playTypingSoundPreview((preset as TypingSoundPreset) || "mechanical", vol || 0.55);
+                            } else if (newSound === "click") {
+                              playClickSoundPreview((preset as ClickSoundPreset) || "bop", vol || 0.70);
+                            }
+                          }}
                           className={`rounded px-1.5 py-1 text-[9px] font-medium transition-colors ${
                             selectedKeyframe.sound === item.value
                               ? "bg-white text-black font-bold shadow-sm"
@@ -485,6 +578,93 @@ export function ToolsSidebar() {
                         </button>
                       ))}
                     </div>
+
+                    {/* SFX Customization: Preset & Volume Adjustments */}
+                    {selectedKeyframe.sound && (
+                      <div className="rounded-lg bg-ink-950/70 p-2 border border-ink-800/80 space-y-2">
+                        {/* Sound Preset Picker */}
+                        <div className="space-y-1">
+                          <div className="flex items-center justify-between text-[10px] text-fg-muted">
+                            <span>Sound Style</span>
+                            <span className="font-mono text-white capitalize text-[9px]">
+                              {selectedKeyframe.soundPreset || (selectedKeyframe.sound === "typing" ? "mechanical" : "bop")}
+                            </span>
+                          </div>
+                          <div className="grid grid-cols-4 gap-1">
+                            {(selectedKeyframe.sound === "click"
+                              ? (["bop", "pop", "camera", "click"] as const)
+                              : (["mechanical", "laptop", "soft", "thock"] as const)
+                            ).map((preset) => {
+                              const activePreset = selectedKeyframe.soundPreset || (selectedKeyframe.sound === "typing" ? "mechanical" : "bop");
+                              const isCur = activePreset === preset;
+                              return (
+                                <button
+                                  key={preset}
+                                  type="button"
+                                  onClick={() => {
+                                    updateKeyframe(selectedKeyframe.id, { soundPreset: preset });
+                                    if (selectedKeyframe.sound === "typing") {
+                                      playTypingSoundPreview(preset as TypingSoundPreset, selectedKeyframe.soundVolume ?? 0.55);
+                                    } else {
+                                      playClickSoundPreview(preset as ClickSoundPreset, selectedKeyframe.soundVolume ?? 0.70);
+                                    }
+                                  }}
+                                  className={`rounded px-1 py-1 text-[9px] capitalize font-medium transition-colors ${
+                                    isCur
+                                      ? "bg-amber-400 text-black font-bold shadow-sm"
+                                      : "bg-ink-800 text-fg-muted hover:bg-ink-700 hover:text-white"
+                                  }`}
+                                >
+                                  {preset}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+
+                        {/* Volume Slider & Play Preview Button */}
+                        <div className="space-y-1">
+                          <div className="flex items-center justify-between text-[10px] text-fg-muted">
+                            <span>SFX Volume</span>
+                            <span className="font-mono text-fg font-semibold">
+                              {Math.round((selectedKeyframe.soundVolume ?? (selectedKeyframe.sound === "typing" ? 0.55 : 0.70)) * 100)}%
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <input
+                              type="range"
+                              min="0.1"
+                              max="1.0"
+                              step="0.05"
+                              value={selectedKeyframe.soundVolume ?? (selectedKeyframe.sound === "typing" ? 0.55 : 0.70)}
+                              onChange={(e) =>
+                                updateKeyframe(selectedKeyframe.id, {
+                                  soundVolume: parseFloat(e.target.value),
+                                })
+                              }
+                              className="flex-1 accent-white cursor-pointer h-1.5 bg-ink-800 rounded-lg"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const vol = selectedKeyframe.soundVolume ?? (selectedKeyframe.sound === "typing" ? 0.55 : 0.70);
+                                const pst = selectedKeyframe.soundPreset || (selectedKeyframe.sound === "typing" ? "mechanical" : "bop");
+                                if (selectedKeyframe.sound === "typing") {
+                                  playTypingSoundPreview(pst as TypingSoundPreset, vol);
+                                } else {
+                                  playClickSoundPreview(pst as ClickSoundPreset, vol);
+                                }
+                              }}
+                              className="flex items-center gap-1 rounded bg-ink-800 hover:bg-ink-700 px-2 py-0.5 text-[9px] font-semibold text-white border border-ink-700 transition-colors shrink-0"
+                              title="Test sound effect"
+                            >
+                              <Play className="size-2.5 fill-white" />
+                              Test
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    )}
                   </div>
 
                   {/* Delete Keyframe Action */}
@@ -500,7 +680,7 @@ export function ToolsSidebar() {
               )}
 
               {/* Keyframe Nodes List */}
-              <div className="max-h-36 overflow-y-auto space-y-1 rounded-lg border border-ink-800 bg-ink-900/60 p-1.5">
+              <div className="max-h-80 md:max-h-96 overflow-y-auto space-y-1 rounded-lg border border-ink-800 bg-ink-900/60 p-1.5">
                 {(!project?.keyframes || project.keyframes.length === 0) ? (
                   <p className="p-2 text-center text-[11px] text-fg-faint">
                     No keyframes yet. Click "Auto-Plot" above or add one manually.
@@ -522,6 +702,37 @@ export function ToolsSidebar() {
                       <div className="flex items-center gap-1.5 min-w-0 truncate">
                         <Diamond className="size-2.5 text-white fill-white shrink-0" />
                         <span className="truncate">Node #{i + 1} ({kf.scale.toFixed(1)}x)</span>
+                        {kf.sound ? (
+                          <span
+                            className={`rounded border text-[9px] px-1 py-0.2 shrink-0 flex items-center gap-0.5 font-medium ${
+                              kf.sound === "typing"
+                                ? "bg-amber-500/20 text-amber-300 border-amber-500/30"
+                                : "bg-cyan-500/20 text-cyan-300 border-cyan-500/30"
+                            }`}
+                            title={`SFX: ${kf.sound} (${kf.soundPreset || (kf.sound === "typing" ? "mech" : "bop")})`}
+                          >
+                            <Volume2 className="size-2.5 shrink-0" />
+                            {kf.sound === "typing" ? "Typing" : "Click"} ({kf.soundPreset || (kf.sound === "typing" ? "mech" : "bop")})
+                          </span>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              updateKeyframe(kf.id, {
+                                sound: "click",
+                                soundPreset: "bop",
+                                soundVolume: 0.70,
+                              });
+                              playClickSoundPreview("bop", 0.70);
+                            }}
+                            className="rounded border border-dashed border-ink-700 bg-ink-800/80 hover:bg-ink-700 text-neutral-400 hover:text-white text-[9px] px-1.5 py-0.5 flex items-center gap-0.5 transition-colors shrink-0"
+                            title="Add Click SFX to this keyframe"
+                          >
+                            <Plus className="size-2 shrink-0" />
+                            SFX
+                          </button>
+                        )}
                         {kf.effect && (
                           <span className="rounded bg-ink-800 border border-ink-700 text-fg text-[9px] px-1 py-0.2 shrink-0">
                             {kf.effect}
@@ -926,7 +1137,7 @@ export function ToolsSidebar() {
                 <span className="font-semibold text-white text-xs">Auto AFX Generator</span>
               </div>
               <p className="text-[11px] text-fg-muted leading-relaxed mb-3">
-                Automatically attaches tactile click bops to clicks, clean mechanical typing sounds, and enables background music ducking.
+                Automatically attaches tactile click bops to clicks and clean mechanical typing sounds.
               </p>
               <button
                 type="button"
@@ -1027,13 +1238,18 @@ export function ToolsSidebar() {
 
               {(project?.audioSettings?.typingSoundEnabled ?? true) && (
                 <div className="space-y-2 pt-1 border-t border-ink-800/80">
-                  <div className="grid grid-cols-3 gap-1.5">
+                  <div className="grid grid-cols-2 gap-1.5">
                     {[
-                      { id: "mechanical" as const, label: "Thocky Mech" },
-                      { id: "laptop" as const, label: "Laptop Key" },
-                      { id: "typewriter" as const, label: "Typewriter" },
+                      { id: "creamy" as const, label: "Creamy Marbly", desc: "Silky lubed linear" },
+                      { id: "thock" as const, label: "Deep Thock", desc: "Heavy POM bottom-out" },
+                      { id: "thack" as const, label: "Crisp Thack", desc: "Snappy aluminum clack" },
+                      { id: "clicky" as const, label: "Tactile Clicky", desc: "Crisp click-bar snap" },
+                      { id: "thick" as const, label: "Thick Heavy", desc: "Dampened tactile thud" },
+                      { id: "mechanical" as const, label: "Classic Mech", desc: "Standard mechanical" },
+                      { id: "laptop" as const, label: "Laptop Scissor", desc: "Flat chiclet key" },
+                      { id: "typewriter" as const, label: "Typewriter", desc: "Metallic strike chime" },
                     ].map((preset) => {
-                      const isActive = (project?.audioSettings?.typingSoundPreset ?? "mechanical") === preset.id;
+                      const isActive = (project?.audioSettings?.typingSoundPreset ?? "creamy") === preset.id;
                       return (
                         <button
                           key={preset.id}
@@ -1042,13 +1258,18 @@ export function ToolsSidebar() {
                             updateAudioSettings({ typingSoundPreset: preset.id });
                             playTypingSoundPreview(preset.id);
                           }}
-                          className={`rounded-lg py-1.5 px-2 text-[10px] font-semibold transition-all ${
+                          className={`rounded-lg p-2 text-left transition-all ${
                             isActive
-                              ? "bg-white text-black font-bold shadow-sm"
+                              ? "bg-white text-black font-bold shadow-sm ring-1 ring-white/50"
                               : "bg-ink-800 text-fg-muted hover:text-white hover:bg-ink-700"
                           }`}
                         >
-                          {preset.label}
+                          <span className="block text-[11px] font-semibold leading-tight">
+                            {preset.label}
+                          </span>
+                          <span className={`block text-[9px] mt-0.5 leading-tight ${isActive ? "text-neutral-600" : "text-fg-faint"}`}>
+                            {preset.desc}
+                          </span>
                         </button>
                       );
                     })}
@@ -1081,132 +1302,6 @@ export function ToolsSidebar() {
                 </div>
               )}
             </div>
-
-            {/* 3. Audio Ducking Toggle */}
-            <div className="flex items-center justify-between rounded-xl border border-ink-800 bg-ink-900/60 p-2.5">
-              <div>
-                <span className="block text-xs font-semibold text-white">Smart Audio Ducking</span>
-                <span className="block text-[10px] text-fg-faint">Dips music volume during clicks & typing</span>
-              </div>
-              <input
-                type="checkbox"
-                checked={project?.audioSettings?.musicDuckingEnabled ?? true}
-                onChange={(e) => updateAudioSettings({ musicDuckingEnabled: e.target.checked })}
-                className="size-4 accent-white rounded cursor-pointer"
-              />
-            </div>
-
-            {/* 4. Background Music */}
-            <div className="space-y-2 pt-1 border-t border-ink-800">
-              <div className="flex items-center justify-between">
-                <span className="text-[11px] font-semibold uppercase tracking-wider text-fg-faint">
-                  Background Music
-                </span>
-                <label className="cursor-pointer rounded-lg bg-ink-800 px-2 py-0.5 text-[10px] font-semibold text-fg-muted hover:text-white hover:bg-ink-700 transition-colors">
-                  + Upload Audio
-                  <input
-                    type="file"
-                    accept="audio/*"
-                    className="hidden"
-                    onChange={(e) => {
-                      const file = e.target.files?.[0];
-                      if (file) {
-                        const url = URL.createObjectURL(file);
-                        addAudioTrack(file.name.replace(/\.[^/.]+$/, ""), url, "music");
-                      }
-                    }}
-                  />
-                </label>
-              </div>
-
-              {[
-                { name: "Ambient Lo-Fi Chill", url: "sample://lofi-chill.mp3" },
-                { name: "Modern Tech Flow", url: "sample://tech-flow.mp3" },
-                { name: "Energetic Upbeat Beat", url: "sample://upbeat-beat.mp3" },
-                { name: "Deep Focus Minimal", url: "sample://focus-drone.mp3" },
-              ].map((preset) => (
-                <div
-                  key={preset.name}
-                  className="flex items-center justify-between rounded-xl border border-ink-800 bg-ink-900 p-2.5"
-                >
-                  <div className="flex items-center gap-2">
-                    <div className="flex size-7 items-center justify-center rounded-lg bg-ink-800 text-white border border-ink-700">
-                      <Music className="size-3.5" />
-                    </div>
-                    <div>
-                      <span className="block font-medium text-fg text-xs">{preset.name}</span>
-                      <span className="block text-[10px] text-fg-faint">Royalty-free background track</span>
-                    </div>
-                  </div>
-
-                  <button
-                    type="button"
-                    onClick={() => addAudioTrack(preset.name, preset.url, "music")}
-                    className="rounded-lg bg-ink-800 px-2.5 py-1 text-[11px] font-semibold text-fg hover:bg-white hover:text-black transition-colors"
-                  >
-                    + Add
-                  </button>
-                </div>
-              ))}
-            </div>
-
-            {/* Active tracks list */}
-            {project?.audioTracks && project.audioTracks.length > 0 && (
-              <div className="space-y-2 pt-2 border-t border-ink-800">
-                <span className="text-[11px] font-semibold uppercase tracking-wider text-fg-faint">
-                  Active Audio Tracks
-                </span>
-                {project.audioTracks.map((tr) => (
-                  <div
-                    key={tr.id}
-                    className="space-y-2 rounded-lg border border-ink-800 bg-ink-900/60 p-2.5"
-                  >
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2 truncate">
-                        <Music className="size-3.5 text-white shrink-0" />
-                        <span className="truncate text-xs font-medium text-fg">{tr.name}</span>
-                      </div>
-                      <div className="flex items-center gap-1.5">
-                        <button
-                          type="button"
-                          onClick={() => updateAudioTrack(tr.id, { muted: !tr.muted })}
-                          className="p-1 text-fg-muted hover:text-fg"
-                          title={tr.muted ? "Unmute" : "Mute"}
-                        >
-                          {tr.muted ? <VolumeX className="size-3.5" /> : <Volume2 className="size-3.5" />}
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => deleteAudioTrack(tr.id)}
-                          className="p-1 text-danger hover:opacity-80"
-                          title="Remove track"
-                        >
-                          <Trash2 className="size-3.5" />
-                        </button>
-                      </div>
-                    </div>
-
-                    <div className="flex items-center gap-2 pt-1">
-                      <span className="text-[10px] text-fg-faint">Volume</span>
-                      <input
-                        type="range"
-                        min="0"
-                        max="1"
-                        step="0.05"
-                        value={tr.volume}
-                        onChange={(e) =>
-                          updateAudioTrack(tr.id, { volume: parseFloat(e.target.value) })
-                        }
-                        className="w-full accent-white cursor-pointer h-1.5 bg-ink-800 rounded-lg"
-                      />
-                      <span className="font-mono text-[10px] text-fg-muted w-8 text-right">
-                        {Math.round(tr.volume * 100)}%
-                      </span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
           </div>
         )}
 
@@ -1267,6 +1362,152 @@ export function ToolsSidebar() {
                   onChange={(e) => updateLooks({ borderRadius: parseInt(e.target.value, 10) })}
                   className="w-full accent-white cursor-pointer h-1.5 bg-ink-800 rounded-lg mt-1"
                 />
+              </div>
+
+              {/* Window Mockup Frame */}
+              <div className="pt-2 border-t border-ink-800/80">
+                <span className="block text-[11px] font-semibold text-white mb-1.5">
+                  Window Frame Shell
+                </span>
+                <div className="grid grid-cols-3 gap-1.5">
+                  {[
+                    { id: "macos" as const, label: "macOS" },
+                    { id: "safari" as const, label: "Safari" },
+                    { id: "terminal" as const, label: "Terminal" },
+                    { id: "chrome" as const, label: "Chrome" },
+                    { id: "glass" as const, label: "Glass" },
+                    { id: "none" as const, label: "None" },
+                  ].map((wf) => {
+                    const isActive = (project?.looks.windowFrame || "macos") === wf.id;
+                    return (
+                      <button
+                        key={wf.id}
+                        type="button"
+                        onClick={() => updateLooks({ windowFrame: wf.id })}
+                        className={`rounded-lg py-1 px-2 text-[10px] font-semibold transition-all ${
+                          isActive
+                            ? "bg-white text-black font-bold shadow-sm"
+                            : "bg-ink-800 text-fg-muted hover:text-white hover:bg-ink-700"
+                        }`}
+                      >
+                        {wf.label}
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {(project?.looks.windowFrame === "safari" ||
+                  project?.looks.windowFrame === "terminal" ||
+                  project?.looks.windowFrame === "chrome") && (
+                  <div className="mt-2">
+                    <span className="text-[10px] text-fg-muted block mb-0.5">Mockup URL / Title:</span>
+                    <input
+                      type="text"
+                      value={project?.looks.mockupUrl || ""}
+                      placeholder="app.yourdomain.com"
+                      onChange={(e) => updateLooks({ mockupUrl: e.target.value })}
+                      className="w-full rounded-md border border-neutral-700 bg-neutral-900 px-2 py-1 text-[11px] text-white font-mono"
+                    />
+                  </div>
+                )}
+              </div>
+
+              {/* 3D Perspective Tilt Pitch */}
+              <div className="pt-2 border-t border-ink-800/80">
+                <div className="flex justify-between items-center text-[11px]">
+                  <span className="text-fg-muted">3D Perspective Tilt</span>
+                  <div className="flex items-center gap-1.5">
+                    <span className="font-mono text-white font-semibold">
+                      {(project?.looks.tiltAngle ?? 0).toFixed(1)}°
+                    </span>
+                    {(project?.looks.tiltAngle ?? 0) !== 0 && (
+                      <button
+                        type="button"
+                        onClick={() => updateLooks({ tiltAngle: 0 })}
+                        className="text-[9px] rounded bg-ink-800 px-1 py-0.5 text-neutral-400 hover:text-white"
+                      >
+                        Reset
+                      </button>
+                    )}
+                  </div>
+                </div>
+                <input
+                  type="range"
+                  min="-15"
+                  max="15"
+                  step="0.5"
+                  value={project?.looks.tiltAngle ?? 0}
+                  onChange={(e) => updateLooks({ tiltAngle: parseFloat(e.target.value) })}
+                  className="w-full accent-white cursor-pointer h-1.5 bg-ink-800 rounded-lg mt-1"
+                />
+              </div>
+
+              {/* Camera Physics Model */}
+              <div className="pt-2 border-t border-ink-800/80">
+                <span className="block text-[11px] font-semibold text-white mb-1.5">
+                  Camera Transition Physics
+                </span>
+                <div className="grid grid-cols-2 gap-1.5">
+                  {[
+                    { id: "spring" as const, label: "Spring SaaS" },
+                    { id: "smooth" as const, label: "Apple Smooth" },
+                    { id: "snappy" as const, label: "Fast Snap" },
+                    { id: "linear" as const, label: "Linear" },
+                  ].map((p) => {
+                    const isActive = (project?.looks.cameraPhysics || "spring") === p.id;
+                    return (
+                      <button
+                        key={p.id}
+                        type="button"
+                        onClick={() => updateLooks({ cameraPhysics: p.id })}
+                        className={`rounded-lg py-1 px-2 text-[10px] font-semibold transition-all ${
+                          isActive
+                            ? "bg-white text-black font-bold shadow-sm"
+                            : "bg-ink-800 text-fg-muted hover:text-white hover:bg-ink-700"
+                        }`}
+                      >
+                        {p.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Ambient Video Blur Glow Toggle */}
+              <div className="pt-2 border-t border-ink-800/80 flex items-center justify-between">
+                <div>
+                  <span className="block text-xs font-semibold text-white">Ambient Blur Glow</span>
+                  <span className="block text-[10px] text-fg-faint">
+                    Blurs video frames into dynamic ambient aura
+                  </span>
+                </div>
+                <input
+                  type="checkbox"
+                  checked={Boolean(project?.looks.ambientBackdropBlur)}
+                  onChange={(e) => updateLooks({ ambientBackdropBlur: e.target.checked })}
+                  className="size-4 accent-white rounded cursor-pointer"
+                />
+              </div>
+
+              {/* Brand Accent Color */}
+              <div className="pt-2 border-t border-ink-800/80 flex items-center justify-between">
+                <div>
+                  <span className="block text-xs font-semibold text-white">Brand Accent Color</span>
+                  <span className="block text-[10px] text-fg-faint">
+                    Synchronized across badges and pills
+                  </span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="color"
+                    value={project?.looks.brandAccentColor || "#6366f1"}
+                    onChange={(e) => updateLooks({ brandAccentColor: e.target.value })}
+                    className="size-6 rounded cursor-pointer bg-transparent border-0 p-0"
+                  />
+                  <span className="font-mono text-[11px] text-white">
+                    {project?.looks.brandAccentColor || "#6366f1"}
+                  </span>
+                </div>
               </div>
             </div>
           </div>

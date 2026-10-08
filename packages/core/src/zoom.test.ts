@@ -15,6 +15,7 @@ import {
   videoToScreenCoordinates,
   zoomBlocksToKeyframes,
   generateTourShiftSequence,
+  getSteadicamBreathing,
 } from "./zoom";
 import type { ClickEvent, InteractionEvent, TimelineClip } from "./project";
 import { removeClipAndRipple, splitClip, splitZoomBlock } from "./timeline";
@@ -22,9 +23,9 @@ import { BACKGROUND_PRESETS, SHADOW_PRESETS } from "./looks";
 
 describe("zoom algorithms", () => {
   it("clampCameraToBounds clamps within valid range", () => {
-    // In default center mode, preserves exact target element coordinates without pushing away
+    // In default center mode, clamps to safe visible frame so video covers full viewport with zero void
     const centeredNearLeft = clampCameraToBounds(0.05, 0.5, 2.0);
-    expect(centeredNearLeft.x).toBe(0.05);
+    expect(centeredNearLeft.x).toBe(0.25);
 
     // At scale 2.0, half width is 0.25, valid range is [0.25, 0.75] in strict mode
     const clampedNearLeft = clampCameraToBounds(0.05, 0.5, 2.0, "strict");
@@ -446,6 +447,30 @@ describe("zoom algorithms", () => {
     expect(step2Cam.x).toBeGreaterThan(0.6);
   });
 
+  it("generateTourShiftSequence zooms out to 1.0x full screen when inactivity exceeds 1 second", () => {
+    const steps = [
+      { id: "step-1", type: "click" as const, timestampMs: 2000, x: 0.3, y: 0.4, button: "left" as const },
+      { id: "step-2", type: "click" as const, timestampMs: 12000, x: 0.7, y: 0.8, button: "left" as const },
+    ];
+
+    const tour = generateTourShiftSequence(steps, 20000);
+    expect(tour.zoomBlocks.length).toBe(2);
+
+    // Zoomed in on step 1 at t = 2200ms
+    const step1Cam = calculateCameraAtTime(2200, tour.zoomBlocks, 1000, 400, undefined, tour.keyframes);
+    expect(step1Cam.isZoomed).toBe(true);
+
+    // When inactive between t = 5000ms and t = 10000ms, camera MUST be 1.0x full screen!
+    const midGapCam = calculateCameraAtTime(7000, tour.zoomBlocks, 1000, 400, undefined, tour.keyframes);
+    expect(midGapCam.isZoomed).toBe(false);
+    expect(midGapCam.scale).toBe(1.0);
+    expect(midGapCam.x).toBe(0.5);
+    expect(midGapCam.y).toBe(0.5);
+
+    // ZoomBlock 1 ended cleanly around holdEnd + leadOut, not spanning all 12 seconds
+    expect(tour.zoomBlocks[0]!.endTimeMs).toBeLessThan(5000);
+  });
+
   it("smoothCursorTrajectory handles none, smooth, and cinematic modes with click anchoring", () => {
     const rawPoints = [
       { timestampMs: 0, x: 0.1, y: 0.1 },
@@ -535,8 +560,8 @@ describe("zoom algorithms", () => {
     // During active typing (at t = 3500ms), camera is focused on the typing input
     const activeCamera = calculateCameraAtTime(3500, result.zoomBlocks, 1000, 400, undefined, result.keyframes);
     expect(activeCamera.scale).toBe(1.85);
-    expect(activeCamera.x).toBe(0.35);
-    expect(activeCamera.y).toBe(0.45);
+    expect(activeCamera.x).toBeCloseTo(0.35, 2);
+    expect(activeCamera.y).toBeCloseTo(0.45, 2);
   });
 
   it("auto-plots text highlight interaction with dedicated zoom and framed coordinates", () => {
@@ -721,23 +746,55 @@ describe("timeline operations", () => {
 
     expect(result.zoomBlocks.length).toBe(1);
     const block = result.zoomBlocks[0]!;
-    // Must center precisely on typing location
-    expect(block.targetX).toBeCloseTo(0.75, 2);
-    expect(block.targetY).toBeCloseTo(0.18, 2);
+    // Must center on typing location safely clamped within boundaries
+    const expectedTypingTarget = clampCameraToBounds(0.75, 0.18, block.scale);
+    expect(block.targetX).toBeCloseTo(expectedTypingTarget.x, 2);
+    expect(block.targetY).toBeCloseTo(expectedTypingTarget.y, 2);
     expect(block.scale).toBeGreaterThanOrEqual(1.85);
 
-    // Peak keyframe must center on typing location
+    // Peak keyframe must center on typing location safely clamped
     const peakKf = result.keyframes.find((k) => k.id.includes("kf-peak"));
     expect(peakKf).toBeDefined();
-    expect(peakKf?.targetX).toBeCloseTo(0.75, 2);
-    expect(peakKf?.targetY).toBeCloseTo(0.18, 2);
+    expect(peakKf?.targetX).toBeCloseTo(expectedTypingTarget.x, 2);
+    expect(peakKf?.targetY).toBeCloseTo(expectedTypingTarget.y, 2);
 
     // Typing must NOT have reveal dip (no zooming out mid-typing)
     const revealKf = result.keyframes.find((k) => k.id.includes("kf-reveal"));
     expect(revealKf).toBeUndefined();
   });
 
-  it("centers camera on exact click coordinates even near screen edges", () => {
+  it("when centerTyping is true, centers search/text typing horizontally (0.50) and frames upper inputs at (0.37) with smooth pan from click", () => {
+    const typingInteractions: InteractionEvent[] = [
+      { id: "click-search", type: "click", timestampMs: 2000, x: 0.30, y: 0.27, button: "left" },
+      { id: "type-search", type: "typing", timestampMs: 2300, x: 0.30, y: 0.27, snippet: "arron p", durationMs: 2000 },
+    ];
+
+    const result = plotInteractionsToKeyframesAndZoomBlocks(typingInteractions, 10000, {
+      centerTyping: true,
+      scale: 1.90,
+    });
+
+    expect(result.zoomBlocks.length).toBe(1);
+    const block = result.zoomBlocks[0]!;
+    // Horizontal center of recording stage
+    expect(block.targetX).toBe(0.50);
+    // Upper search input framed with autocomplete dropdown space below
+    expect(block.targetY).toBeCloseTo(0.37, 2);
+
+    // Initial peak lands on the click
+    const peakKf = result.keyframes.find((k) => k.id === "kf-peak-click-search");
+    expect(peakKf).toBeDefined();
+    expect(peakKf?.targetX).toBe(0.30);
+    expect(peakKf?.targetY).toBe(0.27);
+
+    // Smooth pan to centered stage as typing begins
+    const panKf = result.keyframes.find((k) => k.id.includes("kf-type-center") || k.id.includes("kf-track-type-search"));
+    expect(panKf).toBeDefined();
+    expect(panKf?.targetX).toBe(0.50);
+    expect(panKf?.targetY).toBeCloseTo(0.37, 2);
+  });
+
+  it("centers camera safely on click coordinates near screen edges without exposing black voids", () => {
     const clickEvents: InteractionEvent[] = [
       { id: "c-edge", type: "click", timestampMs: 3000, x: 0.85, y: 0.12, button: "left" },
     ];
@@ -749,25 +806,28 @@ describe("timeline operations", () => {
 
     expect(result.zoomBlocks.length).toBe(1);
     const block = result.zoomBlocks[0]!;
-    // Must target exact click position without strict boundary clipping
-    expect(block.targetX).toBeCloseTo(0.85, 4);
-    expect(block.targetY).toBeCloseTo(0.12, 4);
+    // Must target safely clamped click position to prevent black border void
+    const expectedClamped = clampCameraToBounds(0.85, 0.12, 1.85, "center");
+    expect(block.targetX).toBeCloseTo(expectedClamped.x, 3);
+    expect(block.targetY).toBeCloseTo(expectedClamped.y, 3);
 
     const peakKf = result.keyframes.find((k) => k.id.includes("kf-peak"));
     expect(peakKf).toBeDefined();
-    expect(peakKf?.targetX).toBeCloseTo(0.85, 4);
-    expect(peakKf?.targetY).toBeCloseTo(0.12, 4);
+    expect(peakKf?.targetX).toBeCloseTo(expectedClamped.x, 3);
+    expect(peakKf?.targetY).toBeCloseTo(expectedClamped.y, 3);
 
-    // At peak click timestamp, the clicked element must be centered directly at (0.5, 0.5)
+    // At peak click timestamp, camera coordinates are bounded safely
     const cameraAtClick = calculateCameraAtTime(3000, result.zoomBlocks, 1000, 400, undefined, result.keyframes);
     expect(cameraAtClick.scale).toBeCloseTo(1.85, 2);
-    expect(cameraAtClick.x).toBeCloseTo(0.85, 3);
-    expect(cameraAtClick.y).toBeCloseTo(0.12, 3);
+    expect(cameraAtClick.x).toBeCloseTo(expectedClamped.x, 2);
+    expect(cameraAtClick.y).toBeCloseTo(expectedClamped.y, 2);
 
-    // Verify screen coordinates place clicked element at viewport dead center (960, 540)
+    // Verify screen coordinates frame clicked element visibly without showing void
     const screenCenter = videoToScreenCoordinates(0.85, 0.12, 1920, 1080, cameraAtClick);
-    expect(screenCenter.pixelX).toBeCloseTo(960, 1);
-    expect(screenCenter.pixelY).toBeCloseTo(540, 1);
+    expect(screenCenter.pixelX).toBeGreaterThan(960);
+    expect(screenCenter.pixelX).toBeLessThan(1920);
+    expect(screenCenter.pixelY).toBeGreaterThan(0);
+    expect(screenCenter.pixelY).toBeLessThan(540);
   });
 
   it("zooms in smoothly from full-frame center to clicked element without visual jump", () => {
@@ -797,20 +857,380 @@ describe("timeline operations", () => {
     expect(camMid.scale).toBeGreaterThan(1.0);
     expect(camMid.scale).toBeLessThan(2.0);
 
-    // At t = 2000ms (exact click moment), element lands at dead center (960, 540)
+    // At t = 2000ms (exact click moment), element lands at safely clamped focal target
     const camPeak = calculateCameraAtTime(2000, result.zoomBlocks, 1000, 400, undefined, result.keyframes);
-    expect(camPeak.x).toBeCloseTo(0.90, 2);
-    expect(camPeak.y).toBeCloseTo(0.10, 2);
+    const expectedPeak = clampCameraToBounds(0.90, 0.10, 2.0, "center");
+    expect(camPeak.x).toBeCloseTo(expectedPeak.x, 2);
+    expect(camPeak.y).toBeCloseTo(expectedPeak.y, 2);
     expect(camPeak.scale).toBeCloseTo(2.0, 2);
     const screenPeak = videoToScreenCoordinates(0.90, 0.10, 1920, 1080, camPeak);
-    expect(screenPeak.pixelX).toBeCloseTo(960, 1);
-    expect(screenPeak.pixelY).toBeCloseTo(540, 1);
+    // Framed safely in upper right with 100% full bleed coverage
+    expect(screenPeak.pixelX).toBeCloseTo(1536, 1);
+    expect(screenPeak.pixelY).toBeCloseTo(216, 1);
 
     // At t = 6000ms (after lead-out), camera has returned cleanly to full frame center (0.5, 0.5)
     const camEnd = calculateCameraAtTime(6000, result.zoomBlocks, 1000, 400, undefined, result.keyframes);
     expect(camEnd.x).toBeCloseTo(0.50, 2);
     expect(camEnd.y).toBeCloseTo(0.50, 2);
     expect(camEnd.scale).toBeCloseTo(1.0, 2);
+  });
+
+  it("clampCameraToBounds guarantees zero black border exposure near bottom edge", () => {
+    // Target y = 0.80 at scale 1.9 (as in user screenshot)
+    const scale = 1.9;
+    const halfH = 0.5 / scale;
+    const clamped = clampCameraToBounds(0.5, 0.80, scale);
+
+    // camera.y must NOT exceed 1 - halfH (0.7368)
+    expect(clamped.y).toBeLessThanOrEqual(1 - halfH);
+    expect(clamped.y).toBeCloseTo(1 - halfH, 4);
+
+    // Visible bottom edge (camera.y + halfH) must NEVER exceed 1.0000
+    const visibleBottom = clamped.y + halfH;
+    expect(visibleBottom).toBeLessThanOrEqual(1.0001);
+  });
+
+  it("getSteadicamBreathing produces subtle non-zero organic micro-motion during holds", () => {
+    const b1 = getSteadicamBreathing(1000, 1.85);
+    const b2 = getSteadicamBreathing(2500, 1.85);
+    expect(Math.abs(b1.dx)).toBeGreaterThan(0);
+    expect(Math.abs(b1.dy)).toBeGreaterThan(0);
+    expect(b1.dx).not.toEqual(b2.dx);
+    // Micro-motion amplitude must stay below 0.005 to prevent disorienting shake
+    expect(Math.abs(b1.dx)).toBeLessThan(0.005);
+    expect(Math.abs(b1.dy)).toBeLessThan(0.005);
+  });
+
+  it("glides smoothly between consecutive browser tab clicks with cubic panning and crane shift without returning to 1.0x", () => {
+    const tabClicks: InteractionEvent[] = [
+      { id: "tab-1", type: "click", timestampMs: 2000, x: 0.20, y: 0.12, button: "left" },
+      { id: "tab-2", type: "click", timestampMs: 4200, x: 0.70, y: 0.12, button: "left" },
+    ];
+
+    const result = plotInteractionsToKeyframesAndZoomBlocks(tabClicks, 10000, {
+      continuousGlide: true,
+      maxGlideGapMs: 3800,
+    });
+
+    expect(result.zoomBlocks.length).toBe(1);
+
+    // Verify crane dip exists midway through the wide tab transition
+    const craneKf = result.keyframes.find((k) => k.id.includes("kf-crane"));
+    expect(craneKf).toBeDefined();
+    expect(craneKf?.scale).toBeLessThan(1.85);
+    expect(craneKf?.scale).toBeGreaterThan(1.20);
+    expect(craneKf?.easing).toBe("cubic");
+
+    // At midway between tabs (t = 3100ms), camera must be actively gliding between them, NOT at 1.0x full frame
+    const midCam = calculateCameraAtTime(3100, result.zoomBlocks, 1000, 400, undefined, result.keyframes);
+    expect(midCam.scale).toBeGreaterThan(1.4);
+    expect(midCam.x).toBeGreaterThan(0.20);
+    expect(midCam.x).toBeLessThan(0.70);
+
+    // Glide keyframe to Tab 2 must have smooth cubic easing
+    const glideKf = result.keyframes.find((k) => k.id.includes("tab-2"));
+    expect(glideKf).toBeDefined();
+    expect(glideKf?.easing).toBe("cubic");
+  });
+
+  it("handles typing interaction with authentic focus without dummy text snippets", () => {
+    const typingEvt: InteractionEvent = {
+      id: "type-search",
+      type: "typing",
+      timestampMs: 3000,
+      x: 0.50,
+      y: 0.25,
+      durationMs: 1500,
+    };
+
+    const result = plotInteractionsToKeyframesAndZoomBlocks([typingEvt], 10000);
+    expect(result.zoomBlocks.length).toBe(1);
+
+    // Keyframe attached sound must be typing
+    const peakKf = result.keyframes.find((k) => k.id.includes("kf-peak"));
+    expect(peakKf?.sound).toBe("typing");
+
+    // Camera at t = 3500ms focuses on input coordinates
+    const camDuringTyping = calculateCameraAtTime(3500, result.zoomBlocks, 1000, 400, undefined, result.keyframes);
+    expect(camDuringTyping.scale).toBe(1.85);
+    expect(camDuringTyping.x).toBe(0.50);
+  });
+
+  it("strictly enforces non-overlapping zoom blocks and decimated keyframe diamonds", () => {
+    // 8 rapid interactions across 12 seconds with varied intervals
+    const interactions: InteractionEvent[] = [
+      { id: "e1", type: "click", timestampMs: 1000, x: 0.2, y: 0.3 },
+      { id: "e2", type: "click", timestampMs: 2200, x: 0.4, y: 0.3 },
+      { id: "e3", type: "typing", timestampMs: 3400, x: 0.5, y: 0.5, durationMs: 1200 },
+      { id: "e4", type: "click", timestampMs: 5100, x: 0.7, y: 0.2 },
+      { id: "e5", type: "click", timestampMs: 6300, x: 0.3, y: 0.1 },
+      { id: "e6", type: "click", timestampMs: 7800, x: 0.8, y: 0.6 },
+      { id: "e7", type: "click", timestampMs: 8900, x: 0.5, y: 0.5 },
+      { id: "e8", type: "click", timestampMs: 10200, x: 0.2, y: 0.4 },
+    ];
+
+    const result = plotInteractionsToKeyframesAndZoomBlocks(interactions, 15000);
+
+    // 1. Strict zoom block non-overlapping invariant: cur.endTimeMs must never exceed next.startTimeMs
+    expect(result.zoomBlocks.length).toBeGreaterThan(0);
+    for (let i = 0; i < result.zoomBlocks.length - 1; i++) {
+      const cur = result.zoomBlocks[i]!;
+      const next = result.zoomBlocks[i + 1]!;
+      expect(cur.endTimeMs).toBeLessThanOrEqual(next.startTimeMs);
+    }
+
+    // 2. Strict keyframe decimation invariant: no two keyframes can be placed closer than 240ms
+    expect(result.keyframes.length).toBeGreaterThan(0);
+    for (let i = 0; i < result.keyframes.length - 1; i++) {
+      const curKf = result.keyframes[i]!;
+      const nextKf = result.keyframes[i + 1]!;
+      expect(nextKf.timeMs - curKf.timeMs).toBeGreaterThanOrEqual(240);
+    }
+
+    // 3. Audio preservation: typing and click sounds must still be present on relevant keyframes
+    const hasTypingSound = result.keyframes.some((k) => k.sound === "typing");
+    const hasClickSound = result.keyframes.some((k) => k.sound === "click");
+    expect(hasTypingSound).toBe(true);
+    expect(hasClickSound).toBe(true);
+  });
+
+  it("handles consecutive navbar button clicks in one zoom block while gliding between buttons, and zooms out on isolated clicks", () => {
+    const events: InteractionEvent[] = [
+      // Consecutive navbar sequence: 3 buttons clicked across 3.6 seconds
+      { id: "nav-overview", type: "click", timestampMs: 2000, x: 0.30, y: 0.15 },
+      { id: "nav-features", type: "click", timestampMs: 3800, x: 0.45, y: 0.15 },
+      { id: "nav-showcase", type: "click", timestampMs: 5600, x: 0.60, y: 0.15 },
+
+      // Isolated click much later (8 seconds gap)
+      { id: "cta-download", type: "click", timestampMs: 14000, x: 0.50, y: 0.65 },
+    ];
+
+    const result = plotInteractionsToKeyframesAndZoomBlocks(events, 20000, {
+      continuousGlide: true,
+      scale: 1.85,
+    });
+
+    // 1. Must produce exactly 2 zoom blocks: 1 for the navbar sequence, 1 for the isolated CTA click
+    expect(result.zoomBlocks.length).toBe(2);
+
+    const [navbarBlock, ctaBlock] = result.zoomBlocks;
+    expect(navbarBlock).toBeDefined();
+    expect(ctaBlock).toBeDefined();
+
+    // The navbar block spans the entire 3-button sequence continuously
+    expect(navbarBlock!.startTimeMs).toBeLessThanOrEqual(1500);
+    expect(navbarBlock!.endTimeMs).toBeGreaterThan(6000);
+    expect(navbarBlock!.scale).toBe(1.85);
+
+    // The CTA block is isolated around 14000ms
+    expect(ctaBlock!.startTimeMs).toBeGreaterThan(12000);
+    expect(ctaBlock!.endTimeMs).toBeLessThanOrEqual(17000);
+
+    // Absolutely zero overlap between the blocks (separated by over 5 seconds)
+    expect(navbarBlock!.endTimeMs).toBeLessThan(ctaBlock!.startTimeMs - 2000);
+
+    // 2. Playback verification during navbar sequence:
+    // At t = 2000ms: camera is focused on Button 1 (x ~ 0.30)
+    const camBtn1 = calculateCameraAtTime(2000, result.zoomBlocks, 1000, 400, undefined, result.keyframes);
+    expect(camBtn1.scale).toBe(1.85);
+    expect(camBtn1.x).toBeCloseTo(0.30, 1);
+
+    // At t = 3400ms (gliding towards Button 2): camera is actively gliding at 1.85x, NOT at 1.0x
+    const camGlide1 = calculateCameraAtTime(3400, result.zoomBlocks, 1000, 400, undefined, result.keyframes);
+    expect(camGlide1.scale).toBe(1.85);
+    expect(camGlide1.x).toBeGreaterThan(0.30);
+    expect(camGlide1.x).toBeLessThan(0.46);
+
+    // At t = 3800ms: camera is focused on Button 2 (x ~ 0.45)
+    const camBtn2 = calculateCameraAtTime(3800, result.zoomBlocks, 1000, 400, undefined, result.keyframes);
+    expect(camBtn2.scale).toBe(1.85);
+    expect(camBtn2.x).toBeCloseTo(0.45, 1);
+
+    // At t = 5200ms (gliding towards Button 3): camera is actively gliding at 1.85x, NOT at 1.0x
+    const camGlide2 = calculateCameraAtTime(5200, result.zoomBlocks, 1000, 400, undefined, result.keyframes);
+    expect(camGlide2.scale).toBe(1.85);
+    expect(camGlide2.x).toBeGreaterThan(0.44);
+    expect(camGlide2.x).toBeLessThan(0.61);
+
+    // At t = 5600ms: camera is focused on Button 3 (x ~ 0.60)
+    const camBtn3 = calculateCameraAtTime(5600, result.zoomBlocks, 1000, 400, undefined, result.keyframes);
+    expect(camBtn3.scale).toBe(1.85);
+    expect(camBtn3.x).toBeCloseTo(0.60, 1);
+
+    // 3. After navbar sequence finishes (e.g. at t = 9000ms): camera returns to full screen 1.0x
+    const camBetween = calculateCameraAtTime(9000, result.zoomBlocks, 1000, 400, undefined, result.keyframes);
+    expect(camBetween.scale).toBe(1.0);
+    expect(camBetween.isZoomed).toBe(false);
+    expect(camBetween.x).toBe(0.5);
+
+    // 4. At isolated CTA click (t = 14000ms): camera zooms in, focuses at (0.50, 0.65), and zooms out
+    const camCTA = calculateCameraAtTime(14000, result.zoomBlocks, 1000, 400, undefined, result.keyframes);
+    expect(camCTA.scale).toBe(1.85);
+    expect(camCTA.x).toBeCloseTo(0.50, 1);
+
+    // At t = 18000ms: camera has zoomed back out to 1.0x
+    const camFinal = calculateCameraAtTime(18000, result.zoomBlocks, 1000, 400, undefined, result.keyframes);
+    expect(camFinal.scale).toBe(1.0);
+    expect(camFinal.isZoomed).toBe(false);
+  });
+
+  it("decimates dense click clusters in 25s video into clean cinematic keyframes without 50+ keyframe explosion", () => {
+    // 15 user actions across a 25-second video (navbar clicks, form input, and CTA)
+    const rawEvents: InteractionEvent[] = [
+      { id: "c1", type: "click", timestampMs: 2000, x: 0.20, y: 0.08, button: "left" },
+      { id: "c2", type: "click", timestampMs: 3200, x: 0.35, y: 0.08, button: "left" },
+      { id: "c3", type: "click", timestampMs: 4400, x: 0.50, y: 0.08, button: "left" },
+      { id: "c4", type: "click", timestampMs: 4800, x: 0.51, y: 0.08, button: "left" }, // micro-click on same button
+      { id: "c5", type: "click", timestampMs: 5000, x: 0.51, y: 0.08, button: "left" }, // micro-click on same button
+      // Long rest gap
+      { id: "c6", type: "click", timestampMs: 11000, x: 0.45, y: 0.38, button: "left" },
+      { id: "t1", type: "typing", timestampMs: 12000, x: 0.45, y: 0.38, snippet: "Input", durationMs: 800 },
+      { id: "c7", type: "click", timestampMs: 13200, x: 0.46, y: 0.39, button: "left" },
+      // Another gap
+      { id: "c8", type: "click", timestampMs: 19000, x: 0.50, y: 0.70, button: "left" },
+      { id: "c9", type: "click", timestampMs: 20200, x: 0.50, y: 0.70, button: "left" },
+    ];
+
+    const result = plotInteractionsToKeyframesAndZoomBlocks(rawEvents, 25000, {
+      holdDurationMs: 1200,
+      leadInMs: 800,
+      scale: 1.85,
+      continuousGlide: true,
+    });
+
+    // Instead of 50-60 bloated keyframes, it must produce a clean, cinematic keyframe count (< 24)
+    expect(result.keyframes.length).toBeLessThan(24);
+    expect(result.keyframes.length).toBeGreaterThanOrEqual(8);
+
+    // Guaranteed diamond spacing: every keyframe must have >= 240ms separation from the previous keyframe
+    for (let i = 1; i < result.keyframes.length; i++) {
+      const dt = result.keyframes[i]!.timeMs - result.keyframes[i - 1]!.timeMs;
+      expect(dt).toBeGreaterThanOrEqual(240);
+    }
+  });
+
+  it("guarantees camera smoothly returns to full screen 1.0x after last keyframe even if last keyframe scale > 1.05", () => {
+    // Scenario like user screenshot: keyframe at 8000ms has scale 1.9
+    const keyframes = [
+      { id: "kf-1", timeMs: 6500, scale: 1.0, targetX: 0.5, targetY: 0.5, easing: "cubic" as const },
+      { id: "kf-2", timeMs: 8000, scale: 1.9, targetX: 0.35, targetY: 0.45, easing: "spring" as const },
+    ];
+
+    // At t = 8000ms: fully zoomed in
+    const atPeak = calculateCameraAtTime(8000, [], 1000, 400, undefined, keyframes);
+    expect(atPeak.scale).toBe(1.9);
+    expect(atPeak.isZoomed).toBe(true);
+
+    // At t = 8200ms (mid lead-out): smoothly interpolating back towards full frame
+    const midLeadOut = calculateCameraAtTime(8200, [], 1000, 400, undefined, keyframes);
+    expect(midLeadOut.scale).toBeLessThan(1.9);
+    expect(midLeadOut.scale).toBeGreaterThan(1.0);
+
+    // At t = 8500ms (past leadOutMs 400ms): MUST BE BACK TO FULL FRAME 1.0x at (0.5, 0.5)!
+    const afterLeadOut = calculateCameraAtTime(8500, [], 1000, 400, undefined, keyframes);
+    expect(afterLeadOut.scale).toBe(1.0);
+    expect(afterLeadOut.isZoomed).toBe(false);
+    expect(afterLeadOut.x).toBe(0.5);
+    expect(afterLeadOut.y).toBe(0.5);
+
+    // At t = 10000ms (like in user screenshot): STILL FULL FRAME 1.0x, NEVER STUCK!
+    const at10s = calculateCameraAtTime(10000, [], 1000, 400, undefined, keyframes);
+    expect(at10s.scale).toBe(1.0);
+    expect(at10s.isZoomed).toBe(false);
+    expect(at10s.x).toBe(0.5);
+    expect(at10s.y).toBe(0.5);
+  });
+
+  it("vectorized click motion: glides between clicks within 1.0s and zooms out to full frame after 1.0s inactivity", () => {
+    const clickEvents: InteractionEvent[] = [
+      // Consecutive clicks 600ms apart (<= 1.0s)
+      { id: "click-tab-1", type: "click", timestampMs: 2000, x: 0.25, y: 0.15, button: "left" },
+      { id: "click-tab-2", type: "click", timestampMs: 2600, x: 0.40, y: 0.15, button: "left" },
+      // Long inactivity gap (5.4s later)
+      { id: "click-button-3", type: "click", timestampMs: 8000, x: 0.70, y: 0.80, button: "left" },
+    ];
+
+    const result = plotInteractionsToKeyframesAndZoomBlocks(clickEvents, 12000, {
+      holdDurationMs: 1000,
+      inactivityResetMs: 1000,
+      maxGlideGapMs: 1000,
+      leadInMs: 800,
+      leadOutMs: 400,
+      scale: 1.85,
+      continuousGlide: true,
+    });
+
+    // Must create 2 distinct zoom blocks: one for tabs 1 & 2, and one for button 3
+    expect(result.zoomBlocks).toHaveLength(2);
+
+    // Tab 1 & 2 block ends around 2600 + 1000 = 3600ms
+    expect(result.zoomBlocks[0]!.endTimeMs).toBeLessThanOrEqual(4200);
+
+    // Last keyframe of the first block must return to scale 1.0
+    const kfOut1 = result.keyframes.find((k) => k.id.includes("click-tab-2") && k.scale === 1.0);
+    expect(kfOut1).toBeDefined();
+
+    // At t = 5000ms (during inactivity before button 3): camera MUST be full screen 1.0x
+    const between = calculateCameraAtTime(5000, result.zoomBlocks, 800, 400, undefined, result.keyframes);
+    expect(between.scale).toBe(1.0);
+    expect(between.isZoomed).toBe(false);
+    expect(between.x).toBe(0.5);
+    expect(between.y).toBe(0.5);
+
+    // At t = 8000ms (button 3): camera is zoomed in on button 3
+    const atBtn3 = calculateCameraAtTime(8000, result.zoomBlocks, 800, 400, undefined, result.keyframes);
+    expect(atBtn3.scale).toBe(1.85);
+    expect(atBtn3.isZoomed).toBe(true);
+
+    // At t = 11000ms (> 1s after button 3): camera zooms back out to 1.0x
+    const atEnd = calculateCameraAtTime(11000, result.zoomBlocks, 800, 400, undefined, result.keyframes);
+    expect(atEnd.scale).toBe(1.0);
+    expect(atEnd.isZoomed).toBe(false);
+  });
+
+  it("guarantees every click is picked up and zooms in, returning to full screen 1.0x after 1s inactivity even when subsequent clicks occur shortly after zoom out", () => {
+    // Click 1 at 2000ms, Click 2 at 3300ms (1.3s later: > 1.0s inactivity -> zooms out to 1.0x full screen, then zooms in on Click 2)
+    const clicks: InteractionEvent[] = [
+      { id: "click-first", type: "click", timestampMs: 2000, x: 0.20, y: 0.30, button: "left" },
+      { id: "click-second", type: "click", timestampMs: 3300, x: 0.75, y: 0.65, button: "left" },
+    ];
+
+    const result = plotInteractionsToKeyframesAndZoomBlocks(clicks, 8000, {
+      holdDurationMs: 1000,
+      inactivityResetMs: 1000,
+      maxGlideGapMs: 1000,
+      leadInMs: 800,
+      leadOutMs: 400,
+      scale: 1.85,
+      continuousGlide: true,
+    });
+
+    // Both clicks MUST have zoom blocks — neither click can be silently ignored!
+    expect(result.zoomBlocks).toHaveLength(2);
+
+    // Block 1 frames Click 1
+    const [b1, b2] = result.zoomBlocks;
+    expect(b1).toBeDefined();
+    expect(b2).toBeDefined();
+
+    // At Click 1 (2000ms): zoomed in on Click 1
+    const cam1 = calculateCameraAtTime(2000, result.zoomBlocks, 800, 400, undefined, result.keyframes);
+    expect(cam1.isZoomed).toBe(true);
+    expect(cam1.scale).toBe(1.85);
+    expect(cam1.x).toBeCloseTo(b1!.targetX, 2);
+
+    // At Click 2 (3300ms): zoomed in on Click 2
+    const cam2 = calculateCameraAtTime(3300, result.zoomBlocks, 800, 400, undefined, result.keyframes);
+    expect(cam2.isZoomed).toBe(true);
+    expect(cam2.scale).toBe(1.85);
+    expect(cam2.x).toBeCloseTo(b2!.targetX, 2);
+
+    // After Click 2 has rested for > 1.0s (e.g. at 5000ms): fully returned to full screen 1.0x
+    const camAfter = calculateCameraAtTime(5000, result.zoomBlocks, 800, 400, undefined, result.keyframes);
+    expect(camAfter.isZoomed).toBe(false);
+    expect(camAfter.scale).toBe(1.0);
+    expect(camAfter.x).toBe(0.5);
+    expect(camAfter.y).toBe(0.5);
   });
 });
 

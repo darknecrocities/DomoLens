@@ -3,7 +3,6 @@ import {
   AppWindow,
   ArrowLeft,
   CheckCircle2,
-  Globe,
   Mic,
   MicOff,
   Monitor,
@@ -52,12 +51,6 @@ export function RecordScreen() {
       desc: copy.record.sourceWindowDesc,
       icon: AppWindow,
     },
-    {
-      id: "tab",
-      label: copy.record.sourceTab,
-      desc: copy.record.sourceTabDesc,
-      icon: Globe,
-    },
   ];
 
   return (
@@ -77,7 +70,7 @@ export function RecordScreen() {
             </div>
             <h2 className="text-xl font-bold text-white">Select Screen or Window</h2>
             <p className="mt-2 text-xs text-fg-muted leading-relaxed">
-              Please choose which screen, application window, or browser tab to share. The recording and video will not begin until your screen is shared.
+              Please choose which entire screen or application window to share. The recording and video will not begin until your screen is shared.
             </p>
             <Button
               variant="secondary"
@@ -156,7 +149,7 @@ export function RecordScreen() {
               </div>
 
               {/* Action Bar */}
-              <div className="mt-8 flex w-full flex-wrap items-center justify-center gap-3">
+              <div data-recorder-ui="true" className="mt-8 flex w-full flex-wrap items-center justify-center gap-3">
                 {state === "recording" ? (
                   <Button
                     variant="secondary"

@@ -2,7 +2,9 @@ import {
   calculateActiveEffectsState,
   calculateCameraAtTime,
   smoothCursorTrajectory,
+  TYPING_SOUND_PROFILES,
   type ProjectData,
+  type TypingSoundPreset,
 } from "@domolens/core";
 import { platform } from "../platform";
 
@@ -526,7 +528,42 @@ export async function renderProjectVideo(options: RenderOptions): Promise<Render
             const padX = 14 * baseScale;
             const padY = 8 * baseScale;
 
+            // Optional Badge Pill above caption
+            if (overlay.badge) {
+              const badgeFont = Math.max(10, fontSize * 0.52);
+              ctx.font = `800 ${badgeFont}px sans-serif`;
+              const badgeText = overlay.badge.toUpperCase();
+              const badgeW = ctx.measureText(badgeText).width;
+              const badgePadX = 8 * baseScale;
+              const badgePadY = 3.5 * baseScale;
+              const badgeY = posY - fontSize - padY - 8 * baseScale;
+
+              ctx.fillStyle = looks.brandAccentColor || "#6366f1";
+              if (typeof ctx.roundRect === "function") {
+                ctx.beginPath();
+                ctx.roundRect(
+                  posX - badgeW / 2 - badgePadX,
+                  badgeY - badgeFont - badgePadY / 2,
+                  badgeW + badgePadX * 2,
+                  badgeFont + badgePadY * 2,
+                  10 * baseScale,
+                );
+                ctx.fill();
+              } else {
+                ctx.fillRect(
+                  posX - badgeW / 2 - badgePadX,
+                  badgeY - badgeFont - badgePadY / 2,
+                  badgeW + badgePadX * 2,
+                  badgeFont + badgePadY * 2,
+                );
+              }
+              ctx.fillStyle = "#ffffff";
+              ctx.textAlign = "center";
+              ctx.fillText(badgeText, posX, badgeY - 1 * baseScale);
+            }
+
             // Caption backdrop
+            ctx.font = `600 ${fontSize}px sans-serif`;
             ctx.fillStyle = overlay.bgColor || "rgba(0, 0, 0, 0.75)";
             if (typeof ctx.roundRect === "function") {
               ctx.beginPath();
@@ -557,11 +594,88 @@ export async function renderProjectVideo(options: RenderOptions): Promise<Render
 
       ctx.restore(); // Restore window clipping
 
+      // 9. Draw Window Mockup Shell Header
+      if (looks.windowFrame && looks.windowFrame !== "none") {
+        ctx.save();
+        const headerH = 26 * baseScale;
+        ctx.fillStyle = "rgba(0, 0, 0, 0.45)";
+        if (typeof ctx.roundRect === "function") {
+          ctx.beginPath();
+          ctx.roundRect(winX, winY, winW, headerH, [radiusPx, radiusPx, 0, 0]);
+          ctx.fill();
+        } else {
+          ctx.fillRect(winX, winY, winW, headerH);
+        }
+
+        // Traffic Light Dots
+        if (looks.windowFrame === "macos" || looks.windowFrame === "safari" || looks.windowFrame === "terminal") {
+          const dotR = 4 * baseScale;
+          const startDotX = winX + 12 * baseScale;
+          const dotY = winY + headerH / 2;
+          const gap = 13 * baseScale;
+
+          // Red
+          ctx.fillStyle = "#ff5f56";
+          ctx.beginPath();
+          ctx.arc(startDotX, dotY, dotR, 0, Math.PI * 2);
+          ctx.fill();
+
+          // Yellow
+          ctx.fillStyle = "#ffbd2e";
+          ctx.beginPath();
+          ctx.arc(startDotX + gap, dotY, dotR, 0, Math.PI * 2);
+          ctx.fill();
+
+          // Green
+          ctx.fillStyle = "#27c93f";
+          ctx.beginPath();
+          ctx.arc(startDotX + gap * 2, dotY, dotR, 0, Math.PI * 2);
+          ctx.fill();
+        }
+
+        // Safari Omnibar
+        if (looks.windowFrame === "safari") {
+          const omniW = Math.min(260 * baseScale, winW * 0.45);
+          const omniH = 16 * baseScale;
+          const omniX = winX + (winW - omniW) / 2;
+          const omniY = winY + (headerH - omniH) / 2;
+          ctx.fillStyle = "rgba(255, 255, 255, 0.12)";
+          if (typeof ctx.roundRect === "function") {
+            ctx.beginPath();
+            ctx.roundRect(omniX, omniY, omniW, omniH, 4 * baseScale);
+            ctx.fill();
+          } else {
+            ctx.fillRect(omniX, omniY, omniW, omniH);
+          }
+          ctx.font = `500 ${10 * baseScale}px monospace`;
+          ctx.fillStyle = "rgba(255, 255, 255, 0.75)";
+          ctx.textAlign = "center";
+          ctx.fillText(looks.mockupUrl || "app.domolens.dev", omniX + omniW / 2, omniY + 11 * baseScale);
+        }
+
+        ctx.restore();
+      }
+
       // Trigger Web Audio synthetic bops if enabled
       if (audioCtx && audioDest && project.audioSettings?.clickSoundEnabled !== false && project.clicks) {
         const clickNow = project.clicks.find((c) => Math.abs(c.timestampMs - tMs) < frameIntervalMs / 2);
         if (clickNow) {
           playSyntheticBop(audioCtx, audioDest, project.audioSettings?.clickSoundVolume || 0.7);
+        }
+      }
+
+      // Trigger Web Audio synthetic typing keystrokes if enabled
+      if (audioCtx && audioDest && project.audioSettings?.typingSoundEnabled !== false && project.interactions) {
+        const typeNow = project.interactions.find(
+          (i) => i.type === "typing" && Math.abs(i.timestampMs - tMs) < frameIntervalMs / 2,
+        );
+        if (typeNow) {
+          playSyntheticKeystroke(
+            audioCtx,
+            audioDest,
+            project.audioSettings?.typingSoundPreset || "creamy",
+            project.audioSettings?.typingSoundVolume || 0.6,
+          );
         }
       }
 
@@ -644,3 +758,66 @@ function playSyntheticBop(
     // Ignore audio synthesis errors
   }
 }
+
+/**
+ * Procedural web audio keystroke sound synthesis connected to render audio stream.
+ */
+function playSyntheticKeystroke(
+  ctx: AudioContext,
+  dest: MediaStreamAudioDestinationNode,
+  preset: TypingSoundPreset,
+  volume: number,
+) {
+  if (preset === "none") return;
+  try {
+    const profile =
+      (preset in TYPING_SOUND_PROFILES ? TYPING_SOUND_PROFILES[preset as keyof typeof TYPING_SOUND_PROFILES] : null) ||
+      TYPING_SOUND_PROFILES.creamy ||
+      TYPING_SOUND_PROFILES.mechanical;
+    const now = ctx.currentTime;
+    const jitter = 1 + (Math.random() - 0.5) * 0.12;
+
+    // Contact noise
+    const noiseDuration = profile.clickLeafSnap ? 0.02 : 0.012;
+    const bufferSize = Math.floor(ctx.sampleRate * noiseDuration);
+    const noiseBuffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
+    const output = noiseBuffer.getChannelData(0);
+    for (let i = 0; i < bufferSize; i++) {
+      output[i] = Math.random() * 2 - 1;
+    }
+
+    const whiteNoise = ctx.createBufferSource();
+    whiteNoise.buffer = noiseBuffer;
+
+    const noiseFilter = ctx.createBiquadFilter();
+    noiseFilter.type = profile.resonanceFilter === "bandpass" ? "bandpass" : "highpass";
+    noiseFilter.frequency.setValueAtTime(profile.noiseCutoff * jitter, now);
+
+    const noiseGain = ctx.createGain();
+    noiseGain.gain.setValueAtTime(Math.min(1.0, (profile.noiseGain ?? 0.3) * volume), now);
+    noiseGain.gain.exponentialRampToValueAtTime(0.0005, now + noiseDuration);
+
+    whiteNoise.connect(noiseFilter);
+    noiseFilter.connect(noiseGain);
+    noiseGain.connect(dest);
+    whiteNoise.start(now);
+
+    // Body resonance
+    const osc = ctx.createOscillator();
+    osc.type = "triangle";
+    osc.frequency.setValueAtTime(profile.thockFreq * jitter, now);
+    osc.frequency.exponentialRampToValueAtTime(profile.thockFreq * 0.45, now + profile.durationSec);
+
+    const bodyGain = ctx.createGain();
+    bodyGain.gain.setValueAtTime(Math.min(1.0, volume * 0.5), now);
+    bodyGain.gain.exponentialRampToValueAtTime(0.0001, now + profile.durationSec);
+
+    osc.connect(bodyGain);
+    bodyGain.connect(dest);
+    osc.start(now);
+    osc.stop(now + profile.durationSec);
+  } catch {
+    // Ignore audio synthesis errors
+  }
+}
+

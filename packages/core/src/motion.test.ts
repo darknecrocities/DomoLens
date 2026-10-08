@@ -152,4 +152,116 @@ describe("optical motion analysis and cursor centroid tracking", () => {
     expect(firstInteraction.x).toBeCloseTo(0.3, 1);
     expect(firstInteraction.y).toBeCloseTo(0.4, 1);
   });
+
+  it("registers every single click across browser tabs on the same row without dropping or converting to typing", () => {
+    const width = 100;
+    const height = 100;
+
+    // Frame 0: Baseline
+    const f0 = {
+      timestampMs: 0,
+      data: new Uint8ClampedArray(width * height).fill(30),
+      width,
+      height,
+    };
+
+    // Frame 1: Tab 1 click at (x=20, y=5) at t=1000ms
+    const d1 = new Uint8ClampedArray(width * height).fill(30);
+    for (let y = 3; y <= 7; y++) {
+      for (let x = 18; x <= 22; x++) {
+        d1[y * width + x] = 200;
+      }
+    }
+    const f1 = { timestampMs: 1000, data: d1, width, height };
+
+    // Frame 2: Tab 2 click at (x=38, y=5) at t=2200ms
+    const d2 = new Uint8ClampedArray(d1);
+    for (let y = 3; y <= 7; y++) {
+      for (let x = 36; x <= 40; x++) {
+        d2[y * width + x] = 200;
+      }
+    }
+    const f2 = { timestampMs: 2200, data: d2, width, height };
+
+    // Frame 3: Tab 3 click at (x=55, y=5) at t=3500ms
+    const d3 = new Uint8ClampedArray(d2);
+    for (let y = 3; y <= 7; y++) {
+      for (let x = 53; x <= 57; x++) {
+        d3[y * width + x] = 200;
+      }
+    }
+    const f3 = { timestampMs: 3500, data: d3, width, height };
+
+    const result = detectActivityEventsFromFrames([f0, f1, f2, f3], width, height);
+
+    // All 3 tabs must be registered as individual clicks!
+    expect(result.clicks).toHaveLength(3);
+    expect(result.clicks[0]?.x).toBeCloseTo(0.20, 2);
+    expect(result.clicks[0]?.y).toBeCloseTo(0.05, 2);
+    expect(result.clicks[1]?.x).toBeCloseTo(0.38, 2);
+    expect(result.clicks[1]?.y).toBeCloseTo(0.05, 2);
+    expect(result.clicks[2]?.x).toBeCloseTo(0.55, 2);
+    expect(result.clicks[2]?.y).toBeCloseTo(0.05, 2);
+
+    // No clicks misclassified into typing
+    const typingInteractions = result.interactions.filter((i) => i.type === "typing");
+    expect(typingInteractions).toHaveLength(0);
+
+    const clickInteractions = result.interactions.filter((i) => i.type === "click");
+    expect(clickInteractions).toHaveLength(3);
+  });
+
+  it("does not misclassify continuous mouse cursor translation across the screen as clicks", () => {
+    const width = 100;
+    const height = 100;
+
+    // Frame 0: Baseline
+    const f0 = {
+      timestampMs: 0,
+      data: new Uint8ClampedArray(width * height).fill(30),
+      width,
+      height,
+    };
+
+    // Frame 1: Tab 1 Click at (x=20, y=10) at t=1000ms
+    const d1 = new Uint8ClampedArray(width * height).fill(30);
+    for (let y = 8; y <= 12; y++) {
+      for (let x = 18; x <= 22; x++) {
+        d1[y * width + x] = 200;
+      }
+    }
+    const f1 = { timestampMs: 1000, data: d1, width, height };
+
+    // Frames 2-5: Cursor moving rapidly across the screen (dx = 12-13 per 150ms frame)
+    // t=1150ms at x=35, t=1300ms at x=48, t=1450ms at x=60, t=1600ms at x=72
+    const motionFrames = [35, 48, 60, 72].map((cx, idx) => {
+      const d = new Uint8ClampedArray(width * height).fill(30);
+      for (let y = 8; y <= 12; y++) {
+        for (let x = cx - 2; x <= cx + 2; x++) {
+          d[y * width + x] = 200;
+        }
+      }
+      return { timestampMs: 1150 + idx * 150, data: d, width, height };
+    });
+
+    // Frame 6: Button Click at (x=85, y=10) at t=2400ms (settled, dt > 450ms)
+    const d6 = new Uint8ClampedArray(width * height).fill(30);
+    for (let y = 8; y <= 12; y++) {
+      for (let x = 83; x <= 87; x++) {
+        d6[y * width + x] = 200;
+      }
+    }
+    const f6 = { timestampMs: 2400, data: d6, width, height };
+
+    const result = detectActivityEventsFromFrames([f0, f1, ...motionFrames, f6], width, height);
+
+    // Trajectory must capture the motion path across all frames
+    expect(result.cursorTrajectory.length).toBeGreaterThanOrEqual(5);
+
+    // Only the 2 intentional clicks (Tab 1 at t=1000 and Button at t=2400) should be registered,
+    // NOT the 4 intermediate translating frames!
+    expect(result.clicks).toHaveLength(2);
+    expect(result.clicks[0]?.timestampMs).toBe(1000);
+    expect(result.clicks[1]?.timestampMs).toBe(2400);
+  });
 });

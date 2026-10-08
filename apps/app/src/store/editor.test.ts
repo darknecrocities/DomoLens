@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { useEditor } from "./editor";
 import { useProjects } from "./projects";
-import type { ProjectSummary } from "@domolens/core";
+import { calculateCameraAtTime, clampCameraToBounds, type ProjectSummary } from "@domolens/core";
 
 describe("useEditor store", () => {
   const mockSummary: ProjectSummary = {
@@ -161,6 +161,14 @@ describe("useEditor store", () => {
 
   it("handles LLM AI Director messaging and action triggers", async () => {
     await useEditor.getState().loadProject("proj-test");
+    useEditor.setState((s) => ({
+      durationMs: 10000,
+      project: s.project ? {
+        ...s.project,
+        clicks: [{ id: "c1", timestampMs: 2500, x: 0.4, y: 0.5, button: "left" }],
+        interactions: [{ id: "c1", type: "click", timestampMs: 2500, x: 0.4, y: 0.5, button: "left" }],
+      } : null,
+    }));
     await useEditor.getState().sendLlmMessage("Please auto-plot zooms on clicks");
     const msgs = useEditor.getState().llmMessages;
     expect(msgs.length).toBeGreaterThan(1);
@@ -284,29 +292,48 @@ describe("useEditor store", () => {
     expect(useEditor.getState().selectedEffectId).toBeNull();
   });
 
-  it("plotInteractions generates comprehensive multi-zoom coverage across long videos when no raw clicks exist", async () => {
+  it("plotInteractions strictly keeps full screen only (no zooms) when no clicks exist during recording", async () => {
     await useEditor.getState().loadProject("proj-test");
-    // Set 41-second duration with old 2 dummy clicks
+    // Set 41-second duration with no raw clicks
+    useEditor.setState((s) => ({
+      durationMs: 41000,
+      project: s.project ? {
+        ...s.project,
+        clicks: [],
+        interactions: [],
+        zoomBlocks: [],
+        keyframes: [],
+      } : null,
+    }));
+
+    useEditor.getState().plotInteractions();
+    const state = useEditor.getState();
+    // Strictly NO zoom in when there are no clicks: full screen only!
+    expect(state.project?.zoomBlocks.length).toBe(0);
+    expect(state.project?.keyframes?.length).toBe(0);
+  });
+
+  it("plotInteractions strictly respects user clicks without generating unsolicited filler zooms", async () => {
+    await useEditor.getState().loadProject("proj-test");
     useEditor.setState((s) => ({
       durationMs: 41000,
       project: s.project ? {
         ...s.project,
         clicks: [
-          { id: "c-auto-1", timestampMs: 9000, x: 0.38, y: 0.42, button: "left" },
-          { id: "c-auto-2", timestampMs: 25000, x: 0.62, y: 0.52, button: "left" },
+          { id: "c-1", timestampMs: 9000, x: 0.38, y: 0.42, button: "left" },
+          { id: "c-2", timestampMs: 25000, x: 0.62, y: 0.52, button: "left" },
         ],
         interactions: [
-          { id: "c-auto-1", type: "click", timestampMs: 9000, x: 0.38, y: 0.42, button: "left" },
-          { id: "c-auto-2", type: "click", timestampMs: 25000, x: 0.62, y: 0.52, button: "left" },
+          { id: "c-1", type: "click", timestampMs: 9000, x: 0.38, y: 0.42, button: "left" },
+          { id: "c-2", type: "click", timestampMs: 25000, x: 0.62, y: 0.52, button: "left" },
         ],
       } : null,
     }));
 
     useEditor.getState().plotInteractions();
     const state = useEditor.getState();
-    // Must generate many zooms across the 41-second recording, far more than 2
-    expect(state.project?.zoomBlocks.length).toBeGreaterThanOrEqual(6);
-    expect(state.project?.keyframes?.length).toBeGreaterThanOrEqual(15);
+    // Strictly 2 zoom blocks for the 2 user clicks
+    expect(state.project?.zoomBlocks.length).toBe(2);
   });
 
   it("DEFAULT_LOOKS hides cursor overlay by default to preserve native recording", async () => {
@@ -340,14 +367,14 @@ describe("useEditor store", () => {
     expect(project?.keyframes?.some((kf) => kf.sound === "click")).toBe(true);
   });
 
-  it("autoZoom plots multiple zoom blocks across the entire timeline when recording has only one click at the end", async () => {
+  it("autoZoom plots zoom strictly for the user click without generating fake filler zooms", async () => {
     await useEditor.getState().loadProject("proj-test");
     useEditor.setState((s) => ({
       durationMs: 22000,
       project: s.project ? {
         ...s.project,
-        clicks: [{ id: "c-stop", timestampMs: 20500, x: 0.5, y: 0.5, button: "left" }],
-        interactions: [{ id: "c-stop", type: "click", timestampMs: 20500, x: 0.5, y: 0.5, button: "left" }],
+        clicks: [{ id: "c-action", timestampMs: 8000, x: 0.5, y: 0.5, button: "left" }],
+        interactions: [{ id: "c-action", type: "click", timestampMs: 8000, x: 0.5, y: 0.5, button: "left" }],
         zoomBlocks: [],
         keyframes: [],
       } : null,
@@ -355,10 +382,29 @@ describe("useEditor store", () => {
 
     useEditor.getState().autoZoom();
     const zoomBlocks = useEditor.getState().project?.zoomBlocks ?? [];
-    expect(zoomBlocks.length).toBeGreaterThan(1);
-    // Verify that zooms exist in the first half of the timeline as well
-    const earlyZooms = zoomBlocks.filter((b) => b.startTimeMs < 15000);
-    expect(earlyZooms.length).toBeGreaterThan(0);
+    expect(zoomBlocks.length).toBe(1);
+    expect(zoomBlocks[0]?.targetX).toBe(0.5);
+    expect(zoomBlocks[0]?.targetY).toBe(0.5);
+  });
+
+  it("autoZoom strictly does NOT zoom into finish/stop click at the end of recording", async () => {
+    await useEditor.getState().loadProject("proj-test");
+    useEditor.setState((s) => ({
+      durationMs: 22000,
+      project: s.project ? {
+        ...s.project,
+        clicks: [{ id: "c-stop", timestampMs: 21500, x: 0.9, y: 0.9, button: "left" }],
+        interactions: [{ id: "c-stop", type: "click", timestampMs: 21500, x: 0.9, y: 0.9, button: "left" }],
+        zoomBlocks: [],
+        keyframes: [],
+      } : null,
+    }));
+
+    useEditor.getState().autoZoom();
+    const zoomBlocks = useEditor.getState().project?.zoomBlocks ?? [];
+    expect(zoomBlocks.length).toBe(0);
+    const keyframes = useEditor.getState().project?.keyframes ?? [];
+    expect(keyframes.length).toBe(0);
   });
 
   it("shiftCameraTarget inside an active zoom block updates block and all its keyframes to the clicked element coordinates", async () => {
@@ -391,8 +437,9 @@ describe("useEditor store", () => {
     useEditor.getState().shiftCameraTarget(0.85, 0.65);
     const proj = useEditor.getState().project;
     const block = proj?.zoomBlocks.find((b) => b.id === "b1");
-    expect(block?.targetX).toBeCloseTo(0.85, 2);
-    expect(block?.targetY).toBeCloseTo(0.65, 2);
+    const expectedTarget = clampCameraToBounds(0.85, 0.65, 1.85, "center");
+    expect(block?.targetX).toBeCloseTo(expectedTarget.x, 2);
+    expect(block?.targetY).toBeCloseTo(expectedTarget.y, 2);
 
     const blockKfs = proj?.keyframes?.filter((k) => k.timeMs >= 1000 && k.timeMs <= 4000) ?? [];
     expect(blockKfs.length).toBeGreaterThanOrEqual(3);
@@ -401,8 +448,8 @@ describe("useEditor store", () => {
     const zoomedKfs = blockKfs.filter((k) => k.scale > 1.05);
     expect(zoomedKfs.length).toBeGreaterThanOrEqual(1);
     for (const kf of zoomedKfs) {
-      expect(kf.targetX).toBeCloseTo(0.85, 2);
-      expect(kf.targetY).toBeCloseTo(0.65, 2);
+      expect(kf.targetX).toBeCloseTo(expectedTarget.x, 2);
+      expect(kf.targetY).toBeCloseTo(expectedTarget.y, 2);
     }
 
     // Full frame lead-in and lead-out keyframes must remain dead center (0.5, 0.5) to prevent jumping
@@ -413,4 +460,192 @@ describe("useEditor store", () => {
       expect(kf.targetY).toBeCloseTo(0.5, 2);
     }
   });
+
+  it("plotInteractions glides between consecutive clicks across browser tabs without bouncing to full frame", async () => {
+    await useEditor.getState().loadProject("proj-test");
+    useEditor.setState((s) => ({
+      durationMs: 12000,
+      project: s.project ? {
+        ...s.project,
+        clicks: [
+          { id: "tab-1", timestampMs: 2000, x: 0.20, y: 0.15, button: "left" },
+          { id: "tab-2", timestampMs: 2800, x: 0.70, y: 0.15, button: "left" },
+        ],
+        interactions: [
+          { id: "tab-1", type: "click", timestampMs: 2000, x: 0.20, y: 0.15, button: "left" },
+          { id: "tab-2", type: "click", timestampMs: 2800, x: 0.70, y: 0.15, button: "left" },
+        ],
+      } : null,
+    }));
+
+    useEditor.getState().plotInteractions();
+    const state = useEditor.getState();
+    expect(state.project?.zoomBlocks.length).toBe(1);
+
+    // Verify connecting glide / tracking keyframe exists
+    const glideKf = state.project?.keyframes?.find((k) => k.id.includes("tab-2"));
+    expect(glideKf).toBeDefined();
+    expect(glideKf?.easing).toBe("cubic");
+
+    // Zero reveal dip keyframes
+    const revealKfs = state.project?.keyframes?.filter((k) => k.id.includes("kf-reveal"));
+    expect(revealKfs?.length).toBe(0);
+  });
+
+  it("zooms out to full screen after 1s of no clicks", async () => {
+    await useEditor.getState().loadProject("proj-test");
+    useEditor.setState((s) => ({
+      durationMs: 12000,
+      project: s.project ? {
+        ...s.project,
+        clicks: [
+          { id: "a", timestampMs: 2000, x: 0.2, y: 0.2, button: "left" },
+          { id: "b", timestampMs: 6000, x: 0.7, y: 0.6, button: "left" },
+        ],
+        interactions: [
+          { id: "a", type: "click", timestampMs: 2000, x: 0.2, y: 0.2, button: "left" },
+          { id: "b", type: "click", timestampMs: 6000, x: 0.7, y: 0.6, button: "left" },
+        ],
+      } : null,
+    }));
+    useEditor.getState().plotInteractions();
+    const st = useEditor.getState();
+    expect(st.project?.zoomBlocks.length).toBe(2);
+    expect(st.project?.keyframes?.some((k) => k.scale === 1.0 && k.timeMs > 2000 && k.timeMs < 6000)).toBe(true);
+  });
+
+  it("shiftCameraTarget outside active zoom block creates clean hold without reveal dips", async () => {
+    await useEditor.getState().loadProject("proj-test");
+    useEditor.setState((s) => ({
+      currentTimeMs: 5000,
+      durationMs: 15000,
+      project: s.project ? {
+        ...s.project,
+        zoomBlocks: [],
+        keyframes: [],
+      } : null,
+    }));
+
+    useEditor.getState().shiftCameraTarget(0.70, 0.30);
+    const proj = useEditor.getState().project;
+    expect(proj?.zoomBlocks.length).toBe(1);
+
+    // All zoomed keyframes in the new block maintain active scale (no reveal dip down to 1.44x)
+    const zoomedKfs = proj?.keyframes?.filter((k) => k.scale > 1.05) ?? [];
+    expect(zoomedKfs.length).toBeGreaterThanOrEqual(2);
+    for (const kf of zoomedKfs) {
+      expect(kf.scale).toBeCloseTo(1.85, 2);
+    }
+
+    const revealKf = proj?.keyframes?.find((k) => k.id.includes("kf-reveal"));
+    expect(revealKf).toBeUndefined();
+  });
+
+  it("plotInteractions plots zooms for every single click when clicks has entries missing from interactions", async () => {
+    await useEditor.getState().loadProject("proj-test");
+    useEditor.setState((s) => ({
+      durationMs: 15000,
+      project: s.project ? {
+        ...s.project,
+        clicks: [
+          { id: "click-tab-1", timestampMs: 2000, x: 0.25, y: 0.10, button: "left" },
+          { id: "click-tab-2", timestampMs: 3800, x: 0.45, y: 0.10, button: "left" },
+        ],
+        // interactions only has a typing event at 7000ms
+        interactions: [
+          { id: "typing-1", type: "typing", timestampMs: 7000, x: 0.50, y: 0.50, snippet: "search" },
+        ],
+      } : null,
+    }));
+
+    useEditor.getState().plotInteractions();
+    const state = useEditor.getState();
+
+    // Verify keyframes include targetX/Y for both tab-1 and tab-2
+    const kfTab1 = state.project?.keyframes?.find((k) => Math.abs(k.targetX - 0.25) < 0.05);
+    const kfTab2 = state.project?.keyframes?.find((k) => Math.abs(k.targetX - 0.45) < 0.05);
+    expect(kfTab1).toBeDefined();
+    expect(kfTab2).toBeDefined();
+
+    // Sound effects included
+    expect(kfTab1?.sound).toBe("click");
+  });
+
+  it("plotInteractions leaves video in full screen 1.0x between separate clicks without gluing into one giant video-length zoom block", async () => {
+    await useEditor.getState().loadProject("proj-test");
+    useEditor.setState((s) => ({
+      durationMs: 15000,
+      project: s.project ? {
+        ...s.project,
+        clicks: [
+          { id: "click-1", timestampMs: 2000, x: 0.30, y: 0.40, button: "left" },
+          { id: "click-2", timestampMs: 9000, x: 0.70, y: 0.60, button: "left" },
+        ],
+        interactions: [
+          { id: "click-1", type: "click", timestampMs: 2000, x: 0.30, y: 0.40, button: "left" },
+          { id: "click-2", type: "click", timestampMs: 9000, x: 0.70, y: 0.60, button: "left" },
+        ],
+      } : null,
+    }));
+
+    useEditor.getState().plotInteractions({
+      inactivityResetMs: 1000,
+      holdDurationMs: 1000,
+    });
+    const state = useEditor.getState();
+
+    // Must be exactly 2 distinct zoom blocks, separated by a full screen gap
+    expect(state.project?.zoomBlocks).toHaveLength(2);
+    const b1 = state.project!.zoomBlocks[0]!;
+    const b2 = state.project!.zoomBlocks[1]!;
+
+    // Block 1 ends well before Block 2 starts (separated by several seconds of full screen)
+    expect(b1.endTimeMs).toBeLessThan(4000);
+    expect(b2.startTimeMs).toBeGreaterThan(7500);
+
+    // Playback between blocks (e.g. at t = 5500ms) MUST be 1.0x full screen
+    const midCam = calculateCameraAtTime(5500, state.project!.zoomBlocks, 1000, 400, undefined, state.project!.keyframes);
+    expect(midCam.scale).toBe(1.0);
+    expect(midCam.x).toBe(0.5);
+    expect(midCam.y).toBe(0.5);
+    expect(midCam.isZoomed).toBe(false);
+  });
+
+  it("applies a pre-made motion template and updates looks, aspect ratio, audio and text overlays", async () => {
+    await useEditor.getState().loadProject("proj-test");
+
+    expect(useEditor.getState().isTemplateModalOpen).toBe(false);
+    useEditor.getState().setTemplateModalOpen(true);
+    expect(useEditor.getState().isTemplateModalOpen).toBe(true);
+
+    useEditor.getState().applyTemplate("saas-launch-hero");
+    const proj = useEditor.getState().project;
+
+    expect(useEditor.getState().isTemplateModalOpen).toBe(false);
+    expect(useEditor.getState().activeTemplateId).toBe("saas-launch-hero");
+    expect(proj?.looks.windowFrame).toBe("macos");
+    expect(proj?.looks.tiltAngle).toBe(6.5);
+    expect(proj?.looks.brandAccentColor).toBe("#6366f1");
+    expect(proj?.audioSettings?.typingSoundPreset).toBe("creamy");
+
+    // Text overlay created from template
+    const tplOverlay = proj?.textOverlays?.find((o) => o.badge === "NEW RELEASE");
+    expect(tplOverlay).toBeDefined();
+    expect(tplOverlay?.text).toContain("DomoLens");
+
+    // Undo reverts back to prior looks
+    useEditor.getState().undo();
+    expect(useEditor.getState().project?.looks.tiltAngle).toBe(0);
+  });
+
+  it("supports auditioning expanded mechanical keyboard presets without errors", () => {
+    expect(() => {
+      useEditor.getState().playTypingSoundPreview("thock", 0.7);
+      useEditor.getState().playTypingSoundPreview("creamy", 0.7);
+      useEditor.getState().playTypingSoundPreview("thack", 0.7);
+      useEditor.getState().playTypingSoundPreview("clicky", 0.7);
+      useEditor.getState().playTypingSoundPreview("thick", 0.7);
+    }).not.toThrow();
+  });
 });
+

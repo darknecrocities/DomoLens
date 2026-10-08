@@ -83,7 +83,6 @@ export function Timeline({ project }: TimelineProps) {
   const updateEffect = useEditor((s) => s.updateEffect);
   const deleteEffect = useEditor((s) => s.deleteEffect);
   const addTextOverlay = useEditor((s) => s.addTextOverlay);
-  const addAudioTrack = useEditor((s) => s.addAudioTrack);
   const plotInteractions = useEditor((s) => s.plotInteractions);
   const autoZoom = useEditor((s) => s.autoZoom);
   const autoAfx = useEditor((s) => s.autoAfx);
@@ -158,7 +157,8 @@ export function Timeline({ project }: TimelineProps) {
           {/* Auto Zoom Button */}
           <button
             type="button"
-            onClick={() => autoZoom({ holdDurationMs: 1200, inactivityResetMs: 1200, scale: 1.85 })}
+            data-tutorial-target="auto-zoom"
+            onClick={() => autoZoom({ holdDurationMs: 1000, inactivityResetMs: 1000, continuousGlide: true, scale: 1.85 })}
             className="flex items-center gap-1.5 rounded-lg border border-neutral-700 bg-neutral-800 px-2 sm:px-2.5 py-1 text-xs font-semibold text-white hover:bg-neutral-700 hover:border-white shadow-sm transition-all"
             title="Auto Zoom: Automatically generates smooth camera zooms centered on typing, clicks, and text highlights"
           >
@@ -171,7 +171,7 @@ export function Timeline({ project }: TimelineProps) {
             type="button"
             onClick={() => autoAfx()}
             className="flex items-center gap-1.5 rounded-lg border border-neutral-700 bg-neutral-800 px-2 sm:px-2.5 py-1 text-xs font-semibold text-white hover:bg-neutral-700 hover:border-white shadow-sm transition-all"
-            title="Auto AFX: Automatically synchronizes click bops, typing audio, and music ducking"
+            title="Auto AFX: Automatically synchronizes tactile click bops and mechanical typing audio"
           >
             <Volume2 className="size-3.5 text-white" />
             <span className="hidden sm:inline">Auto AFX</span>
@@ -221,17 +221,6 @@ export function Timeline({ project }: TimelineProps) {
           >
             <Type className="size-3.5 text-neutral-300" />
             <span className="hidden md:inline">+ Text</span>
-          </button>
-
-          {/* + Music */}
-          <button
-            type="button"
-            onClick={() => addAudioTrack("Lo-Fi Beat", "sample://lofi-chill.mp3", "music")}
-            className="flex items-center gap-1 rounded-lg border border-neutral-700 bg-neutral-800 px-2 py-1 text-xs font-medium text-neutral-300 hover:border-neutral-500 hover:text-white transition-colors"
-            title="Add background audio track"
-          >
-            <Music className="size-3.5 text-neutral-300" />
-            <span className="hidden md:inline">+ Music</span>
           </button>
 
           {/* + Zoom */}
@@ -303,19 +292,32 @@ export function Timeline({ project }: TimelineProps) {
       </div>
 
       {/* 2. Visual Tracks Container */}
-      <div className="relative px-3 sm:px-4 py-3 flex gap-2 sm:gap-3 items-stretch">
+      <div data-tutorial-target="timeline-tracks" className="relative px-3 sm:px-4 py-3 flex gap-2 sm:gap-3 items-stretch">
         {/* Left Track Headers Sidebar Column */}
         <div className="flex flex-col gap-1.5 shrink-0 w-24 sm:w-28 md:w-32 select-none py-2 pr-1 sm:pr-2 border-r border-ink-800/70">
           {/* TRACK 1: KEYFRAMES HEADER */}
-          <div className="h-7 flex items-center gap-1.5 px-2 rounded-md bg-ink-900/60 text-[10px] font-semibold uppercase tracking-wider text-fg-muted">
-            <Diamond className="size-3 text-neutral-300 fill-neutral-300 shrink-0" />
-            <span className="truncate">Keyframes</span>
+          <div className="h-7 flex items-center justify-between px-2 rounded-md bg-ink-900/60 text-[10px] font-semibold uppercase tracking-wider text-fg-muted group">
+            <div className="flex items-center gap-1.5 min-w-0">
+              <Diamond className="size-3 text-neutral-300 fill-neutral-300 shrink-0" />
+              <span className="truncate">Keyframes</span>
+            </div>
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                addKeyframeAtCurrentTime(1.85);
+              }}
+              className="p-0.5 rounded hover:bg-ink-800 text-neutral-400 hover:text-white transition-colors"
+              title="Add keyframe at playhead position (+)"
+            >
+              <Plus className="size-3" />
+            </button>
           </div>
 
           {/* TRACK 2: ZOOM BLOCKS HEADER */}
           <button
             type="button"
-            onClick={() => plotInteractions({ holdDurationMs: 2400, scale: 1.85 })}
+            onClick={() => plotInteractions({ holdDurationMs: 1000, inactivityResetMs: 1000, scale: 1.85 })}
             className="h-9 flex items-center justify-between px-2 rounded-lg bg-ink-900/60 text-[10px] font-semibold uppercase tracking-wider text-fg-muted hover:text-white hover:bg-ink-800 transition-colors text-left group"
             title="Auto-plot 2-3s camera zooms on all clicks and typing (applies immediately)"
           >
@@ -372,7 +374,19 @@ export function Timeline({ project }: TimelineProps) {
           className="relative flex-1 min-w-0 flex flex-col gap-1.5 rounded-xl bg-ink-950 p-2 cursor-pointer shadow-inner touch-none"
         >
           {/* TRACK 1: KEYFRAMES TRACK (Diamond Nodes) */}
-          <div className="relative h-7 rounded-md bg-ink-900/90 border border-ink-800/80 flex items-center">
+          <div
+            onDoubleClick={(e) => {
+              e.stopPropagation();
+              const rect = e.currentTarget.getBoundingClientRect();
+              const clickX = e.clientX - rect.left;
+              const ratio = Math.max(0, Math.min(1, clickX / (rect.width || 1)));
+              const targetTime = Math.round(ratio * durationMs);
+              setCurrentTime(targetTime);
+              addKeyframeAtCurrentTime(1.85);
+            }}
+            title="Keyframes Track - Double-click anywhere to add keyframe diamond at that time"
+            className="relative h-7 rounded-md bg-ink-900/90 border border-ink-800/80 flex items-center"
+          >
 
             {project.keyframes &&
               project.keyframes.map((kf, idx) => {
@@ -410,24 +424,31 @@ export function Timeline({ project }: TimelineProps) {
                     style={{ left: `${pos}%` }}
                   >
                     <div
-                      className={`relative size-3.5 rotate-45 border shadow-sm ${
+                      className={`relative size-3.5 rotate-45 border shadow-sm transition-transform ${
                         isSelected
-                          ? "bg-white border-black shadow-md scale-110"
-                          : kf.effect
-                          ? "bg-neutral-100 border-neutral-400 shadow"
+                          ? "bg-white border-white ring-2 ring-white/60 shadow-lg scale-110"
                           : kf.sound === "typing"
-                          ? "bg-neutral-300 border-neutral-500 shadow"
+                          ? "bg-amber-400 border-amber-200 shadow-amber-500/40 shadow"
                           : kf.sound === "click"
-                          ? "bg-neutral-400 border-neutral-600 shadow"
+                          ? "bg-cyan-400 border-cyan-200 shadow-cyan-500/40 shadow"
+                          : kf.effect
+                          ? "bg-fuchsia-400 border-fuchsia-200 shadow"
                           : "bg-neutral-200 border-neutral-400"
                       }`}
                     />
                     {kf.sound && (
-                      <div className="absolute -bottom-2.5 left-1/2 -translate-x-1/2 pointer-events-none flex items-center justify-center">
+                      <div
+                        className={`absolute -bottom-3 left-1/2 -translate-x-1/2 pointer-events-none flex items-center justify-center rounded px-1 py-0.2 shadow-sm text-[8px] font-bold ${
+                          kf.sound === "typing"
+                            ? "bg-amber-500/90 text-black border border-amber-300"
+                            : "bg-cyan-500/90 text-black border border-cyan-300"
+                        }`}
+                        title={`SFX: ${kf.sound} (${kf.soundPreset || (kf.sound === "typing" ? "mechanical" : "bop")})`}
+                      >
                         {kf.sound === "typing" ? (
-                          <Keyboard className="size-2 text-neutral-300" />
+                          <Keyboard className="size-2 text-black shrink-0" />
                         ) : (
-                          <MousePointer className="size-2 text-neutral-300" />
+                          <MousePointer className="size-2 text-black shrink-0" />
                         )}
                       </div>
                     )}
@@ -453,7 +474,7 @@ export function Timeline({ project }: TimelineProps) {
           <div className="relative h-9 rounded-lg bg-ink-900 border border-ink-800/80 overflow-hidden">
             {project.zoomBlocks.map((block) => {
               const left = getPositionPercent(block.startTimeMs);
-              const width = Math.max(2, getPositionPercent(block.endTimeMs) - left);
+              const width = Math.max(0.6, getPositionPercent(block.endTimeMs) - left);
               const isSelected = selectedBlockId === block.id;
 
               return (
@@ -490,7 +511,7 @@ export function Timeline({ project }: TimelineProps) {
                     window.addEventListener("pointermove", onMove);
                     window.addEventListener("pointerup", onUp);
                   }}
-                  className={`absolute top-1 bottom-1 flex items-center justify-between rounded-md border px-2 text-xs font-medium cursor-grab active:cursor-grabbing transition-all ${
+                  className={`absolute top-1 bottom-1 flex items-center justify-between rounded-md border px-2 text-xs font-medium cursor-grab active:cursor-grabbing transition-all overflow-hidden ${
                     isSelected
                       ? "border-white bg-white/25 text-white font-bold shadow-sm z-10"
                       : block.enabled
@@ -502,13 +523,13 @@ export function Timeline({ project }: TimelineProps) {
                     width: `${width}%`,
                   }}
                 >
-                  <span className="truncate text-[11px] font-semibold">
+                  <span className="truncate text-[11px] font-semibold select-none px-1">
                     {block.scale.toFixed(1)}x Auto-Zoom
                   </span>
 
-                  {/* Left & Right Drag Handles */}
+                  {/* Left & Right Drag Handles (cleanly inside block borders to prevent adjacent collisions) */}
                   <div
-                    className="absolute -left-2 top-0 bottom-0 w-4 cursor-ew-resize flex items-center justify-center touch-none z-20 group/handle"
+                    className="absolute left-0 top-0 bottom-0 w-3 cursor-ew-resize flex items-center justify-center touch-none z-20 group/handle"
                     onPointerDown={(e) => {
                       e.stopPropagation();
                       const startX = e.clientX;
@@ -530,10 +551,10 @@ export function Timeline({ project }: TimelineProps) {
                       window.addEventListener("pointerup", onUp);
                     }}
                   >
-                    <div className="w-1 h-3/4 rounded-full bg-white group-hover/handle:bg-neutral-300" />
+                    <div className={`w-1 h-3/4 rounded-full transition-colors ${isSelected ? "bg-white shadow-sm" : "bg-white/50 group-hover/handle:bg-white"}`} />
                   </div>
                   <div
-                    className="absolute -right-2 top-0 bottom-0 w-4 cursor-ew-resize flex items-center justify-center touch-none z-20 group/handle"
+                    className="absolute right-0 top-0 bottom-0 w-3 cursor-ew-resize flex items-center justify-center touch-none z-20 group/handle"
                     onPointerDown={(e) => {
                       e.stopPropagation();
                       const startX = e.clientX;
@@ -555,7 +576,7 @@ export function Timeline({ project }: TimelineProps) {
                       window.addEventListener("pointerup", onUp);
                     }}
                   >
-                    <div className="w-1 h-3/4 rounded-full bg-white group-hover/handle:bg-neutral-300" />
+                    <div className={`w-1 h-3/4 rounded-full transition-colors ${isSelected ? "bg-white shadow-sm" : "bg-white/50 group-hover/handle:bg-white"}`} />
                   </div>
                 </div>
               );
@@ -809,15 +830,36 @@ export function Timeline({ project }: TimelineProps) {
 
           {/* TRACK 6: CLICK & TYPING MARKERS */}
           <div className="relative h-3 w-full">
-            {/* Clicks (Orange) */}
-            {project.clicks.map((click) => (
-              <div
-                key={click.id}
-                title={`Mouse Click at ${formatDuration(click.timestampMs)}`}
-                className="absolute top-0 bottom-0 w-1 -translate-x-1/2 rounded-full bg-white hover:scale-150 transition-transform"
-                style={{ left: `${getPositionPercent(click.timestampMs)}%` }}
-              />
-            ))}
+            {/* Clicks */}
+            {(() => {
+              const allClicks = [...project.clicks];
+              if (project.interactions) {
+                for (const inter of project.interactions) {
+                  if (
+                    inter.type === "click" &&
+                    !allClicks.some(
+                      (c) => c.id === inter.id || Math.abs(c.timestampMs - inter.timestampMs) < 100,
+                    )
+                  ) {
+                    allClicks.push({
+                      id: inter.id,
+                      timestampMs: inter.timestampMs,
+                      x: inter.x,
+                      y: inter.y,
+                      button: inter.button || "left",
+                    });
+                  }
+                }
+              }
+              return allClicks.map((click) => (
+                <div
+                  key={click.id}
+                  title={`Mouse Click at ${formatDuration(click.timestampMs)}`}
+                  className="absolute top-0 bottom-0 w-1 -translate-x-1/2 rounded-full bg-white hover:scale-150 transition-transform"
+                  style={{ left: `${getPositionPercent(click.timestampMs)}%` }}
+                />
+              ));
+            })()}
 
             {/* Typing interactions */}
             {project.interactions?.filter((i) => i.type === "typing").map((typeEvt) => (

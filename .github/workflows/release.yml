@@ -176,3 +176,12 @@ jobs:
             gh release upload "${{ steps.tag.outputs.val }}" DomoLens-Linux.AppImage --clobber
             echo "Successfully published DomoLens-Linux.AppImage to release."
           fi
+
+          DEB_FILE=$(find apps/app/src-tauri/target/release/bundle/deb -name "*.deb" | head -n 1)
+          if [[ -n "$DEB_FILE" && -f "$DEB_FILE" ]]; then
+            echo "Publishing canonical Linux DEB package..."
+            cp "$DEB_FILE" DomoLens-Linux.deb
+            gh release upload "${{ steps.tag.outputs.val }}" DomoLens-Linux.deb --clobber
+            echo "Successfully published DomoLens-Linux.deb to release."
+          fi
+

@@ -353,7 +353,7 @@ export function LandingView() {
     {
       num: "01",
       title: "One-Click Record",
-      desc: "Hit Option+Space on desktop or tap the floating overlay on Android. Select any window, browser tab, or full display.",
+      desc: "Hit Option+Space on desktop or tap the floating overlay on Android. Select any application window or full display.",
       icon: Laptop,
     },
     {

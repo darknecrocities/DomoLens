@@ -22,6 +22,7 @@ import {
   type InteractionEvent,
   type KeyframeNode,
   type OpticalAnalysisOptions,
+  type PlotInteractionsOptions,
   type ProjectAudioSettings,
   type ProjectData,
   type ProjectLooks,
@@ -31,6 +32,8 @@ import {
   type VideoEffect,
   type VideoEffectType,
   type ZoomBlock,
+  STUDIO_MOTION_TEMPLATES,
+  enforceNonOverlappingZoomBlocks,
 } from "@domolens/core";
 import { sfx } from "../lib/sound-effects";
 import { useProjects } from "./projects";
@@ -39,6 +42,11 @@ import { toast } from "./toast";
 
 
 export type ToolTab =
+  | "style"
+  | "motion"
+  | "sound"
+  | "overlays"
+  | "templates"
   | "zoom"
   | "effects"
   | "text"
@@ -97,6 +105,10 @@ interface EditorState {
   setTimelineZoom: (zoom: number) => void;
   isExportModalOpen: boolean;
   setExportModalOpen: (open: boolean) => void;
+  isTemplateModalOpen: boolean;
+  setTemplateModalOpen: (open: boolean) => void;
+  activeTemplateId: string | null;
+  applyTemplate: (templateId: string) => void;
 
   selectBlock: (id: string | null) => void;
   selectClip: (id: string | null) => void;
@@ -106,20 +118,8 @@ interface EditorState {
   selectAudio: (id: string | null) => void;
 
   // Interaction auto-plotting (translates recorded click/typing data into 2-3s zoom loops with keyframes)
-  plotInteractions: (options?: {
-    holdDurationMs?: number;
-    inactivityResetMs?: number;
-    scale?: number;
-    continuousGlide?: boolean;
-    maxGlideGapMs?: number;
-  }) => void;
-  autoZoom: (options?: {
-    holdDurationMs?: number;
-    inactivityResetMs?: number;
-    scale?: number;
-    continuousGlide?: boolean;
-    maxGlideGapMs?: number;
-  }) => void;
+  plotInteractions: (options?: PlotInteractionsOptions) => void;
+  autoZoom: (options?: PlotInteractionsOptions) => void;
   autoAfx: () => void;
 
   // Cinematic camera tour shift walkthrough across focal elements
@@ -180,8 +180,8 @@ interface EditorState {
   updateAudioTrack: (id: string, updates: Partial<AudioTrack>) => void;
   deleteAudioTrack: (id: string) => void;
   updateAudioSettings: (updates: Partial<ProjectAudioSettings>) => void;
-  playClickSoundPreview: (preset?: ClickSoundPreset) => void;
-  playTypingSoundPreview: (preset?: TypingSoundPreset) => void;
+  playClickSoundPreview: (preset?: ClickSoundPreset, volume?: number) => void;
+  playTypingSoundPreview: (preset?: TypingSoundPreset, volume?: number) => void;
 
 
   updateLooks: (updates: Partial<ProjectLooks>) => void;
@@ -210,13 +210,13 @@ const INITIAL_LLM_MESSAGES: LlmMessage[] = [
   {
     id: "msg-welcome",
     role: "assistant",
-    content: "Hi! I'm your DomoLens AI Director. I can automatically detect button clicks & typing to plot seamless 2-3s zooms, suggest titles, add music beats, or refine keyframes.",
+    content: "Hi! I'm your DomoLens AI Director. I can automatically detect button clicks & typing to plot seamless 2-3s zooms, suggest titles, or refine keyframes.",
     timestamp: Date.now(),
     actions: [
       { label: "Auto-Plot Zooms", actionKey: "plot_zooms" },
+      { label: "Camera Shift Tour", actionKey: "tour_shift" },
       { label: "Suggest Title & Chapters", actionKey: "suggest_chapters" },
       { label: "Add Subtitle at Playhead", actionKey: "add_subtitle" },
-      { label: "Add Lo-Fi Music", actionKey: "add_lofi_music" },
     ],
   },
 ];
@@ -236,6 +236,8 @@ export const useEditor = create<EditorState>((set, get) => ({
   activeToolTab: "zoom",
   timelineZoom: 1,
   isExportModalOpen: false,
+  isTemplateModalOpen: false,
+  activeTemplateId: null,
 
   isLeftSidebarOpen: false,
   isRightSidebarOpen: true,
@@ -258,6 +260,10 @@ export const useEditor = create<EditorState>((set, get) => ({
           }
           if (!parsed.effects) {
             parsed.effects = [];
+          }
+          if (parsed.looks) {
+            parsed.looks.autoTrackCursor = false;
+            parsed.looks.showClickRipples = true;
           }
           set({
             project: parsed,
@@ -325,7 +331,7 @@ export const useEditor = create<EditorState>((set, get) => ({
       ];
       starterInteractions = [
         { id: "c-1", type: "click", timestampMs: Math.round(duration * 0.22), x: 0.35, y: 0.45, button: "left" },
-        { id: "c-2", type: "typing", timestampMs: Math.round(duration * 0.62), x: 0.65, y: 0.55, snippet: "DomoLens" },
+        { id: "c-2", type: "typing", timestampMs: Math.round(duration * 0.62), x: 0.65, y: 0.55 },
       ];
 
       const plotted = plotInteractionsToKeyframesAndZoomBlocks(
@@ -361,18 +367,7 @@ export const useEditor = create<EditorState>((set, get) => ({
         },
       ];
 
-      audioTracks = [
-        {
-          id: "audio-default-lofi",
-          name: "Ambient Lo-Fi Beats",
-          type: "music",
-          url: "sample://lofi-chill.mp3",
-          startTimeMs: 0,
-          durationMs: duration,
-          volume: 0.4,
-          muted: false,
-        },
-      ];
+      audioTracks = [];
     }
 
     if (summary.media) {
@@ -433,6 +428,54 @@ export const useEditor = create<EditorState>((set, get) => ({
   toggleRightSidebar: () => set((s) => ({ isRightSidebarOpen: !s.isRightSidebarOpen })),
   setTimelineZoom: (zoom) => set({ timelineZoom: Math.max(0.5, Math.min(5, zoom)) }),
   setExportModalOpen: (open) => set({ isExportModalOpen: open }),
+  setTemplateModalOpen: (open) => set({ isTemplateModalOpen: open }),
+
+  applyTemplate: (templateId) => {
+    const state = get();
+    if (!state.project) return;
+    const template = STUDIO_MOTION_TEMPLATES.find((t) => t.id === templateId);
+    if (!template) return;
+
+    // Generate fresh IDs for template text overlays
+    const newTextOverlays: TextOverlay[] = template.defaultTextOverlays.map((to, i) => ({
+      ...to,
+      id: `text-tpl-${Date.now()}-${i}`,
+    }));
+
+    const updatedLooks: ProjectLooks = {
+      ...state.project.looks,
+      ...template.looks,
+    };
+
+    const updatedAudio: ProjectAudioSettings = {
+      ...(state.project.audioSettings || DEFAULT_AUDIO_SETTINGS),
+      ...template.audioSettings,
+    };
+
+    set({
+      ...pushHistory(state),
+      activeTemplateId: template.id,
+      isTemplateModalOpen: false,
+      project: {
+        ...state.project,
+        looks: updatedLooks,
+        audioSettings: updatedAudio,
+        textOverlays: [
+          ...(state.project.textOverlays || []).filter((o) => !o.id.startsWith("text-tpl-")),
+          ...newTextOverlays,
+        ],
+      },
+    });
+
+    // Audition template sound feedback
+    if (template.audioSettings.typingSoundPreset && template.audioSettings.typingSoundPreset !== "none") {
+      sfx.playTypingBurst(4, 90, template.audioSettings.typingSoundPreset, 0.7);
+    } else {
+      sfx.playClickBop(template.audioSettings.clickSoundPreset || "bop", 0.75);
+    }
+
+    toast.success(`Applied "${template.name}": ${template.aspectRatio} layout & ${template.audioSettings.typingSoundPreset || "bop"} SFX applied.`);
+  },
 
   selectBlock: (id) =>
     set({
@@ -495,104 +538,93 @@ export const useEditor = create<EditorState>((set, get) => ({
     const interactions = state.project.interactions ?? [];
     const clicks = state.project.clicks ?? [];
 
-    // Filter out clicks or interactions that are within 400ms of recording end (stop artifacts)
-    const cutoff = Math.max(0, state.durationMs - 400);
-    const validInteractions = interactions.filter((i) => i.timestampMs <= cutoff);
-    const validClicks = clicks.filter((c) => c.timestampMs <= cutoff);
+    // Filter out clicks or interactions from the user finishing the recording (hud stop/finish artifacts)
+    const isFinishOrStop = (e: { id?: string; timestampMs: number }) => {
+      const id = (e.id || "").toLowerCase();
+      return id.startsWith("hud-stop") || id.startsWith("hud-finish") || id === "finish";
+    };
+    const validInteractions = interactions.filter((i) => !isFinishOrStop(i));
+    const validClicks = clicks.filter((c) => !isFinishOrStop(c));
 
-    let eventsToUse: InteractionEvent[] =
-      validInteractions.length > 0
-        ? validInteractions
-        : validClicks.map((c) => ({
-            id: c.id,
-            type: "click" as const,
-            timestampMs: c.timestampMs,
-            x: c.x,
-            y: c.y,
-            button: c.button,
-          }));
-
-    let isFallback = false;
-    const isOldDummy =
-      eventsToUse.length === 2 &&
-      Boolean(eventsToUse[0]?.id?.startsWith("c-auto-")) &&
-      Boolean(eventsToUse[1]?.id?.startsWith("c-auto-"));
-    const dur = state.durationMs || 10000;
-    const isOnlyTailEnd = eventsToUse.length === 1 && dur >= 4000 && eventsToUse[0]!.timestampMs >= dur - 2500;
-
-    if (eventsToUse.length === 0 || isOldDummy || isOnlyTailEnd) {
-      isFallback = true;
-      const trajectory = state.project.cursorTrajectory;
-      const autoEvents: InteractionEvent[] = [];
-
-      if (trajectory && trajectory.length >= 2) {
-        // Center auto-zooms strictly on the user's real cursor trajectory and activity locations
-        const stepMs = Math.max(2200, Math.min(4200, Math.round(dur / 7)));
-        for (let t = 1200; t < dur - 1000; t += stepMs) {
-          const pt = interpolateCursorAtTime(t, trajectory, 0.5, 0.45);
-          autoEvents.push({
-            id: `act-auto-traj-${t}`,
-            type: "click",
-            timestampMs: t,
-            x: pt.x,
-            y: pt.y,
-            button: "left",
-          });
-        }
-      } else {
-        // Distribute balanced zooms across focal center and common content area
-        const stepMs = Math.max(2500, Math.min(4200, Math.round(dur / 5)));
-        const focalSeq = [
-          { x: 0.50, y: 0.42 }, // Primary search / input area
-          { x: 0.50, y: 0.50 }, // Central canvas
-          { x: 0.46, y: 0.44 },
-          { x: 0.54, y: 0.48 },
-        ];
-        let seqIdx = 0;
-        for (let t = 1800; t < dur - 1200; t += stepMs) {
-          const fp = focalSeq[seqIdx % focalSeq.length]!;
-          seqIdx++;
-          autoEvents.push({
-            id: `act-auto-${t}`,
-            type: "click",
-            timestampMs: t,
-            x: fp.x,
-            y: fp.y,
-            button: "left",
-          });
-        }
-      }
-
-      if (autoEvents.length > 0) {
-        eventsToUse = autoEvents;
-      }
-    }
-
-    // If no interactions exist at all, apply zoom at the active playhead
-    const currentMs = state.currentTimeMs;
-    if (eventsToUse.length === 0 && currentMs > 200 && currentMs < state.durationMs - 350) {
-      const cur = interpolateCursorAtTime(currentMs, state.project.cursorTrajectory, 0.5, 0.5);
-      eventsToUse.push({
-        id: `act-now-${Date.now()}`,
-        type: "click",
-        timestampMs: currentMs,
-        x: cur.x,
-        y: cur.y,
-        button: "left",
+    // STRICT INVARIANT:
+    // If no clicks occurred during recording (excluding user finish/stop action),
+    // strictly DO NOT apply zoom in! The video remains in full screen (1.0x) only,
+    // UNLESS the user explicitly requested AI fallback plotting (fallbackIfEmpty).
+    if (validClicks.length === 0 && !options?.fallbackIfEmpty) {
+      set({
+        ...pushHistory(state),
+        project: {
+          ...state.project,
+          zoomBlocks: [],
+          keyframes: [],
+        },
+        selectedBlockId: null,
+        selectedKeyframeId: null,
       });
-      eventsToUse.sort((a, b) => a.timestampMs - b.timestampMs);
+      toast.info("No clicks recorded during recording. Full screen preserved.");
+      return;
     }
 
+    let clickEventsAsInteractions: InteractionEvent[] = validClicks.map((c) => ({
+      id: c.id,
+      type: "click" as const,
+      timestampMs: c.timestampMs,
+      x: c.x,
+      y: c.y,
+      button: c.button,
+    }));
+
+    if (validClicks.length === 0 && options?.fallbackIfEmpty) {
+      const dur = Math.max(8000, state.durationMs || 10000);
+      const stepMs = Math.max(2500, Math.round(dur / 4));
+      for (let t = 1800; t < dur - 1000; t += stepMs) {
+        clickEventsAsInteractions.push({
+          id: `act-auto-${t}`,
+          type: "click",
+          timestampMs: t,
+          x: 0.5,
+          y: 0.5,
+          button: "left",
+        });
+      }
+    }
+
+    const mergedEvents: InteractionEvent[] = [...validInteractions];
+    for (const c of clickEventsAsInteractions) {
+      const exists = mergedEvents.some(
+        (e) => Math.abs(e.timestampMs - c.timestampMs) < 180 && (e.id === c.id || Math.hypot(e.x - c.x, e.y - c.y) < 0.05),
+      );
+      if (!exists) {
+        mergedEvents.push(c);
+      }
+    }
+    mergedEvents.sort((a, b) => a.timestampMs - b.timestampMs);
+    let eventsToUse: InteractionEvent[] = mergedEvents;
+
+    // Strict Cleanup: Deduplicate micro-flutter closer than 400ms at virtually the same spot
+    const cleanedEvents: InteractionEvent[] = [];
+    for (const e of eventsToUse) {
+      const prev = cleanedEvents[cleanedEvents.length - 1];
+      if (!prev || e.timestampMs - prev.timestampMs >= 400 || Math.hypot(e.x - prev.x, e.y - prev.y) > 0.05) {
+        cleanedEvents.push(e);
+      }
+    }
+    eventsToUse = cleanedEvents;
+
+    const currentMs = state.currentTimeMs;
     const { keyframes, zoomBlocks } = plotInteractionsToKeyframesAndZoomBlocks(
       eventsToUse,
       state.durationMs,
       {
-        continuousGlide: false,
-        leadInMs: 1000,
-        holdDurationMs: 1200,
-        inactivityResetMs: 1200,
-        scale: 1.85,
-        minRestMs: 800,
+        continuousGlide: options?.continuousGlide ?? true,
+        centerTyping: options?.centerTyping ?? true,
+        maxGlideGapMs: options?.maxGlideGapMs ?? 1000,
+        leadInMs: options?.leadInMs ?? 1000,
+        holdDurationMs: options?.holdDurationMs ?? 1000,
+        leadOutMs: options?.leadOutMs ?? 400,
+        inactivityResetMs: options?.inactivityResetMs ?? 1000,
+        scale: options?.scale ?? 1.85,
+        minRestMs: 400,
         enableRevealDip: false,
         cursorTrajectory: state.project.cursorTrajectory,
         typingZoomOut: false,
@@ -607,21 +639,15 @@ export const useEditor = create<EditorState>((set, get) => ({
       ...pushHistory(state),
       project: {
         ...state.project,
-        clicks: isFallback
-          ? eventsToUse.map((e) => ({ id: e.id, timestampMs: e.timestampMs, x: e.x, y: e.y, button: "left" as const }))
-          : state.project.clicks,
-        interactions: isFallback ? eventsToUse : state.project.interactions,
+        clicks: state.project.clicks,
+        interactions: state.project.interactions,
         keyframes,
         zoomBlocks,
       },
       selectedBlockId,
     });
     sfx.playClickBop(state.project.audioSettings?.clickSoundPreset || "bop", 0.7);
-    toast.success(
-      isFallback
-        ? `Auto-generated ${zoomBlocks.length} zooms applied across timeline!`
-        : `Plotted ${zoomBlocks.length} zooms and applied to current moment!`,
-    );
+    toast.success(`Plotted ${zoomBlocks.length} zooms on user clicks!`);
   },
 
   autoZoom: (options) => {
@@ -683,7 +709,7 @@ export const useEditor = create<EditorState>((set, get) => ({
     });
 
     sfx.playClickBop(updatedAudioSettings.clickSoundPreset, 0.7);
-    toast.success("Auto AFX enabled: Click bops, typing audio, and ducking synchronized.");
+    toast.success("Auto AFX enabled: Tactile click bops and mechanical typing audio synchronized.");
   },
 
   createTourCameraShift: (options) => {
@@ -722,7 +748,7 @@ export const useEditor = create<EditorState>((set, get) => ({
           x: pt.x,
           y: pt.y,
           button: "left",
-          ...(pt.type === "typing" ? { snippet: "Input", durationMs: 1200 } : {}),
+          ...(pt.type === "typing" ? { durationMs: 1200 } : {}),
         });
       }
     }
@@ -872,8 +898,6 @@ export const useEditor = create<EditorState>((set, get) => ({
       ? Math.max(time + 400, nextBlock.startTimeMs - leadOutMs - 50)
       : rawHoldEnd;
     const outMs = Math.min(state.durationMs, holdEndMs + leadOutMs);
-    const showcaseScale = Math.max(1.32, Math.round(activeScale * 0.78 * 100) / 100);
-    const revealTime = Math.min(time + 400, holdEndMs - 200);
 
     const clusterKfs: KeyframeNode[] = [
       {
@@ -896,17 +920,9 @@ export const useEditor = create<EditorState>((set, get) => ({
         soundVolume: 0.70,
       },
       {
-        id: `kf-reveal-${now}`,
-        timeMs: revealTime,
-        scale: showcaseScale,
-        targetX: clamped.x,
-        targetY: clamped.y,
-        easing: "cubic",
-      },
-      {
         id: `kf-hold-${now}`,
         timeMs: holdEndMs,
-        scale: showcaseScale,
+        scale: activeScale,
         targetX: clamped.x,
         targetY: clamped.y,
         easing: "cubic",
@@ -968,7 +984,7 @@ export const useEditor = create<EditorState>((set, get) => ({
     const { keyframes, zoomBlocks } = plotInteractionsToKeyframesAndZoomBlocks(
       interactions,
       state.durationMs,
-      { continuousGlide: false, holdDurationMs: 1400, scale: 1.80, minRestMs: 800, enableRevealDip: false },
+      { continuousGlide: true, centerTyping: true, holdDurationMs: 1000, inactivityResetMs: 1000, maxGlideGapMs: 1000, scale: 1.80, minRestMs: 600, enableRevealDip: false },
     );
 
     set({
@@ -991,13 +1007,14 @@ export const useEditor = create<EditorState>((set, get) => ({
   updateZoomBlock: (id, updates) => {
     const state = get();
     if (!state.project) return;
-    const updatedBlocks = state.project.zoomBlocks.map((b) => (b.id === id ? { ...b, ...updates } : b));
-    const updatedKeyframes = zoomBlocksToKeyframes(updatedBlocks, state.durationMs);
+    const mappedBlocks = state.project.zoomBlocks.map((b) => (b.id === id ? { ...b, ...updates } : b));
+    const sortedBlocks = enforceNonOverlappingZoomBlocks(mappedBlocks, 250);
+    const updatedKeyframes = zoomBlocksToKeyframes(sortedBlocks, state.durationMs);
     set({
       ...pushHistory(state),
       project: {
         ...state.project,
-        zoomBlocks: updatedBlocks,
+        zoomBlocks: sortedBlocks,
         keyframes: updatedKeyframes,
       },
     });
@@ -1372,16 +1389,24 @@ export const useEditor = create<EditorState>((set, get) => ({
     });
   },
 
-  playClickSoundPreview: (preset) => {
+  playClickSoundPreview: (preset, volume) => {
     const state = get();
     const settings = state.project?.audioSettings || DEFAULT_AUDIO_SETTINGS;
-    sfx.playClickBop(preset || settings.clickSoundPreset, settings.clickSoundVolume);
+    sfx.playClickBop(
+      preset || settings.clickSoundPreset,
+      volume !== undefined ? volume : settings.clickSoundVolume,
+    );
   },
 
-  playTypingSoundPreview: (preset) => {
+  playTypingSoundPreview: (preset, volume) => {
     const state = get();
     const settings = state.project?.audioSettings || DEFAULT_AUDIO_SETTINGS;
-    sfx.playTypingBurst(5, 90, preset || settings.typingSoundPreset, settings.typingSoundVolume);
+    sfx.playTypingBurst(
+      5,
+      90,
+      preset || settings.typingSoundPreset,
+      volume !== undefined ? volume : settings.typingSoundVolume,
+    );
   },
 
   updateLooks: (updates) => {
@@ -1553,9 +1578,9 @@ export const useEditor = create<EditorState>((set, get) => ({
     } else if (lower.includes("text") || lower.includes("caption") || lower.includes("subtitle")) {
       reply = `I can add an elegant subtitle at the current playhead position (${(get().currentTimeMs / 1000).toFixed(1)}s).`;
       actions = [{ label: "Insert Subtitle", actionKey: "add_subtitle" }];
-    } else if (lower.includes("music") || lower.includes("audio") || lower.includes("sound")) {
-      reply = "Adding a soft Lo-Fi background track gives your tutorial video a polished, engaging studio feel.";
-      actions = [{ label: "Add Lo-Fi Beat", actionKey: "add_lofi_music" }];
+    } else if (lower.includes("audio") || lower.includes("sound") || lower.includes("sfx")) {
+      reply = "Synchronizing tactile click bops and crisp typing sound effects gives your demo a professional tactile response.";
+      actions = [{ label: "Apply Auto AFX", actionKey: "auto_afx" }];
     } else {
       reply = `Got it! I can help you adjust zooms, keyframes, captions, or styling for "${state.project?.summary.name || "your video"}". What would you like to tweak next?`;
       actions = [
@@ -1582,7 +1607,7 @@ export const useEditor = create<EditorState>((set, get) => ({
   executeLlmAction: (actionKey: string) => {
     const state = get();
     if (actionKey === "plot_zooms") {
-      state.plotInteractions();
+      state.plotInteractions({ fallbackIfEmpty: true });
     } else if (actionKey === "tour_shift") {
       state.createTourCameraShift();
     } else if (actionKey === "suggest_chapters") {
@@ -1592,8 +1617,8 @@ export const useEditor = create<EditorState>((set, get) => ({
       }
     } else if (actionKey === "add_subtitle") {
       state.addTextOverlay("Click here to proceed");
-    } else if (actionKey === "add_lofi_music") {
-      state.addAudioTrack("Smooth Lo-Fi Chill", "sample://lofi-chill.mp3", "music");
+    } else if (actionKey === "auto_afx") {
+      state.autoAfx();
     }
   },
 

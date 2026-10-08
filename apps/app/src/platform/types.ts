@@ -51,6 +51,10 @@ export interface Platform {
   startGlobalInputCapture?(): Promise<void>;
   /** Stops native OS-level global mouse/keyboard capture. */
   stopGlobalInputCapture?(): Promise<void>;
+  /** Checks if OS accessibility permission is granted for global mouse/keyboard capture. */
+  checkAccessibilityPermission?(): Promise<boolean>;
+  /** Prompts the OS for accessibility permission if not yet granted. */
+  requestAccessibilityPermission?(): Promise<boolean>;
   /** Subscribes to global mouse clicks outside the app anywhere on screen. */
   onGlobalClick?(callback: (payload: { x: number; y: number; norm_x: number; norm_y: number; button: string }) => void): Off;
   /** Subscribes to global mouse up events outside the app anywhere on screen. */

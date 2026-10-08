@@ -2,7 +2,6 @@ import { create } from "zustand";
 import {
   DEFAULT_AUDIO_SETTINGS,
   DEFAULT_LOOKS,
-  interpolateCursorAtTime,
   plotInteractionsToKeyframesAndZoomBlocks,
   type ClickEvent,
   type InteractionEvent,
@@ -13,13 +12,12 @@ import { useProjects } from "./projects";
 import { useNav } from "./nav";
 import { platform } from "../platform";
 import { createLiveStreamMotionTracker, scanVideoElementForActivity } from "../lib/video-activity-detector";
-import { sfx } from "../lib/sound-effects";
 
 let cursorTrajectoryBuffer: import("@domolens/core").CursorTrajectoryPoint[] = [];
 
 
 export type RecordingState = "idle" | "requesting_share" | "countdown" | "recording" | "paused";
-export type RecordingSource = "screen" | "window" | "tab";
+export type RecordingSource = "screen" | "window";
 
 interface RecorderStore {
   state: RecordingState;
@@ -82,10 +80,9 @@ function getBestSupportedMimeType(): string {
   return "";
 }
 
-const displaySurfaceMap: Record<RecordingSource, "monitor" | "window" | "browser"> = {
+const displaySurfaceMap: Record<RecordingSource, "monitor" | "window"> = {
   screen: "monitor",
   window: "window",
-  tab: "browser",
 };
 
 /** Captures an offscreen video frame as a base64 thumbnail. */
@@ -189,9 +186,22 @@ export const useRecorder = create<RecorderStore>((set, get) => ({
     if (get().state !== "recording") return;
     const now = Date.now();
     const timestampMs = Math.max(0, now - recordingStartTimestamp);
-    const clickId = `click-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
     const clampedX = Math.min(1, Math.max(0, x));
     const clampedY = Math.min(1, Math.max(0, y));
+
+    // Deduplicate rapid duplicate events (e.g. OS global click + DOM mousedown + live optical)
+    // within 300ms at virtually the same coordinates (< 0.04 normalized distance)
+    const existingClicks = get().clicks;
+    const lastClick = existingClicks[existingClicks.length - 1];
+    if (
+      lastClick &&
+      timestampMs - lastClick.timestampMs < 300 &&
+      Math.hypot(clampedX - lastClick.x, clampedY - lastClick.y) < 0.04
+    ) {
+      return;
+    }
+
+    const clickId = `click-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
     const point = { timestampMs, x: clampedX, y: clampedY };
     cursorTrajectoryBuffer.push(point);
 
@@ -456,6 +466,16 @@ export const useRecorder = create<RecorderStore>((set, get) => ({
 
     // Attach native OS-level global mouse & typing listeners for full screen capture outside the app
     void platform.startGlobalInputCapture?.();
+    if (platform.isApp && platform.checkAccessibilityPermission) {
+      void platform.checkAccessibilityPermission().then((trusted) => {
+        if (!trusted) {
+          void platform.requestAccessibilityPermission?.();
+          toast.warning(
+            "Enable Accessibility for DomoLens in macOS System Settings -> Privacy & Security -> Accessibility to record clicks in external apps!",
+          );
+        }
+      });
+    }
     let globalDragStart: { x: number; y: number; timeMs: number } | null = null;
     const offClick = platform.onGlobalClick?.((payload) => {
       if (get().state !== "recording") return;
@@ -499,7 +519,6 @@ export const useRecorder = create<RecorderStore>((set, get) => ({
       } else {
         get().recordTyping(payload.norm_x, payload.norm_y, undefined, activeGlobalTypingId ?? undefined);
       }
-      sfx.playKeystroke("mechanical", 0.45);
     });
 
     // Attach live optical stream tracker to capture smooth cursor movement across the shared display
@@ -519,8 +538,6 @@ export const useRecorder = create<RecorderStore>((set, get) => ({
             lastY = act.y;
             if (act.type === "typing") {
               get().recordTyping(act.x, act.y, act.snippet, act.id);
-            } else {
-              get().recordClick(act.x, act.y, (act.button as "left" | "right" | "middle") || "left");
             }
           },
         });
@@ -570,15 +587,41 @@ export const useRecorder = create<RecorderStore>((set, get) => ({
       }
     })();
     const mapPointer = (clientX: number, clientY: number, screenX: number, screenY: number) => {
+      const sw = window.screen.width || window.innerWidth || 1920;
+      const sh = window.screen.height || window.innerHeight || 1080;
+      const ww = window.innerWidth || 1920;
+      const wh = window.innerHeight || 1080;
+
       if (captureSurface === "monitor") {
-        const sw = window.screen.width || window.innerWidth;
-        const sh = window.screen.height || window.innerHeight;
-        return { x: Math.min(1, Math.max(0, screenX / sw)), y: Math.min(1, Math.max(0, screenY / sh)) };
+        if (typeof screenX === "number" && typeof screenY === "number" && screenX > 0 && screenY > 0) {
+          return {
+            x: Math.min(1, Math.max(0, screenX / sw)),
+            y: Math.min(1, Math.max(0, screenY / sh)),
+          };
+        }
+        return {
+          x: Math.min(1, Math.max(0, clientX / ww)),
+          y: Math.min(1, Math.max(0, clientY / wh)),
+        };
       }
-      if (captureSurface === "browser" && document.visibilityState === "visible") {
-        return { x: clientX / window.innerWidth, y: clientY / window.innerHeight };
+
+      if (captureSurface === "browser" || captureSurface === "window") {
+        return {
+          x: Math.min(1, Math.max(0, clientX / ww)),
+          y: Math.min(1, Math.max(0, clientY / wh)),
+        };
       }
-      return null;
+
+      if (clientX >= 0 && clientY >= 0 && clientX <= ww && clientY <= wh) {
+        return {
+          x: Math.min(1, Math.max(0, clientX / ww)),
+          y: Math.min(1, Math.max(0, clientY / wh)),
+        };
+      }
+      return {
+        x: Math.min(1, Math.max(0, (screenX || clientX) / sw)),
+        y: Math.min(1, Math.max(0, (screenY || clientY) / sh)),
+      };
     };
 
     const handlePointerMove = (e: MouseEvent | TouchEvent) => {
@@ -655,7 +698,6 @@ export const useRecorder = create<RecorderStore>((set, get) => ({
         }
         get().recordTyping(lastX, lastY, typingBuffer, activeTypingId ?? undefined);
       }
-      sfx.playKeystroke("mechanical", 0.45, e.key === " " || e.key === "Enter");
     };
 
     const cleanupListeners = () => {
@@ -767,10 +809,17 @@ export const useRecorder = create<RecorderStore>((set, get) => ({
     }
 
     const duration = Math.max(1000, get().elapsedMs);
-    // Filter out clicks that happened within the last 1000ms of recording (stop artifacts)
-    const cutoffTime = Math.max(0, duration - 1000);
-    const rawClicks = get().clicks.filter((c) => c.timestampMs <= cutoffTime);
-    const rawInteractions = get().interactions.filter((i) => i.timestampMs <= cutoffTime);
+    // Filter out clicks that happened when the user finished the recording (stop/finish clicks or within trailing window)
+    // to strictly prevent accidental zoom frames on the finish action!
+    const finishCutoffTime = Math.max(0, duration - 1000);
+    const isFinishOrStopClick = (c: { timestampMs: number; id?: string }) => {
+      const id = (c.id || "").toLowerCase();
+      if (id.includes("stop") || id.includes("finish")) return true;
+      if (c.timestampMs > finishCutoffTime) return true;
+      return false;
+    };
+    const rawClicks = get().clicks.filter((c) => !isFinishOrStopClick(c));
+    const rawInteractions = get().interactions.filter((i) => !isFinishOrStopClick(i));
     void platform.setAlwaysOnTop?.(false);
     void platform.hideRecordingHud?.();
     set({ state: "idle" });
@@ -818,9 +867,14 @@ export const useRecorder = create<RecorderStore>((set, get) => ({
       }
     }
 
-    // If no DOM interactions were logged (e.g. browser tab recording outside DOM),
-    // scan the recorded video for real optical activity points so zooms focus on where the user interacted!
-    if (finalInteractions.length === 0 && mediaUrl && typeof document !== "undefined") {
+    // Only run optical scan for trajectory reconstruction if NO clicks were captured AND trajectory is completely empty
+    const shouldRunOpticalScan =
+      Boolean(mediaUrl) &&
+      typeof document !== "undefined" &&
+      finalClicks.length === 0 &&
+      finalTrajectory.length < 8;
+
+    if (shouldRunOpticalScan) {
       try {
         const scanVideo = document.createElement("video");
         scanVideo.muted = true;
@@ -836,13 +890,8 @@ export const useRecorder = create<RecorderStore>((set, get) => ({
             sampleStepMs: 250,
             maxDurationMs: duration,
           });
-          if (scanned.interactions.length > 0) {
-            finalInteractions = scanned.interactions;
-          }
-          if (scanned.clicks.length > 0) {
-            finalClicks = scanned.clicks;
-          }
-          if (scanned.cursorTrajectory.length > 0 && finalTrajectory.length === 0) {
+
+          if (scanned.cursorTrajectory.length > 0 && finalTrajectory.length < 8) {
             finalTrajectory = scanned.cursorTrajectory;
           }
         }
@@ -851,43 +900,59 @@ export const useRecorder = create<RecorderStore>((set, get) => ({
       }
     }
 
-    // Zoom strictly on real user interactions!
-    let interactionsForPlotting = finalInteractions;
-    if (interactionsForPlotting.length === 0 && finalTrajectory.length >= 8) {
-      // If no clicks were detected but cursor motion is present, focus on real activity stops
-      const synth: InteractionEvent[] = [];
-      const stepMs = Math.max(3000, Math.round(duration / 4));
-      for (let t = 1200; t < duration - 1000; t += stepMs) {
-        const pt = interpolateCursorAtTime(t, finalTrajectory, 0.5, 0.5);
-        if (Math.abs(pt.x - 0.5) > 0.05 || Math.abs(pt.y - 0.5) > 0.05) {
-          synth.push({
-            id: `act-auto-traj-${t}`,
-            type: "click",
-            timestampMs: t,
-            x: pt.x,
-            y: pt.y,
-            button: "left",
-          });
-        }
+    // Strict Clean Up: Eliminate duplicate clicks or micro-flutter closer than 350ms
+    const sortedRawClicks = [...finalClicks].sort((a, b) => a.timestampMs - b.timestampMs);
+    const cleanedClicks: ClickEvent[] = [];
+    for (const c of sortedRawClicks) {
+      const prev = cleanedClicks[cleanedClicks.length - 1];
+      if (prev && c.timestampMs - prev.timestampMs < 350 && Math.hypot(c.x - prev.x, c.y - prev.y) < 0.05) {
+        continue;
       }
-      interactionsForPlotting = synth;
+      cleanedClicks.push(c);
     }
+    finalClicks = cleanedClicks;
 
-    // Plot zooms strictly on where the user interacted with
+    // Ensure every single click is represented in interactions for camera zooming!
+    const clickEventsAsInteractions: InteractionEvent[] = finalClicks.map((c) => ({
+      id: c.id,
+      type: "click" as const,
+      timestampMs: c.timestampMs,
+      x: c.x,
+      y: c.y,
+      button: c.button,
+    }));
+    const mergedForPlotting: InteractionEvent[] = [...finalInteractions];
+    for (const c of clickEventsAsInteractions) {
+      const exists = mergedForPlotting.some(
+        (e) => Math.abs(e.timestampMs - c.timestampMs) < 300 && (e.id === c.id || Math.hypot(e.x - c.x, e.y - c.y) < 0.05),
+      );
+      if (!exists) {
+        mergedForPlotting.push(c);
+      }
+    }
+    mergedForPlotting.sort((a, b) => a.timestampMs - b.timestampMs);
+    finalInteractions = mergedForPlotting;
+    // STRICT INVARIANT:
+    // If no user clicks or interactions occurred during recording (excluding stop/finish action),
+    // strictly DO NOT apply zoom in! The video remains in full screen (1.0x) only!
+    const hasUserInteractions = finalClicks.length > 0 || finalInteractions.length > 0;
     const { keyframes, zoomBlocks } =
-      interactionsForPlotting.length > 0
+      hasUserInteractions
         ? plotInteractionsToKeyframesAndZoomBlocks(
-            interactionsForPlotting,
+            finalInteractions,
             duration,
             {
-              holdDurationMs: 1200,
-              inactivityResetMs: 1200,
+              holdDurationMs: 1000,
+              inactivityResetMs: 1000,
+              maxGlideGapMs: 1000,
               leadInMs: 1000,
+              leadOutMs: 400,
               scale: 1.85,
               fallbackIfEmpty: false,
-              continuousGlide: false,
+              continuousGlide: true,
+              centerTyping: true,
               autoFillGaps: false,
-              minRestMs: 800,
+              minRestMs: 400,
               enableRevealDip: false,
               cursorTrajectory: finalTrajectory,
               typingZoomOut: false,
@@ -895,9 +960,17 @@ export const useRecorder = create<RecorderStore>((set, get) => ({
           )
         : { keyframes: [], zoomBlocks: [] };
 
-    // Auto-plot text callouts from typing interactions
+    // Auto-plot text callouts from typing interactions ONLY if genuine text was typed
     const textOverlays: import("@domolens/core").TextOverlay[] = finalInteractions
-      .filter((i) => i.type === "typing" && i.snippet && i.snippet.trim().length > 0)
+      .filter(
+        (i) =>
+          i.type === "typing" &&
+          i.snippet &&
+          i.snippet.trim().length > 0 &&
+          i.snippet !== "Text Input" &&
+          i.snippet !== "Activity Target" &&
+          i.snippet !== "Input",
+      )
       .map((i, idx) => ({
         id: `text-auto-${idx + 1}`,
         text: i.snippet!.length > 32 ? `${i.snippet!.slice(0, 30)}...` : i.snippet!,
@@ -912,14 +985,20 @@ export const useRecorder = create<RecorderStore>((set, get) => ({
 
     // Auto-plot chapters for the AI director / video outline
     const chapters = zoomBlocks.map((b, idx) => {
-      const match = finalInteractions.find(
-        (i) => Math.abs(i.timestampMs - b.startTimeMs) <= 1200,
-      );
+      const match =
+        finalInteractions.find(
+          (i) => Math.abs(i.timestampMs - b.startTimeMs) <= 1200 && i.type === "typing",
+        ) ||
+        finalInteractions.find(
+          (i) => Math.abs(i.timestampMs - b.startTimeMs) <= 1200,
+        );
       const isTyping = match?.type === "typing";
       return {
         timeMs: b.startTimeMs,
         title: isTyping
-          ? `Typing: ${match?.snippet ? match.snippet.slice(0, 20) : "Text"}`
+          ? match?.snippet && match.snippet.trim().length > 0
+            ? `Typing: ${match.snippet.slice(0, 20)}`
+            : "Typing Focus"
           : `Step ${idx + 1}: Action Focus`,
       };
     });

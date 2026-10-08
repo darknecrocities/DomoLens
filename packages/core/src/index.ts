@@ -5,3 +5,4 @@ export * from "./timeline";
 export * from "./looks";
 export * from "./audio";
 export * from "./motion";
+export * from "./templates";

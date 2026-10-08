@@ -1,10 +1,11 @@
 import { useState } from "react";
-import { Sparkles, Trash2 } from "lucide-react";
+import { HelpCircle, Sparkles, Trash2 } from "lucide-react";
 import { copy } from "../../copy/en";
 import { Button } from "../ui/Button";
 import { Modal } from "../ui/Modal";
 import { TextField } from "../ui/TextField";
 import { useSettings } from "../../store/settings";
+import { useTutorial } from "../../store/tutorial";
 import { toast } from "../../store/toast";
 
 interface SettingsModalProps {
@@ -78,6 +79,30 @@ export function SettingsModal({ open, onClose }: SettingsModalProps) {
             </button>
           </div>
         )}
+
+        {/* Interactive Studio Walkthrough Tutorial */}
+        <div className="rounded-2xl border border-neutral-700 bg-neutral-900/80 p-4">
+          <div className="mb-1.5 flex items-center justify-between">
+            <div className="flex items-center gap-2 text-sm font-semibold text-white">
+              <HelpCircle className="size-4 text-white" />
+              <span>Studio Walkthrough Tutorial</span>
+            </div>
+          </div>
+          <p className="text-xs text-neutral-400 leading-relaxed mb-3">
+            Replay the spotlight tutorial to explore how Auto-Zoom, interactive camera framing, keyframes, and offline rendering work.
+          </p>
+          <button
+            type="button"
+            onClick={() => {
+              onClose();
+              useTutorial.getState().resetTutorial();
+            }}
+            className="w-full flex items-center justify-center gap-2 rounded-lg bg-white py-2 text-xs font-bold uppercase text-black hover:bg-neutral-200 transition-colors shadow-sm"
+          >
+            <Sparkles className="size-3.5 fill-black" />
+            <span>Launch Studio Tutorial</span>
+          </button>
+        </div>
       </div>
     </Modal>
   );

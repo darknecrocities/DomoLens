@@ -9,6 +9,8 @@ import {
   Play,
   X,
 } from "lucide-react";
+import { invoke } from "@tauri-apps/api/core";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 import { formatDuration } from "@domolens/core";
 import { platform } from "../../platform";
 
@@ -45,14 +47,19 @@ export function GlobalHudWindow() {
     };
   }, []);
 
-  const handleStartDrag = async (e: React.MouseEvent) => {
+  const handleStartDrag = (e: React.MouseEvent) => {
     const target = e.target as HTMLElement | null;
     if (target?.closest("button")) return;
-    try {
-      const { getCurrentWebviewWindow } = await import("@tauri-apps/api/webviewWindow");
-      await getCurrentWebviewWindow().startDragging();
-    } catch {
-      // web fallback
+    if (platform.isApp) {
+      try {
+        void invoke("drag_window");
+      } catch {
+        try {
+          void getCurrentWindow().startDragging();
+        } catch {
+          // web fallback
+        }
+      }
     }
   };
 
@@ -88,17 +95,20 @@ export function GlobalHudWindow() {
   return (
     <div
       onMouseDown={handleStartDrag}
+      style={{ WebkitAppRegion: "drag" } as React.CSSProperties}
       className="size-full flex items-center justify-center p-1 bg-transparent select-none overflow-hidden cursor-grab active:cursor-grabbing"
     >
       <div
         data-tauri-drag-region
         onMouseDown={handleStartDrag}
-        className="flex items-center gap-3 rounded-full border border-white/20 bg-neutral-950/45 backdrop-blur-2xl px-3.5 py-2 shadow-[0_20px_50px_rgba(0,0,0,0.7),inset_0_1px_1px_rgba(255,255,255,0.25)] ring-1 ring-black/50"
+        style={{ WebkitAppRegion: "drag" } as React.CSSProperties}
+        className="flex items-center gap-3 rounded-full border border-white/20 bg-neutral-950/45 backdrop-blur-2xl px-3.5 py-2 shadow-[0_20px_50px_rgba(0,0,0,0.7),inset_0_1px_1px_rgba(255,255,255,0.25)] ring-1 ring-black/50 cursor-grab active:cursor-grabbing"
       >
         {/* Drag Handle */}
         <div
           data-tauri-drag-region
           onMouseDown={handleStartDrag}
+          style={{ WebkitAppRegion: "drag" } as React.CSSProperties}
           className="flex items-center text-neutral-400 hover:text-white transition-colors pl-1 cursor-grab active:cursor-grabbing"
           title="Drag quickbar"
         >
@@ -130,6 +140,7 @@ export function GlobalHudWindow() {
         <button
           type="button"
           onClick={handleAddZoom}
+          style={{ WebkitAppRegion: "no-drag" } as React.CSSProperties}
           title="Click to log camera zoom at center"
           className="flex items-center gap-1 rounded-full border border-white/10 bg-white/5 hover:bg-white/10 hover:border-white/20 px-2.5 py-1 text-xs font-mono font-medium text-neutral-200 hover:text-white transition-all active:scale-95 cursor-pointer backdrop-blur-md"
         >
@@ -141,6 +152,7 @@ export function GlobalHudWindow() {
         <button
           type="button"
           onClick={handleToggleMic}
+          style={{ WebkitAppRegion: "no-drag" } as React.CSSProperties}
           title={hudState.micEnabled ? "Microphone active" : "Microphone muted"}
           className={`flex size-7 items-center justify-center rounded-full border transition-all active:scale-95 cursor-pointer backdrop-blur-md ${
             hudState.micEnabled
@@ -155,6 +167,7 @@ export function GlobalHudWindow() {
         <button
           type="button"
           onClick={handleTogglePlay}
+          style={{ WebkitAppRegion: "no-drag" } as React.CSSProperties}
           title={isRecording ? "Pause recording" : "Resume recording"}
           className="flex items-center gap-1.5 rounded-full border border-white/15 bg-white/10 hover:bg-white/20 px-3 py-1 font-mono text-xs font-semibold text-white transition-all active:scale-95 cursor-pointer backdrop-blur-md"
         >
@@ -175,6 +188,7 @@ export function GlobalHudWindow() {
         <button
           type="button"
           onClick={handleFinish}
+          style={{ WebkitAppRegion: "no-drag" } as React.CSSProperties}
           title="Finish recording and open in studio editor"
           className="flex items-center gap-1.5 rounded-full border border-white bg-white px-3.5 py-1 font-mono text-xs font-bold text-black hover:bg-neutral-200 transition-all shadow-md active:scale-95 cursor-pointer"
         >
@@ -186,6 +200,7 @@ export function GlobalHudWindow() {
         <button
           type="button"
           onClick={handleCancel}
+          style={{ WebkitAppRegion: "no-drag" } as React.CSSProperties}
           title="Discard recording"
           className="flex size-7 items-center justify-center rounded-full border border-white/10 bg-white/5 hover:bg-white/15 text-neutral-400 hover:text-white transition-all active:scale-95 cursor-pointer backdrop-blur-md"
         >

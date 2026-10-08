@@ -37,21 +37,16 @@ export interface CameraState {
 
 /**
  * Clamps center coordinates so the zoomed viewport frames properly.
- * In "center" mode, keeps the target element perfectly centered without pushing it off-center.
- * In "strict" mode, restricts within mathematical [halfW, 1 - halfW] boundary.
+ * Guarantees that camera center strictly remains within [halfW, 1 - halfW]
+ * so that video textures ALWAYS fill the frame 100% without exposing empty black voids.
  */
 export function clampCameraToBounds(
   targetX: number,
   targetY: number,
   scale: number,
-  mode: "strict" | "center" = "center",
+  _mode: "strict" | "center" = "strict",
 ): { x: number; y: number } {
   if (scale <= 1) return { x: 0.5, y: 0.5 };
-  if (mode === "center") {
-    const clampedX = Math.min(Math.max(targetX, 0.0), 1.0);
-    const clampedY = Math.min(Math.max(targetY, 0.0), 1.0);
-    return { x: clampedX, y: clampedY };
-  }
   const halfW = 0.5 / scale;
   const halfH = 0.5 / scale;
 
@@ -64,6 +59,19 @@ export function clampCameraToBounds(
   const clampedY = Math.min(Math.max(targetY, minY), maxY);
 
   return { x: clampedX, y: clampedY };
+}
+
+/**
+ * Generates natural steadicam breathing micro-drift for active holds.
+ * Keeps the shot alive and organic (Screen Studio style) instead of mathematically frozen.
+ */
+export function getSteadicamBreathing(timeMs: number, scale: number): { dx: number; dy: number } {
+  if (scale <= 1.05) return { dx: 0, dy: 0 };
+  const t = timeMs * 0.001;
+  // Multi-harmonic gentle drift (amplitude ~0.0018 normalized, frequency ~0.25Hz)
+  const dx = (Math.sin(t * 1.6) * 0.0018 + Math.cos(t * 0.75) * 0.0010) / scale;
+  const dy = (Math.cos(t * 1.3) * 0.0015 + Math.sin(t * 0.55) * 0.0008) / scale;
+  return { dx, dy };
 }
 
 /**
@@ -147,17 +155,16 @@ export function classifySpatialTransition(
 }
 
 /**
- * Applies a 2D camera deadzone around the cursor.
- * When the mouse cursor moves within the central deadzone box, the camera remains
- * rock-solid still (eliminating tremor). When the cursor crosses outside, the camera
- * gently follows the mouse using spring-damped tracking.
+ * Applies a 2D camera deadzone around the cursor with soft-knee spring follow.
+ * When the mouse moves within the central deadzone, the camera maintains smooth steadicam damping.
+ * When the cursor crosses outside, the camera follows with organic spring physics.
  */
 export function calculateDeadzoneCamera(
   cameraCenter: { x: number; y: number },
   cursor: { x: number; y: number },
   scale: number,
-  deadzoneRatio = 0.35,
-  mode: "strict" | "center" = "center",
+  deadzoneRatio = 0.28,
+  mode: "strict" | "center" = "strict",
 ): { x: number; y: number } {
   if (scale <= 1.0) return { x: 0.5, y: 0.5 };
   const visW = 1.0 / scale;
@@ -165,24 +172,22 @@ export function calculateDeadzoneCamera(
   const halfDzW = (visW * deadzoneRatio) / 2;
   const halfDzH = (visH * deadzoneRatio) / 2;
 
-  let newX = cameraCenter.x;
-  let newY = cameraCenter.y;
-
   const diffX = cursor.x - cameraCenter.x;
-  if (diffX > halfDzW) {
-    newX = cursor.x - halfDzW;
-  } else if (diffX < -halfDzW) {
-    newX = cursor.x + halfDzW;
-  }
-
   const diffY = cursor.y - cameraCenter.y;
-  if (diffY > halfDzH) {
-    newY = cursor.y - halfDzH;
-  } else if (diffY < -halfDzH) {
-    newY = cursor.y + halfDzH;
+
+  let shiftX = 0;
+  if (Math.abs(diffX) > halfDzW) {
+    const excess = Math.abs(diffX) - halfDzW;
+    shiftX = Math.sign(diffX) * excess;
   }
 
-  return clampCameraToBounds(newX, newY, scale, mode);
+  let shiftY = 0;
+  if (Math.abs(diffY) > halfDzH) {
+    const excess = Math.abs(diffY) - halfDzH;
+    shiftY = Math.sign(diffY) * excess;
+  }
+
+  return clampCameraToBounds(cameraCenter.x + shiftX, cameraCenter.y + shiftY, scale, mode);
 }
 
 /**
@@ -230,8 +235,17 @@ export function detectZoomBlocksFromClicks(
   if (clicks.length === 0 || videoDurationMs <= 0) return [];
   const options = { ...DEFAULT_ZOOM_OPTIONS, ...userOptions };
 
+  // Filter out finish/stop clicks and clicks too close to video end (stop artifacts)
+  const validCutoff = Math.max(0, videoDurationMs - 1000);
+  const isFinishOrStop = (c: ClickEvent) => {
+    const id = (c.id || "").toLowerCase();
+    return id.includes("stop") || id.includes("finish") || c.timestampMs > validCutoff;
+  };
+  const validClicks = clicks.filter((c) => c.timestampMs >= 0 && !isFinishOrStop(c));
+  if (validClicks.length === 0) return [];
+
   // Sort clicks by time
-  const sorted = [...clicks].sort((a, b) => a.timestampMs - b.timestampMs);
+  const sorted = [...validClicks].sort((a, b) => a.timestampMs - b.timestampMs);
 
   // Group nearby clicks into clusters
   interface Cluster {
@@ -534,11 +548,28 @@ export function calculateCameraAtTime(
           cursorY: defaultCursor.y,
         };
       }
+      // Beyond the last keyframe, smoothly lead out back to full frame (1.0x at 0.5, 0.5) over leadOutMs
+      const outDuration = Math.max(250, leadOutMs);
+      if (timeMs >= lastKf.timeMs + outDuration) {
+        return {
+          x: 0.5,
+          y: 0.5,
+          scale: 1.0,
+          isZoomed: false,
+          cursorX: defaultCursor.x,
+          cursorY: defaultCursor.y,
+        };
+      }
+      const progress = easeInOutCubic((timeMs - lastKf.timeMs) / outDuration);
+      const scale = lastKf.scale + (1.0 - lastKf.scale) * progress;
+      const target = clampCameraToBounds(lastKf.targetX, lastKf.targetY, lastKf.scale, "center");
+      const finalX = target.x + (0.5 - target.x) * progress;
+      const finalY = target.y + (0.5 - target.y) * progress;
       return {
-        x: lastKf.targetX,
-        y: lastKf.targetY,
-        scale: lastKf.scale,
-        isZoomed: lastKf.scale > 1.05,
+        x: finalX,
+        y: finalY,
+        scale,
+        isZoomed: scale > 1.05,
         cursorX: defaultCursor.x,
         cursorY: defaultCursor.y,
       };
@@ -578,7 +609,7 @@ export function calculateCameraAtTime(
             finalX = baseTargetX;
             finalY = baseTargetY;
           } else {
-            // Steady hold: stay anchored on target
+            // Steady hold: stay anchored rock-solid on target
             if (effectiveTrajectory && effectiveTrajectory.length > 0) {
               const tracked = calculateDeadzoneCamera(
                 { x: baseTargetX, y: baseTargetY },
@@ -649,7 +680,7 @@ export function calculateCameraAtTime(
     // Track moving cursor or block target
     const currentCursor = interpolateCursorAtTime(timeMs, effectiveTrajectory, block.targetX, block.targetY);
 
-    const maxGlideGapMs = 4500;
+    const maxGlideGapMs = options?.maxGlideGapMs ?? 1000;
     const prevBlock = i > 0 ? activeBlocks[i - 1] : undefined;
     const glidedFromPrev = Boolean(
       prevBlock &&
@@ -673,15 +704,17 @@ export function calculateCameraAtTime(
       };
     }
 
-    // 2. Inside active zoom hold: apply rock-solid anchor on block target with calm deadband
+    // 2. Inside active zoom hold: apply rock-solid anchor on block target
     if (timeMs >= transitionInEnd && timeMs <= transitionOutStart) {
-      const target = calculateDeadzoneCamera(
-        { x: block.targetX, y: block.targetY },
-        currentCursor,
-        block.scale,
-        isAutoTrack ? 0.35 : 0.65,
-        "center",
-      );
+      const target = isAutoTrack
+        ? calculateDeadzoneCamera(
+            { x: block.targetX, y: block.targetY },
+            currentCursor,
+            block.scale,
+            0.35,
+            "center",
+          )
+        : clampCameraToBounds(block.targetX, block.targetY, block.scale, "center");
       return {
         x: target.x,
         y: target.y,
@@ -769,6 +802,21 @@ export interface PlotInteractionsOptions {
   minRestMs?: number;
   enableRevealDip?: boolean;
   typingZoomOut?: boolean;
+  centerTyping?: boolean;
+}
+
+/**
+ * Calculates a centered focal target for typing interactions.
+ * In search bars, form inputs, or URL bars, users type horizontally across the input.
+ * Centering horizontally (x = 0.50) prevents the camera from anchoring on the far left or right edge,
+ * which pushes the input and any autocomplete dropdowns off-screen.
+ * For top inputs (y <= 0.45), slightly offsetting down (y ~ 0.38) keeps the input in the upper third
+ * and frames the dropdown / autocomplete results right in the center of the recording.
+ */
+export function calculateTypingTarget(evt: { x: number; y: number }): { x: number; y: number } {
+  const targetX = evt.x >= 0.15 && evt.x <= 0.85 ? 0.50 : evt.x;
+  const targetY = evt.y <= 0.45 ? Math.min(0.44, Math.max(0.36, evt.y + 0.10)) : evt.y;
+  return { x: targetX, y: targetY };
 }
 
 /**
@@ -853,6 +901,38 @@ export function fillInteractionGaps(
 }
 
 /**
+ * Strict invariant enforcer: ensures that no two ZoomBlocks overlap or visually collide on the timeline.
+ * If two blocks overlap or have less than minGapMs between them, they are merged into one continuous block.
+ */
+export function enforceNonOverlappingZoomBlocks(
+  blocks: ZoomBlock[],
+  _minGapMs = 0,
+): ZoomBlock[] {
+  if (!blocks || blocks.length <= 1) return blocks || [];
+  const sorted = [...blocks].sort((a, b) => a.startTimeMs - b.startTimeMs);
+  const result: ZoomBlock[] = [];
+
+  for (let i = 0; i < sorted.length; i++) {
+    const cur = { ...sorted[i]! };
+    if (result.length === 0) {
+      result.push(cur);
+      continue;
+    }
+    const prev = result[result.length - 1]!;
+    // Only merge if cur strictly overlaps with prev in time
+    if (cur.startTimeMs < prev.endTimeMs) {
+      prev.endTimeMs = Math.max(prev.endTimeMs, cur.endTimeMs);
+      prev.scale = Math.max(prev.scale, cur.scale);
+      prev.enabled = prev.enabled || cur.enabled;
+    } else {
+      result.push(cur);
+    }
+  }
+
+  return result.filter((b) => b.endTimeMs - b.startTimeMs >= 350);
+}
+
+/**
  * Translates recorded click and typing interactions into iterative auto-zooms
  * that start 0.5s before the actual click/typing, track the mouse/cursor smoothly,
  * and return to full-frame after 1.0s of user inactivity.
@@ -905,25 +985,33 @@ export function plotInteractionsToKeyframesAndZoomBlocks(
     return { keyframes: [], zoomBlocks: [] };
   }
 
-  // Filter out negative timestamps and interactions within 400ms of video end (stop recording artifacts)
-  const validCutoff = Math.max(0, videoDurationMs - 400);
-  const validInteractions = events.filter((e) => e.timestampMs >= 0 && e.timestampMs <= validCutoff);
+  // Filter out negative timestamps and interactions within 1000ms of video end or stop/finish events (finish artifacts)
+  const validCutoff = Math.max(0, videoDurationMs - 1000);
+  const isFinishOrStop = (e: import("./project").InteractionEvent) => {
+    const id = (e.id || "").toLowerCase();
+    return id.includes("stop") || id.includes("finish") || e.timestampMs > validCutoff;
+  };
+  const validInteractions = events.filter((e) => e.timestampMs >= 0 && !isFinishOrStop(e));
 
   if (validInteractions.length === 0) {
     return { keyframes: [], zoomBlocks: [] };
   }
 
-  // 1.0s lead-in: camera starts zooming into place 1000ms before user interaction
+  // Snappy lead-in: camera starts zooming smoothly before user interaction
   const leadInMs = options.leadInMs ?? 1000;
   const leadOutMs = options.leadOutMs ?? 400;
-  const minDuration = options.minBlockDurationMs ?? 1000;
-  // Actions within 1.2s of each other stay in one zoom (camera pans between them);
-  // after 1.2s with no activity the camera returns to full frame
-  const clusterGapMs = options.inactivityResetMs ?? 1200;
+  const minDuration = options.minBlockDurationMs ?? 700;
+  // Actions within 1.0s of each other stay in one zoom (camera pans between them);
+  // after 1.0s inactivity the camera returns smoothly to full frame
+  const clusterGapMs = options.inactivityResetMs ?? (options.continuousGlide ? 1800 : 1000);
+  const maxGlideGap = options.maxGlideGapMs ?? (options.continuousGlide ? 1800 : 1000);
+  const effectiveClusterGap = options.continuousGlide !== false
+    ? Math.max(clusterGapMs, maxGlideGap)
+    : clusterGapMs;
 
   const sorted = [...validInteractions].sort((a, b) => a.timestampMs - b.timestampMs);
   const maxClusterDist = options.maxClusterDistance ?? Number.POSITIVE_INFINITY;
-  const minRestMs = options.minRestMs ?? 800;
+  const minRestMs = options.minRestMs ?? 400;
 
   // Group events into clusters based on temporal proximity and spatial proximity
   const clusters: import("./project").InteractionEvent[][] = [];
@@ -938,10 +1026,10 @@ export function plotInteractionsToKeyframesAndZoomBlocks(
       const timeDiff = event.timestampMs - prevEffectiveEnd;
       const spatialDist = Math.hypot(event.x - prev.x, event.y - prev.y);
 
-      // Consecutive actions within the inactivity window stay in ONE zoom session:
+      // Consecutive actions within the inactivity/glide window stay in ONE zoom session:
       // the camera pans to each new click instead of zooming out and back in.
       // Distance only splits clusters when explicitly requested via maxClusterDistance.
-      if (timeDiff <= clusterGapMs && spatialDist <= maxClusterDist) {
+      if (timeDiff <= effectiveClusterGap && spatialDist <= maxClusterDist) {
         currentCluster.push(event);
       } else {
         clusters.push(currentCluster);
@@ -974,18 +1062,18 @@ export function plotInteractionsToKeyframesAndZoomBlocks(
         )
       : calculateIntentZoom(firstEvt, { typingZoomOut: options.typingZoomOut });
     const clusterScale = isTypingCluster ? 1.0 : (options.scale ?? intent.scale);
-    const clusterHoldMs = options.holdDurationMs ?? (isTypingCluster ? 1600 : highlightEvt ? 2000 : hasTyping ? 1800 : 1200);
+    const clusterHoldMs = options.holdDurationMs ?? (isTypingCluster ? 1400 : highlightEvt ? 1600 : hasTyping ? 1400 : 1200);
 
     const rawStart = Math.max(0, firstEvt.timestampMs - leadInMs);
     let startMs = rawStart;
 
     if (lastBlockEndTime > 0) {
-      const earliestStart = lastBlockEndTime + (options.continuousGlide ? 0 : minRestMs);
-      if (rawStart < earliestStart) {
-        if (firstEvt.timestampMs - earliestStart >= 150) {
-          startMs = earliestStart;
-        } else {
-          startMs = Math.max(lastBlockEndTime, rawStart);
+      if (previousGlidedIntoThis) {
+        startMs = lastBlockEndTime;
+      } else {
+        const earliestStart = lastBlockEndTime + minRestMs;
+        if (rawStart < earliestStart) {
+          startMs = earliestStart < firstEvt.timestampMs ? earliestStart : Math.max(lastBlockEndTime + 40, firstEvt.timestampMs - 200);
         }
       }
     }
@@ -995,31 +1083,8 @@ export function plotInteractionsToKeyframesAndZoomBlocks(
       ...cluster.map((e) => e.timestampMs + (e.durationMs ?? 0)),
     );
 
-    const rawEnd = clusterEndTime + clusterHoldMs + leadOutMs;
-    let endMs = Math.min(videoDurationMs, rawEnd);
-
-    // If block is too short near video end, attempt to extend start backward to sustain the zoom
-    if (endMs - startMs < minDuration) {
-      const expandedStart = Math.max(lastBlockEndTime, endMs - minDuration);
-      if (endMs - expandedStart >= 900) {
-        startMs = expandedStart;
-      } else {
-        // Cannot fit a visible zoom block before video finishes; skip cluster
-        continue;
-      }
-    }
-
-    const span = endMs - startMs;
-    if (span < 800) continue;
-
-    const typingEvt = cluster.find((e) => "type" in e && e.type === "typing");
-    const focalEvt = typingEvt || highlightEvt || firstEvt;
-    const clampedFirst = isTypingCluster
-      ? { x: 0.5, y: 0.5 }
-      : clampCameraToBounds(focalEvt.x, focalEvt.y + intent.offsetY, clusterScale, "center");
-
     // Check if next cluster is eligible for continuous glide
-    const maxGlideGap = options.maxGlideGapMs ?? 3800;
+    const maxGlideGap = options.maxGlideGapMs ?? (options.continuousGlide ? 1800 : 1000);
     const canGlideToNext = Boolean(
       options.continuousGlide &&
         nextCluster &&
@@ -1027,8 +1092,42 @@ export function plotInteractionsToKeyframesAndZoomBlocks(
         nextCluster[0]!.timestampMs > clusterEndTime,
     );
 
+    const rawEnd = clusterEndTime + clusterHoldMs + leadOutMs;
+    let endMs = Math.min(videoDurationMs, rawEnd);
+
+    if (nextCluster && !canGlideToNext) {
+      const nextFirstTime = nextCluster[0]!.timestampMs;
+      // If not gliding into nextCluster, ensure this zoom block completes its return to 1.0x
+      // before the next interaction's lead-in window
+      if (endMs > nextFirstTime - 120) {
+        endMs = Math.max(clusterEndTime + 200, nextFirstTime - 120);
+      }
+    }
+
+    // If block is too short near video end, attempt to extend start backward to sustain the zoom
+    if (endMs - startMs < minDuration) {
+      const expandedStart = Math.max(lastBlockEndTime > 0 ? lastBlockEndTime + minRestMs : 0, endMs - minDuration);
+      if (endMs - expandedStart >= 350) {
+        startMs = expandedStart;
+      }
+    }
+
+    const span = endMs - startMs;
+    if (span < 240) continue;
+
+    const typingEvt = cluster.find((e) => "type" in e && e.type === "typing");
+    const focalEvt = typingEvt || highlightEvt || firstEvt;
+    const typingTarget = (hasTyping && options.centerTyping === true)
+      ? calculateTypingTarget(focalEvt)
+      : null;
+    const clampedFirst = isTypingCluster
+      ? { x: 0.5, y: 0.5 }
+      : typingTarget
+        ? clampCameraToBounds(typingTarget.x, typingTarget.y, clusterScale, "center")
+        : clampCameraToBounds(focalEvt.x, focalEvt.y + intent.offsetY, clusterScale, "center");
+
     const blockEnd = canGlideToNext
-      ? Math.max(endMs, nextCluster![0]!.timestampMs)
+      ? Math.min(endMs, nextCluster![0]!.timestampMs)
       : endMs;
 
     // Timeline ZoomBlock
@@ -1063,12 +1162,16 @@ export function plotInteractionsToKeyframesAndZoomBlocks(
       const maxPeak = Math.max(minPeak, endMs - effLeadOut - 150);
       const peakTime = Math.max(minPeak, Math.min(maxPeak, firstEvt.timestampMs));
 
+      const initialLandingTarget = (firstEvt.type === "click" && hasTyping && options.centerTyping === true)
+        ? clampCameraToBounds(firstEvt.x, firstEvt.y, clusterScale, "center")
+        : clampedFirst;
+
       keyframes.push({
         id: `kf-peak-${firstEvt.id}`,
         timeMs: peakTime,
         scale: clusterScale,
-        targetX: clampedFirst.x,
-        targetY: clampedFirst.y,
+        targetX: initialLandingTarget.x,
+        targetY: initialLandingTarget.y,
         easing: "spring",
         ...(firstEvt.type === "typing"
           ? { sound: "typing", soundPreset: "mechanical", soundVolume: 0.55 }
@@ -1077,8 +1180,26 @@ export function plotInteractionsToKeyframesAndZoomBlocks(
             : { sound: "click", soundPreset: "bop", soundVolume: 0.70 }),
       });
 
-      // Video Editor Showcase Arc: after focusing tightly on the button click,
-      // optionally zoom out a little (showcase context reveal) only if explicitly enabled or long showcase hold
+      if (
+        firstEvt.type === "click" &&
+        hasTyping &&
+        options.centerTyping === true &&
+        (Math.abs(initialLandingTarget.x - clampedFirst.x) > 0.04 || Math.abs(initialLandingTarget.y - clampedFirst.y) > 0.04)
+      ) {
+        const panTime = Math.min(peakTime + 280, endMs - effLeadOut - 80);
+        if (panTime > peakTime + 50) {
+          keyframes.push({
+            id: `kf-type-center-${firstEvt.id}`,
+            timeMs: panTime,
+            scale: clusterScale,
+            targetX: clampedFirst.x,
+            targetY: clampedFirst.y,
+            easing: "cubic",
+          });
+        }
+      }
+
+      // Video Editor Showcase Arc: only if enabled and not explicitly turned off
       const shouldReveal =
         clusterScale > 1.05 &&
         !hasTyping &&
@@ -1124,26 +1245,34 @@ export function plotInteractionsToKeyframesAndZoomBlocks(
     for (let j = 1; j < cluster.length; j++) {
       const midEvt = cluster[j]!;
       const isMidTyping = midEvt.type === "typing" && options.typingZoomOut === true;
+      const isTypingMid = midEvt.type === "typing" && options.centerTyping === true;
+      const midTypingTarget = isTypingMid ? calculateTypingTarget(midEvt) : null;
       const clampedMid = isMidTyping
         ? { x: 0.5, y: 0.5 }
-        : clampCameraToBounds(midEvt.x, midEvt.y, clusterScale, "center");
+        : midTypingTarget
+          ? clampCameraToBounds(midTypingTarget.x, midTypingTarget.y, clusterScale, "center")
+          : clampCameraToBounds(midEvt.x, midEvt.y, clusterScale, "center");
       const trackMin = firstEvt.timestampMs + 60;
       const trackMax = Math.max(trackMin, endMs - effLeadOut - 100);
       const trackTime = Math.max(trackMin, Math.min(trackMax, midEvt.timestampMs));
 
       // Shift camera directly to consecutive actions in cluster:
-      // only skip if two actions are virtually identical in time (< 150ms) and position (< 0.03)
+      // If two consecutive clicks are at virtually the same small spot (< 0.04 distance), the camera is already framed
+      // on this spot. Skip generating redundant micro-keyframes to keep timeline clean.
       const prevEvt = cluster[j - 1]!;
       const distFromPrev = Math.hypot(midEvt.x - prevEvt.x, midEvt.y - prevEvt.y);
-      if (trackTime - lastTrackTime < 150 && distFromPrev < 0.03) {
+      const targetDist = Math.hypot(clampedMid.x - lastTargetX, clampedMid.y - lastTargetY);
+      const gap = trackTime - lastTrackTime;
+
+      const isBothClicks = midEvt.type === "click" && prevEvt.type === "click";
+      if (gap < 160 || (isBothClicks && targetDist < 0.04 && distFromPrev < 0.04)) {
         continue;
       }
 
-      // If there is a noticeable gap (> 400ms) between consecutive actions, hold camera steady on previous
+      // If there is a noticeable gap (> 450ms) and meaningful distance (> 0.06), hold camera steady on previous
       // action before briskly gliding to the next action
-      const gap = trackTime - lastTrackTime;
-      if (gap > 400 && distFromPrev > 0.04) {
-        const panSpan = Math.min(450, Math.round(gap * 0.55));
+      if (gap > 450 && targetDist > 0.06) {
+        const panSpan = Math.min(1000, Math.max(450, Math.round(gap * 0.55)));
         const panStart = trackTime - panSpan;
         if (panStart > lastTrackTime + 80) {
           keyframes.push({
@@ -1152,6 +1281,22 @@ export function plotInteractionsToKeyframesAndZoomBlocks(
             scale: clusterScale,
             targetX: lastTargetX,
             targetY: lastTargetY,
+            easing: "cubic",
+          });
+        }
+      }
+
+      // For significant spatial distance across tabs/elements, add a subtle crane glide
+      if (targetDist > 0.35 && gap > 500) {
+        const craneSpan = Math.min(1000, Math.max(450, Math.round(gap * 0.6)));
+        const midPanTime = trackTime - Math.round(craneSpan / 2);
+        if (midPanTime > lastTrackTime + 80) {
+          keyframes.push({
+            id: `kf-crane-mid-${midEvt.id}`,
+            timeMs: midPanTime,
+            scale: Math.max(1.35, clusterScale - 0.15),
+            targetX: (lastTargetX + clampedMid.x) / 2,
+            targetY: (lastTargetY + clampedMid.y) / 2,
             easing: "cubic",
           });
         }
@@ -1167,7 +1312,7 @@ export function plotInteractionsToKeyframesAndZoomBlocks(
         scale: isMidTyping ? 1.0 : clusterScale,
         targetX: clampedMid.x,
         targetY: clampedMid.y,
-        easing: "spring",
+        easing: "cubic",
         ...(midEvt.type === "typing"
           ? { sound: "typing", soundPreset: "mechanical", soundVolume: 0.55 }
           : { sound: "click", soundPreset: "bop", soundVolume: 0.70 }),
@@ -1218,7 +1363,9 @@ export function plotInteractionsToKeyframesAndZoomBlocks(
     const holdTime = Math.max(minHold, Math.min(maxHold, idealHoldEnd));
     const clampedLast = isTypingCluster
       ? { x: 0.5, y: 0.5 }
-      : clampCameraToBounds(lastEvt.x, lastEvt.y, clusterScale, "center");
+      : (hasTyping && options.centerTyping === true)
+        ? clampedFirst
+        : clampCameraToBounds(lastEvt.x, lastEvt.y, clusterScale, "center");
     const shouldRevealHold =
       clusterScale > 1.05 &&
       (options.enableRevealDip === true || (options.enableRevealDip === undefined && clusterHoldMs >= 1800));
@@ -1249,17 +1396,22 @@ export function plotInteractionsToKeyframesAndZoomBlocks(
           )
         : calculateIntentZoom(nextFirst, { typingZoomOut: options.typingZoomOut });
       const nextScale = nextIsTyping ? 1.0 : (options.scale ?? nextIntent.scale);
+      const nextTypingTarget = (nextHasTyping && options.centerTyping === true)
+        ? calculateTypingTarget(nextFirst)
+        : null;
       const clampedNext = nextIsTyping
         ? { x: 0.5, y: 0.5 }
-        : clampCameraToBounds(nextFirst.x, nextFirst.y + nextIntent.offsetY, nextScale, "center");
+        : nextTypingTarget
+          ? clampCameraToBounds(nextTypingTarget.x, nextTypingTarget.y, nextScale, "center")
+          : clampCameraToBounds(nextFirst.x, nextFirst.y + nextIntent.offsetY, nextScale, "center");
 
       const spatial = classifySpatialTransition(clampedLast, clampedNext);
       const glideStart = Math.min(holdTime, Math.max(holdTime - 100, nextFirst.timestampMs - leadInMs));
       const glideEnd = nextFirst.timestampMs;
 
-      if (spatial.type === "crane") {
+      if (spatial.type === "crane" && spatial.distance > 0.35) {
         const midTime = Math.round((glideStart + glideEnd) / 2);
-        const craneScale = Math.max(1.2, Math.min(clusterScale, nextScale) - spatial.recommendedScaleDip);
+        const craneScale = Math.max(1.25, Math.min(clusterScale, nextScale) - 0.15);
         keyframes.push({
           id: `kf-crane-${lastEvt.id}`,
           timeMs: midTime,
@@ -1276,7 +1428,7 @@ export function plotInteractionsToKeyframesAndZoomBlocks(
         scale: nextScale,
         targetX: clampedNext.x,
         targetY: clampedNext.y,
-        easing: "spring",
+        easing: "cubic",
         ...(nextFirst.type === "typing"
           ? { sound: "typing", soundPreset: "mechanical", soundVolume: 0.55 }
           : { sound: "click", soundPreset: "bop", soundVolume: 0.70 }),
@@ -1300,6 +1452,10 @@ export function plotInteractionsToKeyframesAndZoomBlocks(
     }
   }
 
+  // Strict Invariant: No two ZoomBlocks can ever overlap or stack on the timeline.
+  // Blocks separated by rest periods remain distinct isolated zoom events.
+  const finalZoomBlocks = enforceNonOverlappingZoomBlocks(zoomBlocks, 0);
+
   // Deduplicate and filter out redundant micro-keyframes too close in time
   const sortedKf = keyframes
     .filter((kf, index, arr) => arr.findIndex((k) => k.id === kf.id) === index)
@@ -1308,18 +1464,58 @@ export function plotInteractionsToKeyframesAndZoomBlocks(
   const uniqueKeyframes: import("./project").KeyframeNode[] = [];
   for (const kf of sortedKf) {
     const prev = uniqueKeyframes[uniqueKeyframes.length - 1];
-    if (
-      prev &&
-      Math.abs(kf.timeMs - prev.timeMs) < 120 &&
-      Math.abs(kf.scale - prev.scale) < 0.05 &&
-      Math.hypot(kf.targetX - prev.targetX, kf.targetY - prev.targetY) < 0.04
-    ) {
-      continue;
+    if (prev) {
+      const dt = kf.timeMs - prev.timeMs;
+      // Prevent diamond stacking: enforce minimum 240ms separation between keyframe diamonds
+      if (dt < 240) {
+        // A return-to-full-screen keyframe (kf-out or scale <= 1.05) following a zoomed-in keyframe
+        // must NEVER be dropped, otherwise the camera stays stuck zoomed in!
+        if ((kf.scale <= 1.05 || kf.id.includes("kf-out")) && prev.scale > 1.05) {
+          kf.timeMs = prev.timeMs + 240;
+          uniqueKeyframes.push(kf);
+          continue;
+        }
+
+        // A user interaction click or typing keyframe must NEVER be dropped by an intermediate synthetic hold/crane keyframe!
+        const isKfUserAction = kf.id.includes("kf-track") || kf.id.includes("kf-peak") || kf.sound === "click" || kf.sound === "typing";
+        const isPrevSynthetic = prev.id.includes("kf-hold") || prev.id.includes("kf-crane");
+        if (isKfUserAction && isPrevSynthetic) {
+          uniqueKeyframes.pop();
+          uniqueKeyframes.push(kf);
+          continue;
+        }
+
+        // If both are user clicks at different screen locations, keep both with clean spacing
+        if (isKfUserAction && (prev.id.includes("kf-track") || prev.id.includes("kf-peak") || prev.sound === "click")) {
+          const dist = Math.hypot(kf.targetX - prev.targetX, kf.targetY - prev.targetY);
+          if (dist > 0.03) {
+            kf.timeMs = prev.timeMs + 180;
+            uniqueKeyframes.push(kf);
+            continue;
+          }
+        }
+
+        // Merge sound cues and effects into prev if prev lacks them
+        if (kf.sound && !prev.sound) {
+          prev.sound = kf.sound;
+          prev.soundPreset = kf.soundPreset;
+          prev.soundVolume = kf.soundVolume;
+        }
+        if (kf.effect && !prev.effect) {
+          prev.effect = kf.effect;
+        }
+        if (kf.scale > prev.scale) {
+          prev.scale = kf.scale;
+          prev.targetX = kf.targetX;
+          prev.targetY = kf.targetY;
+        }
+        continue;
+      }
     }
     uniqueKeyframes.push(kf);
   }
 
-  return { keyframes: uniqueKeyframes, zoomBlocks };
+  return { keyframes: uniqueKeyframes, zoomBlocks: finalZoomBlocks };
 }
 
 /**
@@ -1346,7 +1542,7 @@ export function zoomBlocksToKeyframes(
   const keyframes: import("./project").KeyframeNode[] = [];
   const leadIn = options?.leadInMs ?? 1000;
   const leadOut = options?.leadOutMs ?? 350;
-  const maxGlideGapMs = options?.maxGlideGapMs ?? 3800;
+  const maxGlideGapMs = options?.maxGlideGapMs ?? 1000;
 
   for (let i = 0; i < active.length; i++) {
     const b = active[i]!;
@@ -1421,9 +1617,31 @@ export function zoomBlocksToKeyframes(
   }
 
   // Deduplicate by id and sort chronologically
-  return keyframes
+  const sorted = keyframes
     .filter((kf, index, arr) => arr.findIndex((k) => k.id === kf.id) === index)
     .sort((a, b) => a.timeMs - b.timeMs);
+  const clean: import("./project").KeyframeNode[] = [];
+  for (const kf of sorted) {
+    const prev = clean[clean.length - 1];
+    if (prev && kf.timeMs - prev.timeMs < 220) {
+      if ((kf.scale <= 1.05 || kf.id.includes("kf-out")) && prev.scale > 1.05) {
+        kf.timeMs = Math.min(videoDurationMs, prev.timeMs + 240);
+        clean.push(kf);
+        continue;
+      }
+      if (kf.sound && !prev.sound) {
+        prev.sound = kf.sound;
+        prev.soundPreset = kf.soundPreset;
+        prev.soundVolume = kf.soundVolume;
+      }
+      if (kf.effect && !prev.effect) {
+        prev.effect = kf.effect;
+      }
+      continue;
+    }
+    clean.push(kf);
+  }
+  return clean;
 }
 
 export interface TourShiftOptions {
@@ -1451,7 +1669,7 @@ export function generateTourShiftSequence(
   const zoomBlocks: ZoomBlock[] = [];
 
   const defaultScale = options?.scale ?? 1.85;
-  const holdMs = options?.stepHoldMs ?? 1600;
+  const holdMs = options?.stepHoldMs ?? 1000;
   const leadInMs = 1000;
   const leadOutMs = 400;
 
@@ -1510,25 +1728,54 @@ export function generateTourShiftSequence(
     // Camera shift to next element if available
     if (next) {
       const nextTime = next.timestampMs;
-      const shiftSpan = Math.max(400, Math.min(900, nextTime - holdEndMs));
-      const shiftMid = holdEndMs + Math.round(shiftSpan / 2);
+      const gap = nextTime - holdEndMs;
       const nextScale = next.type === "typing" ? 2.1 : defaultScale;
       const clampedNext = clampCameraToBounds(next.x, next.y, nextScale, "center");
       const shiftDist = Math.hypot(clampedNext.x - clampedCur.x, clampedNext.y - clampedCur.y);
 
-      if (shiftDist > 0.20) {
-        // Crane dip midway through camera glide
-        const craneScale = Math.max(1.25, Math.min(curScale, nextScale) - 0.25);
+      if (gap <= 1000) {
+        // Snappy direct glide between nearby events
+        const shiftSpan = Math.max(400, Math.min(900, Math.max(400, gap)));
+        const shiftMid = holdEndMs + Math.round(shiftSpan / 2);
+
+        if (shiftDist > 0.20) {
+          // Crane dip midway through camera glide
+          const craneScale = Math.max(1.25, Math.min(curScale, nextScale) - 0.25);
+          keyframes.push({
+            id: `tour-crane-${cur.id}`,
+            timeMs: shiftMid,
+            scale: craneScale,
+            targetX: (clampedCur.x + clampedNext.x) / 2,
+            targetY: (clampedCur.y + clampedNext.y) / 2,
+            easing: "cubic",
+          });
+        }
+        prevHoldEndMs = holdEndMs + shiftSpan;
+      } else {
+        // Gap > 1000ms: user is inactive! Zoom out smoothly to 1.0x full frame
+        const outEndMs = Math.min(nextTime - 800, holdEndMs + leadOutMs);
         keyframes.push({
-          id: `tour-crane-${cur.id}`,
-          timeMs: shiftMid,
-          scale: craneScale,
-          targetX: (clampedCur.x + clampedNext.x) / 2,
-          targetY: (clampedCur.y + clampedNext.y) / 2,
+          id: `tour-out-${cur.id}`,
+          timeMs: outEndMs,
+          scale: 1.0,
+          targetX: 0.5,
+          targetY: 0.5,
           easing: "cubic",
         });
+
+        // Lead-in into next element starts smoothly before nextTime
+        const inStartMs = Math.max(outEndMs, nextTime - leadInMs);
+        keyframes.push({
+          id: `tour-in-${next.id}`,
+          timeMs: inStartMs,
+          scale: 1.0,
+          targetX: 0.5,
+          targetY: 0.5,
+          easing: "cubic",
+        });
+
+        prevHoldEndMs = inStartMs;
       }
-      prevHoldEndMs = holdEndMs + shiftSpan;
     } else {
       // Final return to full frame
       const endMs = Math.min(videoDurationMs, holdEndMs + leadOutMs);
@@ -1543,11 +1790,16 @@ export function generateTourShiftSequence(
       prevHoldEndMs = endMs;
     }
 
-    // Add continuous ZoomBlock spanning this tour step
+    // ZoomBlock bounds: glide into next if nearby, otherwise end cleanly after hold + leadOut
+    const blockEnd =
+      next && next.timestampMs - holdEndMs <= 1000
+        ? next.timestampMs
+        : Math.min(videoDurationMs, holdEndMs + leadOutMs);
+
     zoomBlocks.push({
       id: `tour-block-${i + 1}`,
       startTimeMs: arriveMs,
-      endTimeMs: next ? next.timestampMs : holdEndMs,
+      endTimeMs: blockEnd,
       targetX: clampedCur.x,
       targetY: clampedCur.y,
       scale: curScale,

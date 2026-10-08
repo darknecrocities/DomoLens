@@ -141,9 +141,13 @@ export function App() {
 
       {/* Global Floating Quick Action Bar during Full-Screen Recording */}
       {(recorderState === "recording" || recorderState === "paused") && (
-        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[9999] w-[95vw] max-w-4xl px-3 pointer-events-auto select-none shadow-2xl">
+        <motion.div
+          drag
+          dragMomentum={false}
+          className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[9999] w-[95vw] max-w-4xl px-3 pointer-events-auto select-none shadow-2xl cursor-grab active:cursor-grabbing"
+        >
           <FloatingQuickBar />
-        </div>
+        </motion.div>
       )}
 
       <DropZoneOverlay isDragging={isDragging} />

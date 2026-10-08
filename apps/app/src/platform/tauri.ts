@@ -105,6 +105,8 @@ export function createTauriPlatform(opts: { isMobile: boolean; isTouch: boolean;
 
     startGlobalInputCapture: () => invoke<void>("start_global_input_capture"),
     stopGlobalInputCapture: () => invoke<void>("stop_global_input_capture"),
+    checkAccessibilityPermission: () => invoke<boolean>("check_accessibility_permission"),
+    requestAccessibilityPermission: () => invoke<boolean>("request_accessibility_permission"),
 
     onGlobalClick(callback) {
       return lazyOff(listen<{ x: number; y: number; norm_x: number; norm_y: number; button: string }>("global-click", (ev) => callback(ev.payload)));

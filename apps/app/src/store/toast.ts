@@ -36,6 +36,7 @@ export const useToasts = create<ToastState>((set, get) => ({
 /** Shortcut for code outside React components. */
 export const toast = {
   info: (message: string) => useToasts.getState().show(message),
+  warning: (message: string) => useToasts.getState().show(message, { tone: "neutral", durationMs: 7000 }),
   success: (message: string) => useToasts.getState().show(message, { tone: "success" }),
   error: (message: string, action?: Toast["action"]) => useToasts.getState().show(message, { tone: "error", action }),
 };

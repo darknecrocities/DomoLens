@@ -37,31 +37,24 @@ export function createLiveStreamMotionTracker(
     return () => {};
   }
 
-  const sampleIntervalMs = options.sampleIntervalMs ?? 75;
+  const sampleIntervalMs = options.sampleIntervalMs ?? 60;
   const width = options.width ?? 160;
   const height = options.height ?? 90;
   const threshold = options.differenceThreshold ?? 12;
   const minEnergy = options.minEnergyThreshold ?? 20;
   const maxSpread = options.maxSpreadThreshold ?? 0.16;
 
-  const video = document.createElement("video");
-  video.muted = true;
-  video.autoplay = true;
-  video.playsInline = true;
-  video.style.cssText =
-    "position:fixed;bottom:0;right:0;width:2px;height:2px;opacity:0.01;pointer-events:none;z-index:999999;";
-  document.body.appendChild(video);
-  video.srcObject = stream;
-
   const canvas = document.createElement("canvas");
   canvas.width = width;
   canvas.height = height;
   const ctx = canvas.getContext("2d", { willReadFrequently: true });
+  if (!ctx) return () => {};
 
-  let timer: ReturnType<typeof setInterval> | null = null;
-  let prevLuma: Uint8ClampedArray | null = null;
   let isRunning = true;
-  let lastInteractionTime = 0;
+  let prevLuma: Uint8ClampedArray | null = null;
+  let prevCentroid: { x: number; y: number; timeMs: number } | null = null;
+  let dwellStartTime = 0;
+  let isMoving = false;
   let activeTypingBurst: {
     id: string;
     startTime: number;
@@ -71,113 +64,184 @@ export function createLiveStreamMotionTracker(
     count: number;
   } | null = null;
 
-  const processFrame = () => {
-    if (!isRunning || !ctx || (video.readyState < 1 && video.videoWidth === 0)) return;
+  const handleFrameLuma = (currLuma: Uint8ClampedArray, timestampMs: number) => {
+    if (!prevLuma) {
+      prevLuma = currLuma;
+      return;
+    }
 
-    try {
-      ctx.drawImage(video, 0, 0, width, height);
-      const imageData = ctx.getImageData(0, 0, width, height);
-      const currLuma = extractLuminanceBuffer(imageData.data, width, height);
+    const diff = analyzeFrameDifference(prevLuma, currLuma, width, height, threshold);
+    prevLuma = currLuma;
 
-      if (!prevLuma) {
-        prevLuma = currLuma;
-        return;
+    if (diff.motionEnergy >= minEnergy) {
+      const centroid = calculateOpticalCentroid(diff.diffMap, width, height);
+
+      // Report moving cursor / activity point only for localized motion.
+      if (callbacks.onPoint && centroid.spread <= maxSpread) {
+        callbacks.onPoint({
+          x: centroid.x,
+          y: centroid.y,
+          timestampMs,
+        });
       }
 
-      const diff = analyzeFrameDifference(prevLuma, currLuma, width, height, threshold);
-      prevLuma = currLuma;
+      // Track cursor velocity: only fast, long translations count as "in flight".
+      const displacement = prevCentroid
+        ? Math.hypot(centroid.x - prevCentroid.x, centroid.y - prevCentroid.y)
+        : 0;
+      const dt = prevCentroid ? timestampMs - prevCentroid.timeMs : 9999;
+      isMoving = displacement > 0.08 && dt < 300;
+      dwellStartTime = isMoving ? timestampMs : dwellStartTime;
 
-      if (diff.motionEnergy >= minEnergy) {
-        const centroid = calculateOpticalCentroid(diff.diffMap, width, height);
-        const now = Date.now();
+      const kind = classifyFrameActivity(diff.motionEnergy, centroid.spread, minEnergy, maxSpread);
 
-        // Report moving cursor / activity point only for localized motion.
-        // Page-wide changes (scrolling, animated backgrounds, tab switches) produce a
-        // centroid that has no relation to where the user is pointing.
-        if (callbacks.onPoint && centroid.spread <= maxSpread) {
-          callbacks.onPoint({
-            x: centroid.x,
-            y: centroid.y,
-            timestampMs: now,
-          });
-        }
+      if (centroid.spread <= maxSpread) {
+        prevCentroid = { x: centroid.x, y: centroid.y, timeMs: timestampMs };
+      }
 
-        const kind = classifyFrameActivity(diff.motionEnergy, centroid.spread, minEnergy, maxSpread);
+      if (callbacks.onInteraction && kind === "click" && !isMoving) {
+        const isLocalized = centroid.spread <= maxSpread * 1.35;
 
-        if (callbacks.onInteraction) {
-          const isLocalized = centroid.spread <= maxSpread * 1.25;
+        if (isLocalized) {
+          // Check if this is rapid typing keystrokes in the exact same small spot (dx < 0.08, dy < 0.03, dt <= 450ms)
+          const isTypingKeystroke =
+            Boolean(activeTypingBurst) &&
+            timestampMs - activeTypingBurst!.lastTime <= 450 &&
+            Math.abs(centroid.y - activeTypingBurst!.y) <= 0.03 &&
+            Math.abs(centroid.x - activeTypingBurst!.x) <= 0.08;
 
-          if (isLocalized) {
-            if (
-              activeTypingBurst &&
-              now - activeTypingBurst.lastTime <= 1500 &&
-              Math.hypot(centroid.x - activeTypingBurst.x, centroid.y - activeTypingBurst.y) <= 0.12
-            ) {
-              activeTypingBurst.lastTime = now;
-              activeTypingBurst.count++;
+          if (isTypingKeystroke) {
+            activeTypingBurst!.lastTime = timestampMs;
+            activeTypingBurst!.count++;
+            if (activeTypingBurst!.count >= 3) {
               callbacks.onInteraction({
-                id: activeTypingBurst.id,
+                id: activeTypingBurst!.id,
                 type: "typing",
-                timestampMs: activeTypingBurst.startTime,
-                x: activeTypingBurst.x,
-                y: activeTypingBurst.y,
-                snippet: "Text Input",
-                durationMs: activeTypingBurst.lastTime - activeTypingBurst.startTime,
+                timestampMs: activeTypingBurst!.startTime,
+                x: activeTypingBurst!.x,
+                y: activeTypingBurst!.y,
+                snippet: undefined,
+                durationMs: activeTypingBurst!.lastTime - activeTypingBurst!.startTime,
               });
-            } else {
-              if (now - lastInteractionTime >= 700) {
-                lastInteractionTime = now;
-                const newBurstId = `opt-type-${now}`;
-                activeTypingBurst = {
-                  id: newBurstId,
-                  startTime: now,
-                  lastTime: now,
-                  x: centroid.x,
-                  y: centroid.y,
-                  count: 1,
-                };
-                if (kind === "click" && diff.motionEnergy >= minEnergy * 1.8) {
-                  callbacks.onInteraction({
-                    id: `opt-act-${now}`,
-                    type: "click",
-                    timestampMs: now,
-                    x: centroid.x,
-                    y: centroid.y,
-                    button: "left",
-                  });
-                }
-              }
             }
           } else {
             activeTypingBurst = null;
           }
+        } else {
+          activeTypingBurst = null;
         }
       }
-    } catch {
-      // Ignore canvas read errors during track transitions
     }
   };
 
-  const startTracking = () => {
-    if (!isRunning || timer) return;
+  const videoTrack = stream.getVideoTracks()[0];
+  let cleanupTrackProcessor: (() => void) | null = null;
+  let useFallback = true;
 
-    // In browsers, requestVideoFrameCallback is paused when the tab is hidden / in background.
-    // An interval ensures continuous processing of the incoming MediaStream so interaction
-    // coordinates and cursor trajectory continue tracking accurately even when recording another window or app.
-    timer = setInterval(processFrame, sampleIntervalMs);
-  };
+  // 1. Primary engine: WebCodecs MediaStreamTrackProcessor (unaffected by background tab throttling in Chrome)
+  const globalAny = typeof window !== "undefined" ? (window as unknown as Record<string, unknown>) : {};
+  if (videoTrack && typeof globalAny.MediaStreamTrackProcessor !== "undefined") {
+    try {
+      const ProcessorClass = globalAny.MediaStreamTrackProcessor as new (init: { track: MediaStreamTrack }) => {
+        readable: ReadableStream<{ close: () => void }>;
+      };
+      const processor = new ProcessorClass({ track: videoTrack });
+      const reader = processor.readable.getReader();
+      useFallback = false;
 
-  void video.play().then(startTracking).catch(startTracking);
+      let lastSampleMs = 0;
+
+      const readLoop = async () => {
+        while (isRunning) {
+          try {
+            const { value: frame, done } = await reader.read();
+            if (done || !frame) break;
+            if (!isRunning) {
+              frame.close();
+              break;
+            }
+            const now = Date.now();
+            if (now - lastSampleMs >= sampleIntervalMs) {
+              lastSampleMs = now;
+              ctx.drawImage(frame as unknown as CanvasImageSource, 0, 0, width, height);
+              const img = ctx.getImageData(0, 0, width, height);
+              handleFrameLuma(extractLuminanceBuffer(img.data, width, height), now);
+            }
+            frame.close();
+          } catch {
+            break;
+          }
+        }
+      };
+
+      void readLoop();
+
+      cleanupTrackProcessor = () => {
+        void reader.cancel().catch(() => {});
+      };
+    } catch {
+      useFallback = true;
+    }
+  }
+
+  // 2. Fallback engine: Video element with unthrottled Web Worker ticker
+  let videoEl: HTMLVideoElement | null = null;
+  let worker: Worker | null = null;
+  let fallbackTimer: ReturnType<typeof setInterval> | null = null;
+
+  if (useFallback) {
+    videoEl = document.createElement("video");
+    videoEl.muted = true;
+    videoEl.autoplay = true;
+    videoEl.playsInline = true;
+    videoEl.style.cssText =
+      "position:fixed;bottom:0;right:0;width:4px;height:4px;opacity:0.05;pointer-events:none;z-index:999999;";
+    document.body.appendChild(videoEl);
+    videoEl.srcObject = stream;
+    void videoEl.play().catch(() => {});
+
+    const processVideoFrame = () => {
+      if (!isRunning || !ctx || !videoEl || (videoEl.readyState < 1 && videoEl.videoWidth === 0)) return;
+      try {
+        ctx.drawImage(videoEl, 0, 0, width, height);
+        const img = ctx.getImageData(0, 0, width, height);
+        handleFrameLuma(extractLuminanceBuffer(img.data, width, height), Date.now());
+      } catch {
+        // ignore
+      }
+    };
+
+    try {
+      const blob = new Blob([
+        `let t; self.onmessage = e => { if (e.data === 'start') { t = setInterval(() => self.postMessage('t'), ${sampleIntervalMs}); } else { clearInterval(t); } };`,
+      ], { type: "application/javascript" });
+      const workerUrl = URL.createObjectURL(blob);
+      worker = new Worker(workerUrl);
+      worker.onmessage = () => processVideoFrame();
+      worker.postMessage("start");
+    } catch {
+      fallbackTimer = setInterval(processVideoFrame, sampleIntervalMs);
+    }
+  }
 
   return () => {
     isRunning = false;
-    if (timer) {
-      clearInterval(timer);
-      timer = null;
+    cleanupTrackProcessor?.();
+    if (worker) {
+      worker.postMessage("stop");
+      worker.terminate();
+      worker = null;
     }
-    video.srcObject = null;
-    if (video.parentNode) {
-      video.parentNode.removeChild(video);
+    if (fallbackTimer) {
+      clearInterval(fallbackTimer);
+      fallbackTimer = null;
+    }
+    if (videoEl) {
+      videoEl.srcObject = null;
+      if (videoEl.parentNode) {
+        videoEl.parentNode.removeChild(videoEl);
+      }
+      videoEl = null;
     }
     canvas.remove();
   };
@@ -205,12 +269,9 @@ export async function scanVideoElementForActivity(
   }
 
   const durationSec = video.duration;
-  if (!durationSec || isNaN(durationSec) || durationSec <= 0) {
-    return { interactions: [], clicks: [], cursorTrajectory: [] };
-  }
-
-  const maxDurationMs = options.maxDurationMs ?? Math.round(durationSec * 1000);
-  const sampleStepMs = options.sampleStepMs ?? 250;
+  const isInvalidDuration = !durationSec || isNaN(durationSec) || !Number.isFinite(durationSec) || durationSec <= 0;
+  const maxDurationMs = options.maxDurationMs ?? (isInvalidDuration ? 15000 : Math.round(durationSec * 1000));
+  const sampleStepMs = options.sampleStepMs ?? 200;
   const canvasWidth = options.canvasWidth ?? 160;
   const canvasHeight = options.canvasHeight ?? 90;
 
@@ -229,50 +290,129 @@ export async function scanVideoElementForActivity(
     height: number;
   }> = [];
 
-  const originalTime = video.currentTime;
-  const totalSamples = Math.min(150, Math.floor(maxDurationMs / sampleStepMs));
+  // Method 1: High-Speed Video Playback Extraction (decodes unindexed MediaRecorder WebM blobs in Chromium sequentially)
+  let playbackSuccess = false;
+  if (typeof video.play === "function") {
+    try {
+      video.playbackRate = 8.0;
+      video.muted = true;
+      video.currentTime = 0;
+      await video.play();
 
-  try {
-    for (let i = 0; i < totalSamples; i++) {
-      const timeMs = i * sampleStepMs;
-      const targetSec = timeMs / 1000;
+      let lastSampleMs = -sampleStepMs;
+      const targetMaxMs = maxDurationMs;
 
       await new Promise<void>((resolve) => {
-        let finished = false;
-        const cleanup = () => {
-          if (finished) return;
-          finished = true;
-          video.removeEventListener("seeked", onSeeked);
-          clearTimeout(timeoutId);
+        let isDone = false;
+        const finish = () => {
+          if (isDone) return;
+          isDone = true;
+          try {
+            video.pause();
+          } catch {
+            // ignore
+          }
           resolve();
         };
-        const onSeeked = () => cleanup();
-        const timeoutId = setTimeout(cleanup, 120);
-        video.addEventListener("seeked", onSeeked, { once: true });
-        try {
-          video.currentTime = targetSec;
-        } catch {
-          cleanup();
+
+        const maxWaitMs = Math.max(3000, Math.round(targetMaxMs / 6) + 1500);
+        const timeoutId = setTimeout(finish, maxWaitMs);
+
+        const checkFrame = () => {
+          if (isDone) return;
+          const currentMs = Math.round(video.currentTime * 1000);
+          if (video.ended || currentMs >= targetMaxMs) {
+            clearTimeout(timeoutId);
+            finish();
+            return;
+          }
+
+          if (currentMs - lastSampleMs >= sampleStepMs) {
+            lastSampleMs = currentMs;
+            ctx.drawImage(video, 0, 0, canvasWidth, canvasHeight);
+            const img = ctx.getImageData(0, 0, canvasWidth, canvasHeight);
+            frames.push({
+              timestampMs: currentMs,
+              data: img.data,
+              width: canvasWidth,
+              height: canvasHeight,
+            });
+          }
+
+          if ("requestVideoFrameCallback" in video) {
+            (video as HTMLVideoElement & { requestVideoFrameCallback: (cb: unknown) => number }).requestVideoFrameCallback(checkFrame);
+          } else {
+            requestAnimationFrame(checkFrame);
+          }
+        };
+
+        if ("requestVideoFrameCallback" in video) {
+          (video as HTMLVideoElement & { requestVideoFrameCallback: (cb: unknown) => number }).requestVideoFrameCallback(checkFrame);
+        } else {
+          requestAnimationFrame(checkFrame);
         }
+
+        video.addEventListener("ended", finish, { once: true });
+        video.addEventListener("error", finish, { once: true });
       });
 
-      ctx.drawImage(video, 0, 0, canvasWidth, canvasHeight);
-      const img = ctx.getImageData(0, 0, canvasWidth, canvasHeight);
-      frames.push({
-        timestampMs: timeMs,
-        data: img.data,
-        width: canvasWidth,
-        height: canvasHeight,
-      });
-    }
-  } finally {
-    try {
-      video.currentTime = originalTime;
+      if (frames.length >= 2) {
+        playbackSuccess = true;
+      }
     } catch {
-      // ignore
+      playbackSuccess = false;
     }
-    canvas.remove();
   }
+
+  // Method 2: Seek-based extraction fallback (for indexed MP4 or video files with seek tables)
+  if (!playbackSuccess || frames.length < 2) {
+    frames.length = 0;
+    const totalSamples = Math.min(150, Math.floor(maxDurationMs / sampleStepMs));
+    const originalTime = video.currentTime;
+
+    try {
+      for (let i = 0; i < totalSamples; i++) {
+        const timeMs = i * sampleStepMs;
+        const targetSec = timeMs / 1000;
+
+        await new Promise<void>((resolve) => {
+          let finished = false;
+          const cleanup = () => {
+            if (finished) return;
+            finished = true;
+            video.removeEventListener("seeked", onSeeked);
+            clearTimeout(timeoutId);
+            resolve();
+          };
+          const onSeeked = () => cleanup();
+          const timeoutId = setTimeout(cleanup, 120);
+          video.addEventListener("seeked", onSeeked, { once: true });
+          try {
+            video.currentTime = targetSec;
+          } catch {
+            cleanup();
+          }
+        });
+
+        ctx.drawImage(video, 0, 0, canvasWidth, canvasHeight);
+        const img = ctx.getImageData(0, 0, canvasWidth, canvasHeight);
+        frames.push({
+          timestampMs: timeMs,
+          data: img.data,
+          width: canvasWidth,
+          height: canvasHeight,
+        });
+      }
+    } finally {
+      try {
+        video.currentTime = originalTime;
+      } catch {
+        // ignore
+      }
+    }
+  }
+
+  canvas.remove();
 
   return detectActivityEventsFromFrames(frames, canvasWidth, canvasHeight, {
     differenceThreshold: 12,

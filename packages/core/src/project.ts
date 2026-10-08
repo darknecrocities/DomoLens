@@ -101,6 +101,16 @@ export interface TimelineClip {
 
 export type BackgroundKind = "solid" | "gradient" | "mesh" | "image";
 
+export type WindowFrameStyle =
+  | "macos"
+  | "safari"
+  | "chrome"
+  | "glass"
+  | "terminal"
+  | "none";
+
+export type CameraPhysicsPreset = "spring" | "smooth" | "snappy" | "linear";
+
 export interface ProjectLooks {
   backgroundType: BackgroundKind;
   /** CSS background value (e.g. solid hex or gradient definition). */
@@ -129,6 +139,20 @@ export interface ProjectLooks {
   autoTrackScale?: number;
   /** Aspect ratio of the canvas (default "16:9"). */
   aspectRatio?: "16:9" | "9:16" | "1:1" | "4:3";
+  /** Window mockup frame shell around the recording. */
+  windowFrame?: WindowFrameStyle;
+  /** 3D Perspective tilt pitch angle (-15 to 15 degrees). */
+  tiltAngle?: number;
+  /** Motion blur strength (0.0 to 1.0). */
+  motionBlur?: number;
+  /** Camera physics model for zoom transitions. */
+  cameraPhysics?: CameraPhysicsPreset;
+  /** Primary brand accent color (e.g. #6366f1) for badges and accents. */
+  brandAccentColor?: string;
+  /** Browser mockup custom URL string (e.g. "app.domain.com"). */
+  mockupUrl?: string;
+  /** Enable dynamic video background glow blur. */
+  ambientBackdropBlur?: boolean;
 }
 
 /** Video effect types that can be placed on the timeline or attached to keyframes. */
@@ -183,6 +207,8 @@ export interface TextOverlay {
   fontSize: number;
   color: string;
   bgColor?: string;
+  badge?: string; // Optional pill badge e.g. "STEP 1" or "NEW"
+  style?: "headline" | "badge" | "callout" | "subtitle";
 }
 
 /** An audio track or sound effect on the timeline. */
@@ -204,7 +230,16 @@ export interface ProjectAiData {
 }
 
 export type ClickSoundPreset = "bop" | "click" | "tap" | "none";
-export type TypingSoundPreset = "mechanical" | "laptop" | "typewriter" | "none";
+export type TypingSoundPreset =
+  | "thock"
+  | "creamy"
+  | "thack"
+  | "clicky"
+  | "thick"
+  | "mechanical"
+  | "laptop"
+  | "typewriter"
+  | "none";
 
 export interface ProjectAudioSettings {
   /** Whether clicks automatically trigger a tactile sound effect. */
@@ -228,7 +263,7 @@ export const DEFAULT_AUDIO_SETTINGS: ProjectAudioSettings = {
   clickSoundPreset: "bop",
   clickSoundVolume: 0.7,
   typingSoundEnabled: true,
-  typingSoundPreset: "mechanical",
+  typingSoundPreset: "creamy",
   typingSoundVolume: 0.6,
   musicDuckingEnabled: true,
   duckingAmount: 0.45,
@@ -259,11 +294,17 @@ export const DEFAULT_LOOKS: ProjectLooks = {
   shadow: "lift",
   cursorStyle: "hidden",
   showCursor: false,
-  showClickRipples: false,
+  showClickRipples: true,
   cursorSize: 1.4,
   cursorSmoothing: "smooth",
-  autoTrackCursor: true,
+  autoTrackCursor: false,
   autoTrackScale: 1.6,
   aspectRatio: "16:9",
+  windowFrame: "macos",
+  tiltAngle: 0,
+  motionBlur: 0,
+  cameraPhysics: "spring",
+  brandAccentColor: "#6366f1",
+  mockupUrl: "app.domolens.dev",
 };
 

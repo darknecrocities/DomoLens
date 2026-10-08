@@ -31,7 +31,7 @@ const SHOWCASE_TEMPLATES: ShowcaseTemplate[] = [
     id: "demo-saas",
     title: "SaaS Product Walkthrough",
     subtitle: "Web App & Metrics Showcase",
-    description: "Tight button click focus, smooth cursor tracking, context zoom-out, and ambient lo-fi music.",
+    description: "Tight button click focus, smooth cursor tracking, context zoom-out, and tactile click bops.",
     duration: "14s",
     zoomsCount: "3 Zooms",
     soundType: "Click Bops",

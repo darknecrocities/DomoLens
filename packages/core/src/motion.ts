@@ -259,6 +259,8 @@ export function detectActivityEventsFromFrames(
     sampleCount: number;
   } | null = null;
 
+  let prevCentroid: { x: number; y: number; timeMs: number } | null = null;
+
   for (let i = 1; i < sorted.length; i++) {
     const f = sorted[i]!;
     const w = f.width ?? defaultWidth;
@@ -277,14 +279,44 @@ export function detectActivityEventsFromFrames(
 
       const kind = classifyFrameActivity(diff.motionEnergy, centroid.spread, minEnergy, maxSpread);
 
-      if (kind === "click") {
-        // Check if this is part of sustained typing or an isolated click
-        if (activeTypingCluster && f.timestampMs - activeTypingCluster.endTimeMs <= 1200) {
-          activeTypingCluster.endTimeMs = f.timestampMs;
-          activeTypingCluster.sampleCount++;
+      // Check whether cursor is actively translating across the screen:
+      // When a user steers the mouse across the display, displacement between consecutive sample frames
+      // is large (> 0.035 normalized distance) in rapid succession (< 400ms).
+      // A translating cursor in flight represents trajectory motion, NOT a click or keyframe trigger!
+      const displacement = prevCentroid
+        ? Math.hypot(centroid.x - prevCentroid.x, centroid.y - prevCentroid.y)
+        : 0;
+      const dtSincePrev = prevCentroid ? f.timestampMs - prevCentroid.timeMs : 9999;
+      const isCursorInFlight = prevCentroid !== null && dtSincePrev < 300 && displacement > 0.08;
+
+
+      if (kind === "click" && !isCursorInFlight) {
+        const clickId = `click-opt-${f.timestampMs}`;
+        const clickEvt: ClickEvent = {
+          id: clickId,
+          timestampMs: f.timestampMs,
+          x: centroid.x,
+          y: centroid.y,
+          button: "left",
+        };
+
+        // Determine if this frame is a continuous typing character keystroke:
+        // Typing requires rapid successive strokes (<= 450ms) within a tiny, localized character box
+        // (dy < 0.025 and dx < 0.08).
+        // Clicks on tabs/buttons (which are typically separated by >= 0.10 horizontal distance
+        // or >= 400ms time) are NEVER converted to typing.
+        const isTypingStroke =
+          Boolean(activeTypingCluster) &&
+          f.timestampMs - activeTypingCluster!.endTimeMs <= 450 &&
+          Math.abs(centroid.y - activeTypingCluster!.centerY) < 0.025 &&
+          Math.abs(centroid.x - activeTypingCluster!.centerX) < 0.08;
+
+        if (isTypingStroke) {
+          activeTypingCluster!.endTimeMs = f.timestampMs;
+          activeTypingCluster!.sampleCount++;
         } else {
-          // Finalize previous typing cluster if one existed
-          if (activeTypingCluster && activeTypingCluster.sampleCount >= 2) {
+          // Finalize previous typing cluster if one existed with at least 3 keystroke samples
+          if (activeTypingCluster && activeTypingCluster.sampleCount >= 3) {
             const typingId = `type-opt-${activeTypingCluster.startTimeMs}`;
             const dur = Math.max(0, activeTypingCluster.endTimeMs - activeTypingCluster.startTimeMs);
             interactions.push({
@@ -293,38 +325,27 @@ export function detectActivityEventsFromFrames(
               timestampMs: activeTypingCluster.startTimeMs,
               x: activeTypingCluster.centerX,
               y: activeTypingCluster.centerY,
-              snippet: "Activity Target",
+              snippet: undefined,
               durationMs: dur,
             });
-            activeTypingCluster = null;
           }
+          activeTypingCluster = null;
 
-          // Check if distance to previous interaction is very small (text caret)
-          const isNearPrevious =
-            interactions.length > 0 &&
-            Math.hypot(
-              centroid.x - interactions[interactions.length - 1]!.x,
-              centroid.y - interactions[interactions.length - 1]!.y,
-            ) < 0.08 &&
-            f.timestampMs - interactions[interactions.length - 1]!.timestampMs < 1800;
+          // Deduplicate optical flutter and enforce refractory cooldown:
+          // 1. Refractory period: at least 650ms for distinct positions (> 0.08 distance), 1200ms for same location
+          // 2. Spatial deduplication: ignore clicks within 0.04 distance if under 1200ms
+          const lastClick = clicks[clicks.length - 1];
+          const timeSinceLastClick = lastClick ? f.timestampMs - lastClick.timestampMs : 99999;
+          const distFromLastClick = lastClick
+            ? Math.hypot(centroid.x - lastClick.x, centroid.y - lastClick.y)
+            : 99999;
 
-          if (isNearPrevious) {
-            activeTypingCluster = {
-              startTimeMs: f.timestampMs,
-              endTimeMs: f.timestampMs,
-              centerX: centroid.x,
-              centerY: centroid.y,
-              sampleCount: 1,
-            };
-          } else {
-            const clickId = `click-opt-${f.timestampMs}`;
-            const clickEvt: ClickEvent = {
-              id: clickId,
-              timestampMs: f.timestampMs,
-              x: centroid.x,
-              y: centroid.y,
-              button: "left",
-            };
+          const isRefractoryViolation = distFromLastClick > 0.08
+            ? timeSinceLastClick < 650
+            : timeSinceLastClick < 1200;
+          const isDuplicateLocation = timeSinceLastClick < 1200 && distFromLastClick < 0.04;
+
+          if (!isRefractoryViolation && !isDuplicateLocation) {
             clicks.push(clickEvt);
             interactions.push({
               id: clickId,
@@ -334,16 +355,31 @@ export function detectActivityEventsFromFrames(
               y: centroid.y,
               button: "left",
             });
+
+            // Start candidate cluster in case rapid character typing follows in this exact spot
+            activeTypingCluster = {
+              startTimeMs: f.timestampMs,
+              endTimeMs: f.timestampMs,
+              centerX: centroid.x,
+              centerY: centroid.y,
+              sampleCount: 1,
+            };
           }
         }
       }
+
+      if (centroid.spread <= maxSpread) prevCentroid = {
+        x: centroid.x,
+        y: centroid.y,
+        timeMs: f.timestampMs,
+      };
     }
 
     prevLuma = currLuma;
   }
 
   // Finalize any trailing typing cluster
-  if (activeTypingCluster && activeTypingCluster.sampleCount >= 2) {
+  if (activeTypingCluster && activeTypingCluster.sampleCount >= 3) {
     const typingId = `type-opt-${activeTypingCluster.startTimeMs}`;
     const dur = Math.max(0, activeTypingCluster.endTimeMs - activeTypingCluster.startTimeMs);
     interactions.push({
@@ -352,7 +388,7 @@ export function detectActivityEventsFromFrames(
       timestampMs: activeTypingCluster.startTimeMs,
       x: activeTypingCluster.centerX,
       y: activeTypingCluster.centerY,
-      snippet: "Text Input",
+      snippet: undefined,
       durationMs: dur,
     });
   }

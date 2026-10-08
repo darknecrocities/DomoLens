@@ -40,17 +40,11 @@ export function App() {
           </div>
 
           <a
-            href="http://127.0.0.1:1420"
-            className="flex items-center gap-1.5 rounded-full border border-white/[0.14] bg-white/[0.06] backdrop-blur-xl px-3.5 py-1.5 font-mono text-xs font-semibold uppercase text-neutral-200 hover:text-white hover:bg-white/[0.14] hover:border-white/25 active:scale-95 transition-all shadow-[inset_0_1px_0_rgba(255,255,255,0.12)]"
-          >
-            <span>Launch Studio</span>
-          </a>
-          <a
             href="#download"
             className="flex items-center gap-1.5 rounded-full bg-white px-4 py-1.5 font-mono text-xs font-bold uppercase text-black hover:bg-neutral-100 active:scale-95 transition-all shadow-[0_0_20px_rgba(255,255,255,0.22)]"
           >
             <Download className="size-3.5" />
-            <span>Download</span>
+            <span>Download App</span>
           </a>
         </div>
       </nav>

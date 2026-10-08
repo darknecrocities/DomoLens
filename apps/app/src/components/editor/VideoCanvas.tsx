@@ -27,6 +27,7 @@ export function VideoCanvas({ project, currentTimeMs: propTimeMs }: VideoCanvasP
   const viewportRef = useRef<HTMLDivElement>(null);
   const prevTimeRef = useRef(currentTimeMs);
   const triggeredEventsRef = useRef<Set<string>>(new Set());
+  const lastClickSfxPlaybackTimeRef = useRef<number>(-999999);
   const [clickShiftMarker, setClickShiftMarker] = useState<{ x: number; y: number; id: number } | null>(null);
 
   const handleCanvasClick = (e: React.MouseEvent<HTMLDivElement>) => {
@@ -67,6 +68,8 @@ export function VideoCanvas({ project, currentTimeMs: propTimeMs }: VideoCanvasP
       cursorSmoothing: looks.cursorSmoothing || "smooth",
       clicks,
       alreadySmoothed: true,
+      continuousGlide: true,
+      maxGlideGapMs: 1000,
     } as const;
     return (tMs: number) => {
       return calculateCameraAtTime(tMs, zoomBlocks, 1000, 400, smoothedTrajectory, keyframes, opts);
@@ -223,8 +226,9 @@ export function VideoCanvas({ project, currentTimeMs: propTimeMs }: VideoCanvasP
     const clickSoundEnabled = audioSettings?.clickSoundEnabled !== false;
     const typingSoundEnabled = audioSettings?.typingSoundEnabled !== false;
 
-    // Zero-latency edge-triggered procedural click bop sound
-    if (clickSoundEnabled) {
+    // Zero-latency edge-triggered procedural click bop sound (only if keyframes don't already handle click sounds)
+    const hasAnyKeyframeClicks = Boolean(keyframes?.some((k) => k.sound === "click"));
+    if (clickSoundEnabled && !hasAnyKeyframeClicks) {
       for (const click of clicks) {
         if (
           !triggeredEventsRef.current.has(click.id) &&
@@ -232,9 +236,11 @@ export function VideoCanvas({ project, currentTimeMs: propTimeMs }: VideoCanvasP
           click.timestampMs <= currentTimeMs + 90
         ) {
           triggeredEventsRef.current.add(click.id);
-          sfx.playClickBop(audioSettings?.clickSoundPreset || "bop", audioSettings?.clickSoundVolume || 0.7);
-          if (audioSettings?.musicDuckingEnabled) {
-            sfx.duckMusic(400, audioSettings.duckingAmount);
+
+          const nowAudio = performance.now();
+          if (nowAudio - lastClickSfxPlaybackTimeRef.current >= 420) {
+            lastClickSfxPlaybackTimeRef.current = nowAudio;
+            sfx.playClickBop(audioSettings?.clickSoundPreset || "bop", audioSettings?.clickSoundVolume || 0.7);
           }
         }
       }
@@ -262,9 +268,6 @@ export function VideoCanvas({ project, currentTimeMs: propTimeMs }: VideoCanvasP
               audioSettings?.typingSoundVolume || 0.55,
             );
           }
-          if (audioSettings?.musicDuckingEnabled) {
-            sfx.duckMusic(550, audioSettings.duckingAmount);
-          }
         }
       }
     }
@@ -286,31 +289,19 @@ export function VideoCanvas({ project, currentTimeMs: propTimeMs }: VideoCanvasP
               false,
             );
           } else if (kf.sound === "click" && clickSoundEnabled) {
-            sfx.playClickBop(
-              (kf.soundPreset as any) || audioSettings?.clickSoundPreset || "bop",
-              kf.soundVolume || audioSettings?.clickSoundVolume || 0.7,
-            );
-          }
-          if (audioSettings?.musicDuckingEnabled) {
-            sfx.duckMusic(450, audioSettings.duckingAmount);
+            const nowAudio = performance.now();
+            if (nowAudio - lastClickSfxPlaybackTimeRef.current >= 420) {
+              lastClickSfxPlaybackTimeRef.current = nowAudio;
+              sfx.playClickBop(
+                (kf.soundPreset as any) || audioSettings?.clickSoundPreset || "bop",
+                kf.soundVolume || audioSettings?.clickSoundVolume || 0.7,
+              );
+            }
           }
         }
       }
     }
   }, [isPlaying, currentTimeMs, clicks, project.interactions, keyframes, project.audioSettings]);
-
-  // Sync background music track
-  useEffect(() => {
-    const musicTrack = project.audioTracks?.find((t) => t.type === "music" && !t.muted);
-    if (!musicTrack || !isPlaying) {
-      sfx.pauseMusic();
-      return;
-    }
-    sfx.playMusic(musicTrack.url, musicTrack.volume, true);
-    return () => {
-      sfx.pauseMusic();
-    };
-  }, [isPlaying, project.audioTracks]);
 
 
   const rawMedia = summary.media;
@@ -374,20 +365,83 @@ export function VideoCanvas({ project, currentTimeMs: propTimeMs }: VideoCanvasP
       style={{
         background: looks.backgroundValue,
         padding: `clamp(6px, 2.5vw, ${looks.padding}px)`,
+        perspective: "1200px",
       }}
     >
-      {/* Video Viewport with Framing and Click-to-Shift */}
+      {/* Ambient Video Blur Glow (Apple Keynote Style) */}
+      {looks.ambientBackdropBlur && (resolvedMediaSrc || thumbnailSrc) && (
+        <div className="absolute inset-0 overflow-hidden pointer-events-none opacity-40 blur-3xl scale-110 select-none">
+          {resolvedMediaSrc ? (
+            <video
+              src={resolvedMediaSrc}
+              muted
+              playsInline
+              className="size-full object-cover"
+            />
+          ) : (
+            <img src={thumbnailSrc!} alt="" className="size-full object-cover" />
+          )}
+        </div>
+      )}
+
+      {/* Video Viewport with Framing, 3D Tilt, and Click-to-Shift */}
       <div
         ref={viewportRef}
+        data-tutorial-target="canvas-player"
         onClick={handleCanvasClick}
-        className="relative max-h-full max-w-full overflow-hidden bg-ink-950 cursor-crosshair group select-none"
+        className="relative max-h-full max-w-full overflow-hidden bg-ink-950 cursor-crosshair group select-none transition-transform duration-300"
         style={{
           aspectRatio: viewportAspectRatio,
           borderRadius: `${looks.borderRadius}px`,
           boxShadow: shadowStyles[looks.shadow] || shadowStyles.lift,
+          transform: looks.tiltAngle
+            ? `rotateX(${looks.tiltAngle}deg) rotateY(${-(looks.tiltAngle * 0.45)}deg)`
+            : undefined,
+          transformStyle: "preserve-3d",
         }}
         title="Click anywhere to shift camera focal center"
       >
+        {/* Modular Window Mockup Shell Bar */}
+        {looks.windowFrame && looks.windowFrame !== "none" && (
+          <div className="absolute top-0 inset-x-0 h-7 z-30 flex items-center px-3 bg-black/40 backdrop-blur-md border-b border-white/10 select-none pointer-events-none">
+            {/* Traffic Light Dots */}
+            {(looks.windowFrame === "macos" ||
+              looks.windowFrame === "safari" ||
+              looks.windowFrame === "terminal") && (
+              <div className="flex items-center gap-1.5 shrink-0">
+                <span className="size-2.5 rounded-full bg-[#ff5f56] border border-black/20" />
+                <span className="size-2.5 rounded-full bg-[#ffbd2e] border border-black/20" />
+                <span className="size-2.5 rounded-full bg-[#27c93f] border border-black/20" />
+              </div>
+            )}
+
+            {/* Safari Omnibar */}
+            {looks.windowFrame === "safari" && (
+              <div className="mx-auto flex items-center gap-1.5 rounded bg-white/10 px-3 py-0.5 text-[10px] font-mono text-white/80 border border-white/10 max-w-xs truncate">
+                <span className="size-1.5 rounded-full bg-emerald-400" />
+                <span>{looks.mockupUrl || "app.domolens.dev"}</span>
+              </div>
+            )}
+
+            {/* Terminal Title */}
+            {looks.windowFrame === "terminal" && (
+              <div className="mx-auto text-[10px] font-mono text-neutral-400">
+                {looks.mockupUrl || "terminal — zsh — 80x24"}
+              </div>
+            )}
+
+            {/* Chrome Tab Bar */}
+            {looks.windowFrame === "chrome" && (
+              <div className="flex items-center gap-2">
+                <div className="flex items-center gap-1.5 rounded-t-md bg-neutral-800/90 px-2.5 py-0.5 text-[10px] font-medium text-white border-t border-x border-white/10">
+                  <span className="size-2 rounded-full bg-indigo-400" />
+                  <span className="max-w-[120px] truncate">{looks.mockupUrl || "DomoLens Studio"}</span>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
         {/* Dynamic Zooming Video Container: zero latency with hardware accelerated 3D transform */}
         <div
           ref={zoomLayerRef}
@@ -512,6 +566,41 @@ export function VideoCanvas({ project, currentTimeMs: propTimeMs }: VideoCanvasP
               )}
             </div>
           )}
+
+          {/* Tactile Click Ripples Plotted Live on Screen */}
+          {(looks.showClickRipples !== false) && clicks && clicks.map((click) => {
+            const elapsed = currentTimeMs - click.timestampMs;
+            if (elapsed < -60 || elapsed > 450) return null;
+            const progress = Math.min(1, Math.max(0, (elapsed + 60) / 510));
+            const ringScale = 0.3 + progress * 2.2;
+            const ringOpacity = Math.max(0, 1 - progress);
+            return (
+              <div
+                key={`ripple-${click.id}`}
+                className="pointer-events-none absolute -translate-x-1/2 -translate-y-1/2 z-25"
+                style={{
+                  left: `${click.x * 100}%`,
+                  top: `${click.y * 100}%`,
+                }}
+              >
+                {/* Expanding tactile ripple ring */}
+                <div
+                  className="size-11 rounded-full border-2 border-white shadow-[0_0_14px_rgba(255,255,255,0.85)]"
+                  style={{
+                    transform: `scale(${ringScale})`,
+                    opacity: ringOpacity,
+                  }}
+                />
+                {/* Center contact dot */}
+                <div
+                  className="absolute top-1/2 left-1/2 size-2.5 -translate-x-1/2 -translate-y-1/2 rounded-full bg-white shadow-[0_0_8px_rgba(255,255,255,1)]"
+                  style={{
+                    opacity: Math.max(0, 1 - progress * 1.6),
+                  }}
+                />
+              </div>
+            );
+          })}
         </div>
 
         {/* Dynamic Vignette Effect Overlay */}
@@ -591,12 +680,22 @@ export function VideoCanvas({ project, currentTimeMs: propTimeMs }: VideoCanvasP
           return (
             <div
               key={textOverlay.id}
-              className="absolute -translate-x-1/2 -translate-y-1/2 pointer-events-none z-20 text-center transition-all select-none"
+              className="absolute -translate-x-1/2 -translate-y-1/2 pointer-events-none z-20 text-center transition-all select-none flex flex-col items-center gap-1"
               style={{
                 left: `${textOverlay.x * 100}%`,
                 top: `${textOverlay.y * 100}%`,
               }}
             >
+              {textOverlay.badge && (
+                <span
+                  className="rounded-full px-2.5 py-0.5 text-[10px] font-black uppercase tracking-wider text-white shadow-md"
+                  style={{
+                    backgroundColor: looks.brandAccentColor || "#6366f1",
+                  }}
+                >
+                  {textOverlay.badge}
+                </span>
+              )}
               <span
                 className="inline-block rounded-xl px-4 py-1.5 font-bold shadow-lg backdrop-blur-sm"
                 style={{

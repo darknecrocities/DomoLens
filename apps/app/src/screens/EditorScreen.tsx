@@ -3,10 +3,12 @@ import {
   ArrowLeft,
   Download,
   Film,
+  HelpCircle,
   Settings,
   Sliders,
   Sparkles,
   Trash2,
+  Wand2,
 } from "lucide-react";
 import { copy } from "../copy/en";
 import { Button } from "../components/ui/Button";
@@ -16,10 +18,13 @@ import { Timeline } from "../components/editor/Timeline";
 import { LlmSidebar } from "../components/editor/LlmSidebar";
 import { ToolsSidebar } from "../components/editor/ToolsSidebar";
 import { ExportModal } from "../components/editor/ExportModal";
+import { TemplatePickerModal } from "../components/editor/TemplatePickerModal";
 import { SettingsModal } from "../components/settings/SettingsModal";
 import { DeleteModal } from "../components/home/DeleteModal";
+import { SpotlightTutorial } from "../components/editor/SpotlightTutorial";
 import { useEditor } from "../store/editor";
 import { useNav } from "../store/nav";
+import { useTutorial } from "../store/tutorial";
 
 interface EditorScreenProps {
   id: string;
@@ -45,11 +50,26 @@ export function EditorScreen({ id }: EditorScreenProps) {
   const redo = useEditor((s) => s.redo);
   const isExportModalOpen = useEditor((s) => s.isExportModalOpen);
   const setExportModalOpen = useEditor((s) => s.setExportModalOpen);
+  const isTemplateModalOpen = useEditor((s) => s.isTemplateModalOpen);
+  const setTemplateModalOpen = useEditor((s) => s.setTemplateModalOpen);
 
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   // Mobile responsive view selector (<md)
   const [mobileTab, setMobileTab] = useState<"canvas" | "ai" | "tools">("canvas");
+
+  const hasSeenTutorial = useTutorial((s) => s.hasSeenTutorial);
+  const startTutorial = useTutorial((s) => s.startTutorial);
+
+  // Auto-launch tutorial card on first launch
+  useEffect(() => {
+    if (!hasSeenTutorial && project) {
+      const timer = setTimeout(() => {
+        startTutorial();
+      }, 700);
+      return () => clearTimeout(timer);
+    }
+  }, [hasSeenTutorial, project, startTutorial]);
 
   // Load project on mount or when id changes
   useEffect(() => {
@@ -179,6 +199,17 @@ export function EditorScreen({ id }: EditorScreenProps) {
             <span>AI Director</span>
           </button>
 
+          {/* Templates Modal Trigger */}
+          <button
+            type="button"
+            onClick={() => setTemplateModalOpen(true)}
+            className="flex items-center gap-1.5 rounded-lg border border-indigo-500/30 bg-indigo-950/40 px-2 sm:px-2.5 py-1 text-xs font-semibold text-indigo-300 hover:bg-indigo-900/60 hover:text-white hover:border-indigo-400 transition-all shadow-sm"
+            title="Browse & Apply Motion Video Templates"
+          >
+            <Wand2 className="size-3.5 text-indigo-400" />
+            <span className="hidden sm:inline">Templates</span>
+          </button>
+
           {/* Desktop Right Tools Sidebar Toggle */}
           <button
             type="button"
@@ -206,6 +237,15 @@ export function EditorScreen({ id }: EditorScreenProps) {
           />
 
           <IconButton
+            label="Studio Walkthrough Tutorial"
+            icon={<HelpCircle className="size-4" />}
+            variant="ghost"
+            size="sm"
+            onClick={startTutorial}
+            className="text-neutral-400 hover:text-white hover:bg-white/10"
+          />
+
+          <IconButton
             label={copy.editor.settingsBtn}
             icon={<Settings className="size-4" />}
             variant="ghost"
@@ -216,6 +256,7 @@ export function EditorScreen({ id }: EditorScreenProps) {
           <Button
             variant="primary"
             size="sm"
+            data-tutorial-target="export-button"
             icon={<Download className="size-4 text-ink-950" />}
             onClick={() => setExportModalOpen(true)}
             className="px-2.5 sm:px-3.5"
@@ -320,10 +361,15 @@ export function EditorScreen({ id }: EditorScreenProps) {
         project={project}
         onClose={() => setExportModalOpen(false)}
       />
+      <TemplatePickerModal
+        open={isTemplateModalOpen}
+        onClose={() => setTemplateModalOpen(false)}
+      />
       <SettingsModal
         open={settingsOpen}
         onClose={() => setSettingsOpen(false)}
       />
+      <SpotlightTutorial />
       {showDeleteModal && (
         <DeleteModal
           open={showDeleteModal}

@@ -121,4 +121,146 @@ describe("useRecorder store", () => {
 
     globalThis.sessionStorage = originalStorage;
   });
+
+  it("does not generate dummy text overlay when typing interaction has no snippet or dummy snippet", async () => {
+    useRecorder.setState({
+      state: "recording",
+      elapsedMs: 6000,
+      clicks: [
+        { id: "c-opt", timestampMs: 2000, x: 0.5, y: 0.5, button: "left" },
+      ],
+      interactions: [
+        { id: "c-opt", type: "click", timestampMs: 2000, x: 0.5, y: 0.5, button: "left" },
+        { id: "t-opt", type: "typing", timestampMs: 2000, x: 0.5, y: 0.5 },
+      ],
+      cursorTrajectory: [
+        { timestampMs: 0, x: 0.5, y: 0.5 },
+        { timestampMs: 2000, x: 0.5, y: 0.5 },
+      ],
+    });
+
+    const storageMap = new Map<string, string>();
+    const originalStorage = globalThis.sessionStorage;
+    globalThis.sessionStorage = {
+      getItem: (key: string) => storageMap.get(key) ?? null,
+      setItem: (key: string, val: string) => storageMap.set(key, val),
+      removeItem: (key: string) => storageMap.delete(key),
+      clear: () => storageMap.clear(),
+      length: 0,
+      key: () => null,
+    };
+
+    const summary = await useRecorder.getState().stopRecording();
+    const saved = globalThis.sessionStorage.getItem(`domolens_project_${summary?.id}`);
+    const project = JSON.parse(saved!);
+
+    // Must NOT create dummy text overlay
+    expect(project.textOverlays.length).toBe(0);
+
+    // AI chapters must use clean title
+    expect(project.aiData.chapters[0]?.title).toBe("Typing Focus");
+
+    globalThis.sessionStorage = originalStorage;
+  });
+
+  it("stopRecording strictly keeps full screen only when no clicks occurred during recording", async () => {
+    useRecorder.setState({
+      state: "recording",
+      elapsedMs: 12000,
+      clicks: [],
+      interactions: [],
+      cursorTrajectory: [
+        { timestampMs: 0, x: 0.5, y: 0.5 },
+        { timestampMs: 3000, x: 0.2, y: 0.2 },
+        { timestampMs: 6000, x: 0.8, y: 0.8 },
+        { timestampMs: 9000, x: 0.4, y: 0.4 },
+        { timestampMs: 12000, x: 0.5, y: 0.5 },
+      ],
+    });
+
+    const storageMap = new Map<string, string>();
+    const originalStorage = globalThis.sessionStorage;
+    globalThis.sessionStorage = {
+      getItem: (key: string) => storageMap.get(key) ?? null,
+      setItem: (key: string, val: string) => storageMap.set(key, val),
+      removeItem: (key: string) => storageMap.delete(key),
+      clear: () => storageMap.clear(),
+      length: 0,
+      key: () => null,
+    };
+
+    const summary = await useRecorder.getState().stopRecording();
+    const saved = globalThis.sessionStorage.getItem(`domolens_project_${summary?.id}`);
+    const project = JSON.parse(saved!);
+
+    // Strictly full screen only: 0 zoom blocks and 0 keyframes!
+    expect(project.zoomBlocks).toHaveLength(0);
+    expect(project.keyframes).toHaveLength(0);
+
+    globalThis.sessionStorage = originalStorage;
+  });
+
+  it("stopRecording ignores finish recording click at the end and keeps full screen", async () => {
+    useRecorder.setState({
+      state: "recording",
+      elapsedMs: 10000,
+      clicks: [
+        // Finish recording click at 9500ms
+        { id: "click-finish", timestampMs: 9500, x: 0.95, y: 0.05, button: "left" },
+      ],
+      interactions: [
+        { id: "click-finish", type: "click", timestampMs: 9500, x: 0.95, y: 0.05, button: "left" },
+      ],
+      cursorTrajectory: [
+        { timestampMs: 0, x: 0.5, y: 0.5 },
+        { timestampMs: 9500, x: 0.95, y: 0.05 },
+      ],
+    });
+
+    const storageMap = new Map<string, string>();
+    const originalStorage = globalThis.sessionStorage;
+    globalThis.sessionStorage = {
+      getItem: (key: string) => storageMap.get(key) ?? null,
+      setItem: (key: string, val: string) => storageMap.set(key, val),
+      removeItem: (key: string) => storageMap.delete(key),
+      clear: () => storageMap.clear(),
+      length: 0,
+      key: () => null,
+    };
+
+    const summary = await useRecorder.getState().stopRecording();
+    const saved = globalThis.sessionStorage.getItem(`domolens_project_${summary?.id}`);
+    const project = JSON.parse(saved!);
+
+    // Finish click was filtered out, so 0 clicks remain -> strictly full screen only!
+    expect(project.clicks).toHaveLength(0);
+    expect(project.zoomBlocks).toHaveLength(0);
+    expect(project.keyframes).toHaveLength(0);
+
+    globalThis.sessionStorage = originalStorage;
+  });
+
+  it("deduplicates rapid duplicate clicks within 300ms at virtually the same coordinates", () => {
+    useRecorder.setState({ state: "recording" });
+
+    // Click 1: Normal click
+    useRecorder.getState().recordClick(0.35, 0.45, "left");
+    expect(useRecorder.getState().clicks).toHaveLength(1);
+
+    // Click 2: Spurious duplicate 20ms later at identical location (e.g. DOM mousedown + global click)
+    useRecorder.getState().recordClick(0.352, 0.451, "left");
+    expect(useRecorder.getState().clicks).toHaveLength(1); // Dropped!
+
+    // Click 3: Legitimate subsequent click elsewhere
+    useRecorder.getState().recordClick(0.70, 0.20, "left");
+    expect(useRecorder.getState().clicks).toHaveLength(2);
+  });
+
+  it("supports screen and window sources only without browser tab mode", () => {
+    useRecorder.getState().setSource("screen");
+    expect(useRecorder.getState().source).toBe("screen");
+
+    useRecorder.getState().setSource("window");
+    expect(useRecorder.getState().source).toBe("window");
+  });
 });

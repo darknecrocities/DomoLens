@@ -78,6 +78,7 @@ pub struct AppState {
 static RECORDING_ACTIVE: AtomicBool = AtomicBool::new(false);
 static LAST_MOUSE_POS: Mutex<(f64, f64)> = Mutex::new((0.5, 0.5));
 static LAST_MOVE_EMIT_MS: Mutex<i64> = Mutex::new(0);
+static EVENT_TAP_PORT: Mutex<Option<usize>> = Mutex::new(None);
 
 fn get_data_dir() -> PathBuf {
     if let Some(dirs) = directories::ProjectDirs::from("com", "domolens", "desktop") {
@@ -355,7 +356,73 @@ fn set_recording_hud_mode(app_handle: tauri::AppHandle, floating: bool) -> Resul
 }
 
 #[tauri::command]
+fn drag_window(window: tauri::Window) -> Result<(), String> {
+    window.start_dragging().map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn check_accessibility_permission() -> bool {
+    #[cfg(target_os = "macos")]
+    {
+        extern "C" {
+            fn AXIsProcessTrusted() -> bool;
+        }
+        unsafe { AXIsProcessTrusted() }
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        true
+    }
+}
+
+#[tauri::command]
+fn request_accessibility_permission() -> bool {
+    #[cfg(target_os = "macos")]
+    {
+        extern "C" {
+            fn AXIsProcessTrustedWithOptions(options: *const std::ffi::c_void) -> bool;
+            static kAXTrustedCheckOptionPrompt: *const std::ffi::c_void;
+            fn CFDictionaryCreate(
+                allocator: *mut std::ffi::c_void,
+                keys: *const *const std::ffi::c_void,
+                values: *const *const std::ffi::c_void,
+                num_values: isize,
+                key_callbacks: *const std::ffi::c_void,
+                value_callbacks: *const std::ffi::c_void,
+            ) -> *mut std::ffi::c_void;
+            static kCFBooleanTrue: *const std::ffi::c_void;
+            fn CFRelease(cf: *mut std::ffi::c_void);
+        }
+        unsafe {
+            let key = kAXTrustedCheckOptionPrompt;
+            let val = kCFBooleanTrue;
+            let dict = CFDictionaryCreate(
+                std::ptr::null_mut(),
+                &key,
+                &val,
+                1,
+                std::ptr::null(),
+                std::ptr::null(),
+            );
+            let res = AXIsProcessTrustedWithOptions(dict);
+            if !dict.is_null() {
+                CFRelease(dict);
+            }
+            res
+        }
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        true
+    }
+}
+
+#[tauri::command]
 fn start_global_input_capture() -> Result<(), String> {
+    #[cfg(target_os = "macos")]
+    {
+        let _ = request_accessibility_permission();
+    }
     RECORDING_ACTIVE.store(true, Ordering::Relaxed);
     Ok(())
 }
@@ -424,6 +491,7 @@ pub fn run() {
                         user_info: *mut std::ffi::c_void,
                     ) -> *mut std::ffi::c_void;
                     fn CGEventGetLocation(event: *mut std::ffi::c_void) -> CGPoint;
+                    fn CGEventTapEnable(tap: *mut std::ffi::c_void, enable: bool);
                     fn CGEventCreate(source: *mut std::ffi::c_void) -> *mut std::ffi::c_void;
                     fn CFRelease(cf: *mut std::ffi::c_void);
                     fn CFMachPortCreateRunLoopSource(
@@ -447,6 +515,16 @@ pub fn run() {
                     event: *mut std::ffi::c_void,
                     user_info: *mut std::ffi::c_void,
                 ) -> *mut std::ffi::c_void {
+                    if event_type == 14 || event_type == 0xFFFFFFFE || event_type == 0xFFFFFFFF {
+                        if let Ok(guard) = EVENT_TAP_PORT.lock() {
+                            if let Some(port_addr) = *guard {
+                                unsafe {
+                                    CGEventTapEnable(port_addr as *mut std::ffi::c_void, true);
+                                }
+                            }
+                        }
+                        return event;
+                    }
                     if !RECORDING_ACTIVE.load(Ordering::Relaxed) {
                         return event;
                     }
@@ -575,21 +653,39 @@ pub fn run() {
                         let handle_box = Box::new(handle_clone);
                         let handle_ptr = Box::into_raw(handle_box);
 
-                        let port = CGEventTapCreate(
-                            1,
-                            0,
-                            1,
-                            input_mask,
-                            event_tap_cb,
-                            handle_ptr as *mut std::ffi::c_void,
-                        );
-                        if !port.is_null() {
-                            let source = CFMachPortCreateRunLoopSource(ptr::null_mut(), port, 0);
-                            if !source.is_null() {
-                                let run_loop = CFRunLoopGetCurrent();
-                                CFRunLoopAddSource(run_loop, source, kCFRunLoopCommonModes);
-                                CFRunLoopRun();
+                        loop {
+                            let mut port = CGEventTapCreate(
+                                0, // kCGHIDEventTap
+                                0, // kCGHeadInsertEventTap
+                                1, // kCGEventTapOptionListenOnly
+                                input_mask,
+                                event_tap_cb,
+                                handle_ptr as *mut std::ffi::c_void,
+                            );
+                            if port.is_null() {
+                                port = CGEventTapCreate(
+                                    1, // kCGSessionEventTap
+                                    0,
+                                    1,
+                                    input_mask,
+                                    event_tap_cb,
+                                    handle_ptr as *mut std::ffi::c_void,
+                                );
                             }
+                            if !port.is_null() {
+                                if let Ok(mut guard) = EVENT_TAP_PORT.lock() {
+                                    *guard = Some(port as usize);
+                                }
+                                let source = CFMachPortCreateRunLoopSource(ptr::null_mut(), port, 0);
+                                if !source.is_null() {
+                                    let run_loop = CFRunLoopGetCurrent();
+                                    CFRunLoopAddSource(run_loop, source, kCFRunLoopCommonModes);
+                                    CFRunLoopRun();
+                                }
+                                break;
+                            }
+                            // Sleep 1500ms and retry until accessibility permissions are granted
+                            std::thread::sleep(std::time::Duration::from_millis(1500));
                         }
                     }
                 });
@@ -694,8 +790,11 @@ pub fn run() {
             show_recording_hud,
             hide_recording_hud,
             set_recording_hud_mode,
+            drag_window,
             start_global_input_capture,
             stop_global_input_capture,
+            check_accessibility_permission,
+            request_accessibility_permission,
             get_screen_dimensions
         ])
         .run(tauri::generate_context!())

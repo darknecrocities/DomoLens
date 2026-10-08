@@ -12,7 +12,7 @@ import {
   Bookmark,
   Crosshair,
   MessageSquare,
-  Music,
+  Volume2,
 } from "lucide-react";
 import { useEditor } from "../../store/editor";
 
@@ -80,9 +80,9 @@ export function LlmSidebar() {
       icon: <MessageSquare className="size-3 text-white shrink-0" />,
     },
     {
-      label: "Add Lo-Fi Music",
-      prompt: "Add ambient Lo-Fi background music track",
-      icon: <Music className="size-3 text-white shrink-0" />,
+      label: "Apply Auto AFX",
+      prompt: "Synchronize tactile click bops and mechanical typing sound effects",
+      icon: <Volume2 className="size-3 text-white shrink-0" />,
     },
   ];
 
