@@ -15,37 +15,37 @@ export function FeaturesCarousel() {
       title: "Follows Clicks & Typing",
       desc: "Camera glides with your cursor, holds focus tight on button clicks, and pans smoothly along code or text typing without manual keyframing.",
       icon: MousePointer2,
-      tag: "AUTO MOTION",
+      num: "01",
     },
     {
       title: "Tactile Sound Effects",
       desc: "Subtle bubble bops on button clicks and mechanical keystroke sounds automatically synced to your actions to keep viewers engaged.",
       icon: Volume2,
-      tag: "AUDIO DESIGN",
+      num: "02",
     },
     {
       title: "Studio Window Framing",
       desc: "Make any desktop app look like an Apple keynote: rounded corners, frosted glass backdrops, custom padding, and soft drop shadows.",
       icon: Layers,
-      tag: "COMPOSITION",
+      num: "03",
     },
     {
       title: "One-Click QuickBar HUD",
       desc: "Floating shortcut toolbar for laptop and phone. Hit Option+Space to record, pause, transcribe, and open the studio with zero clutter.",
       icon: Sliders,
-      tag: "ONE TAP",
+      num: "04",
     },
     {
       title: "Visual Multi-Track Timeline",
       desc: "NLE-grade timeline with dedicated track headers for Keyframes, Zoom, Video, Captions, and Audio. Trim with T, split with S, zero overlap.",
       icon: SlidersHorizontal,
-      tag: "TIMELINE",
+      num: "05",
     },
     {
       title: "100% Private On Your Device",
       desc: "Everything runs locally on your computer. Zero cloud rendering queues, no subscriptions, no accounts, and zero watermarks.",
       icon: Shield,
-      tag: "LOCAL-FIRST",
+      num: "06",
     },
   ];
 
@@ -58,7 +58,7 @@ export function FeaturesCarousel() {
       whileInView={{ opacity: 1, y: 0, clipPath: "inset(0% 0% 0% 0%)" }}
       viewport={{ once: true, amount: 0.15 }}
       transition={{ duration: 0.75, ease: [0.16, 1, 0.3, 1] }}
-      className="relative overflow-hidden border-b border-neutral-800 bg-black py-24"
+      className="relative overflow-hidden border-b border-white/[0.08] bg-black py-24"
     >
       <div className="mx-auto max-w-6xl px-4 sm:px-6 mb-12">
         <div className="font-mono text-xs uppercase tracking-widest text-neutral-400">
@@ -72,27 +72,28 @@ export function FeaturesCarousel() {
         </p>
       </div>
 
-      {/* Non-stop infinite marquee carousel */}
-      <div className="relative flex overflow-x-hidden">
-        <div className="animate-marquee flex gap-5 py-2">
+      {/* Non-stop infinite marquee carousel with Edge Mask & 3D Tilt Hover Physics */}
+      <div className="relative flex overflow-x-hidden [mask-image:linear-gradient(to_right,transparent,black_8%,black_92%,transparent)]">
+        <div className="animate-marquee flex gap-5 py-4">
           {duplicated.map((feat, idx) => {
             const Icon = feat.icon;
             return (
-              <div
+              <motion.div
                 key={`${feat.title}-${idx}`}
-                className="flex w-80 shrink-0 flex-col justify-between rounded-xl border border-neutral-800 bg-neutral-900/90 p-6 transition-colors hover:border-neutral-500"
+                whileHover={{ y: -8, scale: 1.02, transition: { duration: 0.25 } }}
+                className="flex w-80 shrink-0 flex-col justify-between rounded-2xl border border-white/[0.08] bg-neutral-950/70 backdrop-blur-xl p-6 transition-colors hover:border-white/20 shadow-xl group cursor-default"
               >
                 <div>
                   <div className="flex items-center justify-between">
-                    <div className="flex size-10 items-center justify-center rounded-lg bg-neutral-800 text-white border border-neutral-700">
+                    <div className="flex size-10 items-center justify-center rounded-xl bg-white/[0.06] text-white border border-white/[0.08] group-hover:bg-white/[0.12] transition-colors">
                       <Icon className="size-5" />
                     </div>
-                    <span className="font-mono text-[10px] font-bold uppercase tracking-wider text-neutral-400 border border-neutral-800 px-2 py-0.5 rounded">
-                      {feat.tag}
+                    <span className="font-mono text-xs font-semibold text-neutral-400">
+                      /{feat.num}
                     </span>
                   </div>
 
-                  <h3 className="mt-6 text-lg font-bold uppercase text-white">
+                  <h3 className="mt-6 text-lg font-bold uppercase text-white tracking-tight">
                     {feat.title}
                   </h3>
                   <p className="mt-2 text-xs leading-relaxed text-neutral-400">
@@ -100,11 +101,11 @@ export function FeaturesCarousel() {
                   </p>
                 </div>
 
-                <div className="mt-6 pt-4 border-t border-neutral-800 flex items-center justify-between font-mono text-[11px] text-neutral-300">
+                <div className="mt-6 pt-4 border-t border-white/[0.08] flex items-center justify-between font-mono text-[11px] text-neutral-300">
                   <span>Instant & Private</span>
                   <Check className="size-3.5 text-white" />
                 </div>
-              </div>
+              </motion.div>
             );
           })}
         </div>

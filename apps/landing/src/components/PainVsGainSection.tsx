@@ -1,5 +1,5 @@
 import { motion } from "framer-motion";
-import { CheckCircle2, Clock, XCircle, Zap } from "lucide-react";
+import { CheckCircle2, Clock, XCircle, Zap, Crosshair } from "lucide-react";
 
 export function PainVsGainSection() {
   const painPoints = [
@@ -41,32 +41,43 @@ export function PainVsGainSection() {
   ];
 
   return (
-    <motion.section
-      initial={{ opacity: 0, y: 50, clipPath: "inset(8% 0% 0% 0%)" }}
-      whileInView={{ opacity: 1, y: 0, clipPath: "inset(0% 0% 0% 0%)" }}
-      viewport={{ once: true, amount: 0.15 }}
-      transition={{ duration: 0.75, ease: [0.16, 1, 0.3, 1] }}
-      className="relative border-b border-neutral-800 bg-neutral-950 px-4 py-24 sm:px-6 lg:px-12"
-    >
-      <div className="mx-auto max-w-6xl">
-        <div className="font-mono text-xs uppercase tracking-widest text-neutral-400">
-          // The Real Problem
-        </div>
-        <h2 className="mt-2 text-3xl font-black uppercase tracking-tight text-white sm:text-5xl">
-          Why Spend 3 Hours Keyframing?
-        </h2>
-        <p className="mt-2 max-w-2xl text-sm text-neutral-400 leading-relaxed">
-          Manual video editing is tedious, exhausting, and keeps you from shipping.
-          DomoLens eliminates the video editing pipeline entirely so you can showcase your product in seconds.
-        </p>
+    <section className="relative overflow-hidden border-b border-white/[0.08] bg-black px-4 py-24 sm:px-6 lg:px-12">
+      {/* Ambient background glow */}
+      <div className="pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 size-[650px] rounded-full bg-white/[0.02] blur-[140px]" />
 
-        <div className="mt-14 grid grid-cols-1 md:grid-cols-2 gap-8 items-stretch">
+      <div className="relative mx-auto max-w-6xl">
+        <motion.div
+          initial={{ opacity: 0, y: 24 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true, amount: 0.3 }}
+          transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
+        >
+          <div className="font-mono text-xs uppercase tracking-widest text-neutral-400">
+            // The Real Problem
+          </div>
+          <h2 className="mt-2 text-3xl font-black uppercase tracking-tight text-white sm:text-5xl">
+            Why Spend 3 Hours Keyframing?
+          </h2>
+          <p className="mt-2 max-w-2xl text-sm text-neutral-400 leading-relaxed">
+            Manual video editing is tedious, exhausting, and keeps you from shipping.
+            DomoLens eliminates the video editing pipeline entirely so you can showcase your product in seconds.
+          </p>
+        </motion.div>
+
+        <div className="mt-14 grid grid-cols-1 md:grid-cols-2 gap-8 items-stretch [perspective:1200px]">
           {/* The Old Way: 3+ Hours of Editing Fatigue */}
-          <div className="rounded-2xl border border-neutral-800 bg-neutral-900/60 p-6 sm:p-8 flex flex-col justify-between shadow-2xl relative overflow-hidden before:absolute before:inset-x-0 before:top-0 before:h-1 before:bg-gradient-to-r before:from-neutral-700 before:to-neutral-900">
+          <motion.div
+            initial={{ opacity: 0, x: -40, rotateY: 6 }}
+            whileInView={{ opacity: 1, x: 0, rotateY: 0 }}
+            whileHover={{ y: -5, transition: { duration: 0.25 } }}
+            viewport={{ once: true, amount: 0.2 }}
+            transition={{ duration: 0.7, ease: [0.16, 1, 0.3, 1] }}
+            className="rounded-2xl border border-white/[0.08] bg-neutral-950/70 p-6 sm:p-8 flex flex-col justify-between shadow-2xl relative overflow-hidden backdrop-blur-xl group hover:border-white/20 transition-colors"
+          >
             <div>
-              <div className="flex items-center justify-between pb-6 border-b border-neutral-800">
-                <div className="flex items-center gap-2.5">
-                  <div className="flex size-10 items-center justify-center rounded-xl bg-neutral-800 border border-neutral-700 text-neutral-400">
+              <div className="flex items-center justify-between pb-6 border-b border-white/[0.08]">
+                <div className="flex items-center gap-3">
+                  <div className="flex size-10 items-center justify-center rounded-xl bg-white/[0.04] border border-white/[0.08] text-neutral-400">
                     <Clock className="size-5" />
                   </div>
                   <div>
@@ -79,63 +90,94 @@ export function PainVsGainSection() {
                 <XCircle className="size-5 text-neutral-500" />
               </div>
 
-              <div className="mt-6 space-y-4">
+              <div className="mt-6 space-y-3.5">
                 {painPoints.map((pain, idx) => (
-                  <div key={idx} className="flex items-start gap-3 rounded-lg border border-neutral-800/80 bg-black/40 p-3.5">
+                  <motion.div
+                    key={idx}
+                    initial={{ opacity: 0, x: -10 }}
+                    whileInView={{ opacity: 1, x: 0 }}
+                    viewport={{ once: true }}
+                    transition={{ delay: 0.1 + idx * 0.08, duration: 0.4 }}
+                    className="flex items-start gap-3 rounded-xl border border-white/[0.04] bg-white/[0.02] p-3.5"
+                  >
                     <XCircle className="size-4 text-neutral-500 shrink-0 mt-0.5" />
                     <div>
-                      <span className="block font-mono text-xs font-bold text-neutral-200 uppercase">{pain.title}</span>
+                      <span className="block font-mono text-xs font-bold text-neutral-300 uppercase">{pain.title}</span>
                       <span className="block text-xs text-neutral-400 mt-1 leading-relaxed">{pain.desc}</span>
                     </div>
-                  </div>
+                  </motion.div>
                 ))}
               </div>
             </div>
 
-            <div className="mt-8 pt-4 border-t border-neutral-800 flex items-center justify-between font-mono text-xs text-neutral-500">
+            <div className="mt-8 pt-4 border-t border-white/[0.08] flex items-center justify-between font-mono text-xs text-neutral-400">
               <span>Result: Hours lost, tired eyes</span>
               <span className="text-neutral-400 font-semibold">Exhausting</span>
             </div>
-          </div>
+          </motion.div>
 
           {/* The DomoLens Way: 30 Seconds, Zero Fatigue */}
-          <div className="rounded-2xl border border-white/40 bg-neutral-900 p-6 sm:p-8 flex flex-col justify-between shadow-[0_0_50px_rgba(255,255,255,0.08)] relative overflow-hidden before:absolute before:inset-x-0 before:top-0 before:h-1 before:bg-gradient-to-r before:from-white before:to-neutral-500">
+          <motion.div
+            initial={{ opacity: 0, x: 40, rotateY: -6 }}
+            whileInView={{ opacity: 1, x: 0, rotateY: 0 }}
+            whileHover={{ y: -5, transition: { duration: 0.25 } }}
+            viewport={{ once: true, amount: 0.2 }}
+            transition={{ duration: 0.7, ease: [0.16, 1, 0.3, 1] }}
+            className="rounded-2xl border border-white/20 bg-neutral-950/90 p-6 sm:p-8 flex flex-col justify-between shadow-[0_0_50px_rgba(255,255,255,0.04)] relative overflow-hidden backdrop-blur-xl group hover:border-white/40 transition-colors"
+          >
+            {/* Animated subtle lens scanning beam */}
+            <motion.div
+              animate={{ y: ["-100%", "200%"] }}
+              transition={{ repeat: Infinity, duration: 4.5, ease: "linear" }}
+              className="pointer-events-none absolute inset-x-0 h-28 bg-gradient-to-b from-transparent via-white/[0.03] to-transparent opacity-80"
+            />
+
             <div>
-              <div className="flex items-center justify-between pb-6 border-b border-neutral-800">
-                <div className="flex items-center gap-2.5">
-                  <div className="flex size-10 items-center justify-center rounded-xl bg-white text-black font-bold shadow-md">
+              <div className="flex items-center justify-between pb-6 border-b border-white/[0.08]">
+                <div className="flex items-center gap-3">
+                  <div className="flex size-10 items-center justify-center rounded-xl bg-white text-black font-bold shadow-lg">
                     <Zap className="size-5 fill-black" />
                   </div>
                   <div>
                     <h3 className="font-bold text-base uppercase text-white tracking-wide">
                       The DomoLens Way
                     </h3>
-                    <span className="font-mono text-[11px] text-white">30 Seconds. Zero Video Editing.</span>
+                    <span className="font-mono text-[11px] text-neutral-300">30 Seconds. Zero Video Editing.</span>
                   </div>
                 </div>
-                <CheckCircle2 className="size-5 text-white" />
+                <div className="flex items-center gap-1 text-white">
+                  <Crosshair className="size-4 animate-spin text-neutral-400 [animation-duration:12s]" />
+                  <CheckCircle2 className="size-5 text-white" />
+                </div>
               </div>
 
-              <div className="mt-6 space-y-4">
+              <div className="mt-6 space-y-3.5">
                 {domolensBenefits.map((benefit, idx) => (
-                  <div key={idx} className="flex items-start gap-3 rounded-lg border border-neutral-700/80 bg-neutral-800/50 p-3.5">
+                  <motion.div
+                    key={idx}
+                    initial={{ opacity: 0, x: 10 }}
+                    whileInView={{ opacity: 1, x: 0 }}
+                    viewport={{ once: true }}
+                    transition={{ delay: 0.15 + idx * 0.08, duration: 0.4 }}
+                    className="flex items-start gap-3 rounded-xl border border-white/10 bg-white/[0.04] p-3.5 hover:border-white/25 transition-colors"
+                  >
                     <CheckCircle2 className="size-4 text-white shrink-0 mt-0.5" />
                     <div>
                       <span className="block font-mono text-xs font-bold text-white uppercase">{benefit.title}</span>
                       <span className="block text-xs text-neutral-300 mt-1 leading-relaxed">{benefit.desc}</span>
                     </div>
-                  </div>
+                  </motion.div>
                 ))}
               </div>
             </div>
 
-            <div className="mt-8 pt-4 border-t border-neutral-800 flex items-center justify-between font-mono text-xs text-neutral-400">
+            <div className="mt-8 pt-4 border-t border-white/[0.08] flex items-center justify-between font-mono text-xs text-neutral-400">
               <span>Result: Launch-ready 60 FPS video</span>
               <span className="text-white font-bold">Shipped in seconds</span>
             </div>
-          </div>
+          </motion.div>
         </div>
       </div>
-    </motion.section>
+    </section>
   );
 }

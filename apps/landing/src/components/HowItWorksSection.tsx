@@ -36,7 +36,7 @@ export function HowItWorksSection() {
       whileInView={{ opacity: 1, y: 0, clipPath: "inset(0% 0% 0% 0%)" }}
       viewport={{ once: true, amount: 0.15 }}
       transition={{ duration: 0.75, ease: [0.16, 1, 0.3, 1] }}
-      className="relative border-b border-neutral-800 bg-neutral-950 px-4 py-24 sm:px-6 lg:px-12"
+      className="relative border-b border-white/[0.08] bg-black px-4 py-24 sm:px-6 lg:px-12"
     >
       <div className="mx-auto max-w-6xl">
         <div className="font-mono text-xs uppercase tracking-widest text-neutral-400">
@@ -49,38 +49,59 @@ export function HowItWorksSection() {
           Capture your product demonstration and let DomoLens handle camera angles, cuts, and framing automatically.
         </p>
 
-        <div className="mt-14 grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
-          {steps.map((step) => {
-            const Icon = step.icon;
-            return (
-              <div
-                key={step.num}
-                className="flex flex-col justify-between rounded-xl border border-neutral-800 bg-neutral-900 p-6 transition-all hover:border-neutral-500"
-              >
-                <div>
-                  <div className="flex items-center justify-between">
-                    <span className="font-mono text-3xl font-black text-white">
-                      {step.num}
-                    </span>
-                    <div className="flex size-9 items-center justify-center rounded-lg bg-neutral-800 text-white border border-neutral-700">
-                      <Icon className="size-4" />
-                    </div>
-                  </div>
-                  <h3 className="mt-6 text-base font-bold uppercase text-white">
-                    {step.title}
-                  </h3>
-                  <p className="mt-2 text-xs leading-relaxed text-neutral-400">
-                    {step.desc}
-                  </p>
-                </div>
+        {/* Sequential Neon Pipeline Tracer Container */}
+        <div className="relative mt-14">
+          {/* Connecting Laser Beam Line across Steps (Desktop Only) */}
+          <div className="hidden lg:block absolute top-12 inset-x-8 h-[2px] bg-white/[0.06] overflow-hidden pointer-events-none z-0">
+            <motion.div
+              className="h-full w-48 bg-gradient-to-r from-transparent via-white to-transparent shadow-[0_0_12px_rgba(255,255,255,0.8)]"
+              animate={{ x: ["-100%", "600%"] }}
+              transition={{ repeat: Infinity, duration: 4, ease: "linear" }}
+            />
+          </div>
 
-                <div className="mt-6 pt-3 border-t border-neutral-800 flex items-center gap-1.5 font-mono text-[10px] text-neutral-400 uppercase">
-                  <Check className="size-3 text-white" />
-                  <span>Instant Execution</span>
-                </div>
-              </div>
-            );
-          })}
+          <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4 relative z-10">
+            {steps.map((step, idx) => {
+              const Icon = step.icon;
+              return (
+                <motion.div
+                  key={step.num}
+                  initial={{ opacity: 0, y: 30 }}
+                  whileInView={{ opacity: 1, y: 0 }}
+                  viewport={{ once: true }}
+                  transition={{ duration: 0.5, delay: idx * 0.12 }}
+                  whileHover={{ y: -6, scale: 1.02, transition: { duration: 0.2 } }}
+                  className="flex flex-col justify-between rounded-2xl border border-white/[0.08] bg-neutral-950/70 backdrop-blur-xl p-6 transition-colors hover:border-white/20 shadow-xl group cursor-default"
+                >
+                  <div>
+                    <div className="flex items-center justify-between">
+                      <motion.span
+                        className="font-mono text-3xl font-black text-white"
+                        animate={{ opacity: [0.8, 1, 0.8] }}
+                        transition={{ repeat: Infinity, duration: 3, delay: idx * 0.5 }}
+                      >
+                        {step.num}
+                      </motion.span>
+                      <div className="flex size-10 items-center justify-center rounded-xl bg-white/[0.06] text-white border border-white/[0.08] group-hover:bg-white/[0.12] transition-colors">
+                        <Icon className="size-5" />
+                      </div>
+                    </div>
+                    <h3 className="mt-6 text-base font-bold uppercase text-white tracking-tight">
+                      {step.title}
+                    </h3>
+                    <p className="mt-2 text-xs leading-relaxed text-neutral-400">
+                      {step.desc}
+                    </p>
+                  </div>
+
+                  <div className="mt-6 pt-4 border-t border-white/[0.08] flex items-center gap-1.5 font-mono text-[10px] text-neutral-400 uppercase">
+                    <Check className="size-3 text-white" />
+                    <span>Instant Execution</span>
+                  </div>
+                </motion.div>
+              );
+            })}
+          </div>
         </div>
       </div>
     </motion.section>

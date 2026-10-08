@@ -1,12 +1,11 @@
 import { useRef, useState, useEffect } from "react";
-import { motion } from "framer-motion";
-import { Pause, Play, RotateCcw, Volume2, VolumeX, Sparkles } from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
+import { Pause, Play, RotateCcw, Volume2, VolumeX, Sparkles, Crosshair } from "lucide-react";
 
 interface WorkflowChapter {
   id: "zoom" | "silence" | "composition" | "export";
   name: "Auto-Zoom Focus" | "AI Silence Trim" | "Studio Composition" | "Instant GPU Export";
   time: number;
-  tag: string;
   scale: string;
   desc: string;
   tip: string;
@@ -17,7 +16,6 @@ const WORKFLOW_CHAPTERS: Record<string, WorkflowChapter> = {
     id: "zoom",
     name: "Auto-Zoom Focus",
     time: 0.5,
-    tag: "16:9 • 1.85x Zoom",
     scale: "1.85x",
     desc: "Camera detects the button target, smoothly zooms in at 60 FPS, tracks the cursor trajectory, and pulls back gently to reveal context.",
     tip: "Perfect for high-impact call-to-actions, navigation clicks, and onboarding flows.",
@@ -26,7 +24,6 @@ const WORKFLOW_CHAPTERS: Record<string, WorkflowChapter> = {
     id: "silence",
     name: "AI Silence Trim",
     time: 3.2,
-    tag: "Timeline • Auto Cut",
     scale: "1.0x",
     desc: "One click in the AI Director analyzes the speech waveform, automatically identifies dead pauses, and trims them from the timeline.",
     tip: "Eliminates hesitation gaps without manually slicing clips in an NLE editor.",
@@ -35,7 +32,6 @@ const WORKFLOW_CHAPTERS: Record<string, WorkflowChapter> = {
     id: "composition",
     name: "Studio Composition",
     time: 6.0,
-    tag: "Studio • Frosted Bezel",
     scale: "Live",
     desc: "Live adjustments to corner roundness, soft drop shadows, background padding, and frosted ambient blur render in real time on canvas.",
     tip: "Gives standard desktop screen recordings the polish of an official keynote presentation.",
@@ -44,7 +40,6 @@ const WORKFLOW_CHAPTERS: Record<string, WorkflowChapter> = {
     id: "export",
     name: "Instant GPU Export",
     time: 9.6,
-    tag: "Hardware • 60 FPS",
     scale: "1080p/4K",
     desc: "Renders directly on your local GPU via embedded FFmpeg with zero cloud upload queues, zero watermarks, and lossless clarity.",
     tip: "Ready to share on Product Hunt, YouTube, and X in seconds.",
@@ -104,7 +99,6 @@ export function ShowcaseSimulatorSection() {
 
     const handleTimeUpdate = () => {
       setCurrentTime(video.currentTime);
-      // Auto highlight corresponding chapter based on playback position
       const t = video.currentTime;
       if (t >= 9.2) {
         setActiveChapter("export");
@@ -145,7 +139,7 @@ export function ShowcaseSimulatorSection() {
       whileInView={{ opacity: 1, y: 0, clipPath: "inset(0% 0% 0% 0%)" }}
       viewport={{ once: true, amount: 0.15 }}
       transition={{ duration: 0.75, ease: [0.16, 1, 0.3, 1] }}
-      className="relative border-b border-neutral-800 bg-black px-4 py-24 sm:px-6 lg:px-12"
+      className="relative border-b border-white/[0.08] bg-black px-4 py-24 sm:px-6 lg:px-12"
     >
       <div className="mx-auto max-w-6xl">
         <div className="font-mono text-xs uppercase tracking-widest text-neutral-400">
@@ -158,7 +152,7 @@ export function ShowcaseSimulatorSection() {
           Watch the actual DomoLens Studio interface track clicks, zoom the camera, tighten silences, and render high-framerate video directly on device.
         </p>
 
-        {/* Chapter Switcher Buttons */}
+        {/* Chapter Switcher Buttons with Animated Layout Pill */}
         <div className="mt-8 flex flex-wrap gap-2.5">
           {(Object.keys(WORKFLOW_CHAPTERS) as Array<typeof activeChapter>).map((key) => {
             const chap = WORKFLOW_CHAPTERS[key];
@@ -168,69 +162,133 @@ export function ShowcaseSimulatorSection() {
                 key={key}
                 type="button"
                 onClick={() => handleSelectChapter(key)}
-                className={`rounded-xl px-4 py-2.5 font-mono text-xs font-semibold uppercase tracking-wider transition-all flex items-center gap-2 ${
-                  isSelected
-                    ? "bg-white text-black font-bold shadow-lg scale-105"
-                    : "border border-neutral-800 bg-neutral-900/80 text-neutral-300 hover:border-neutral-600 hover:text-white"
+                className={`relative rounded-xl px-4 py-2.5 font-mono text-xs font-semibold uppercase tracking-wider transition-colors flex items-center gap-2 ${
+                  isSelected ? "text-black" : "text-neutral-400 hover:text-white"
                 }`}
               >
-                <Sparkles className={`size-3.5 ${isSelected ? "text-black" : "text-neutral-500"}`} />
-                <span>{chap.name}</span>
+                {isSelected && (
+                  <motion.div
+                    layoutId="active-chapter-pill"
+                    className="absolute inset-0 rounded-xl bg-white shadow-[0_0_20px_rgba(255,255,255,0.2)]"
+                    transition={{ type: "spring", stiffness: 380, damping: 30 }}
+                  />
+                )}
+                <span className="relative z-10 flex items-center gap-2">
+                  <Sparkles className={`size-3.5 ${isSelected ? "text-black" : "text-neutral-500"}`} />
+                  <span>{chap.name}</span>
+                </span>
               </button>
             );
           })}
         </div>
 
         {/* Stage Container with Real Screen Recording Video */}
-        <div className="mt-8 rounded-2xl border border-neutral-800 bg-neutral-900/90 p-6 sm:p-8 shadow-2xl">
+        <div className="mt-8 rounded-2xl border border-white/[0.08] bg-neutral-950/70 backdrop-blur-xl p-6 sm:p-8 shadow-2xl">
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-center">
             {/* Left Column: Live Specs & Active Chapter Description */}
             <div className="lg:col-span-5 space-y-6">
-              <div>
-                <div className="inline-block font-mono text-[11px] font-bold uppercase tracking-wider text-neutral-400 border border-neutral-700 px-2.5 py-1 rounded-md mb-2">
-                  {current.tag}
-                </div>
-                <h3 className="text-2xl font-bold uppercase text-white tracking-tight">
-                  {current.name}
-                </h3>
-                <p className="mt-3 text-xs leading-relaxed text-neutral-300">
-                  {current.desc}
-                </p>
-              </div>
+              <AnimatePresence mode="wait">
+                <motion.div
+                  key={current.id}
+                  initial={{ opacity: 0, x: -12 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  exit={{ opacity: 0, x: 12 }}
+                  transition={{ duration: 0.3 }}
+                >
+                  <div className="font-mono text-xs uppercase tracking-wider text-neutral-400 mb-1">
+                    Mode Focus
+                  </div>
+                  <h3 className="text-2xl font-bold uppercase text-white tracking-tight">
+                    {current.name}
+                  </h3>
+                  <p className="mt-3 text-xs leading-relaxed text-neutral-300">
+                    {current.desc}
+                  </p>
+                </motion.div>
+              </AnimatePresence>
 
-              {/* Technical Parameter Readouts */}
-              <div className="grid grid-cols-2 gap-3 pt-4 border-t border-neutral-800">
-                <div className="rounded-lg border border-neutral-800 bg-black/50 p-3">
-                  <span className="block font-mono text-[10px] text-neutral-500 uppercase">Camera Zoom</span>
+              {/* Technical Parameter Readouts with Equalizer Animation */}
+              <div className="grid grid-cols-2 gap-3 pt-4 border-t border-white/[0.08]">
+                <div className="rounded-lg border border-white/[0.06] bg-black/60 p-3">
+                  <span className="block font-mono text-[10px] text-neutral-400 uppercase">Camera Zoom</span>
                   <span className="block font-mono text-sm font-bold text-white mt-0.5">{current.scale}</span>
                 </div>
-                <div className="rounded-lg border border-neutral-800 bg-black/50 p-3">
-                  <span className="block font-mono text-[10px] text-neutral-500 uppercase">Frame Rate</span>
+                <div className="rounded-lg border border-white/[0.06] bg-black/60 p-3">
+                  <span className="block font-mono text-[10px] text-neutral-400 uppercase">Frame Rate</span>
                   <span className="block font-mono text-sm font-bold text-white mt-0.5">60 FPS Hardware</span>
                 </div>
-                <div className="rounded-lg border border-neutral-800 bg-black/50 p-3">
-                  <span className="block font-mono text-[10px] text-neutral-500 uppercase">Timestamp</span>
+                <div className="rounded-lg border border-white/[0.06] bg-black/60 p-3">
+                  <span className="block font-mono text-[10px] text-neutral-400 uppercase">Timestamp</span>
                   <span className="block font-mono text-xs font-semibold text-neutral-200 mt-0.5">
                     {formatTime(currentTime)} / {formatTime(duration)}
                   </span>
                 </div>
-                <div className="rounded-lg border border-neutral-800 bg-black/50 p-3">
-                  <span className="block font-mono text-[10px] text-neutral-500 uppercase">Processing</span>
-                  <span className="block font-mono text-xs font-semibold text-neutral-200 mt-0.5">100% Local GPU</span>
+                <div className="rounded-lg border border-white/[0.06] bg-black/60 p-3">
+                  <span className="block font-mono text-[10px] text-neutral-400 uppercase">Audio Track</span>
+                  <div className="flex items-center gap-1 mt-1.5 h-3">
+                    {[0.6, 1, 0.4, 0.8, 0.5, 0.9, 0.3, 0.7].map((heightScale, i) => (
+                      <motion.div
+                        key={i}
+                        className="w-1 bg-white rounded-full"
+                        animate={isPlaying ? {
+                          height: ["30%", `${heightScale * 100}%`, "25%"]
+                        } : { height: "25%" }}
+                        transition={{
+                          repeat: Infinity,
+                          repeatType: "reverse",
+                          duration: 0.5 + i * 0.08,
+                          ease: "easeInOut"
+                        }}
+                      />
+                    ))}
+                  </div>
                 </div>
               </div>
 
-              <div className="rounded-xl border border-neutral-800 bg-neutral-950 p-3.5 text-xs text-neutral-400 font-mono">
+              <div className="rounded-xl border border-white/[0.08] bg-black/80 p-3.5 text-xs text-neutral-400 font-mono">
                 <span className="text-white font-bold block mb-1">PRO TIP</span>
                 <span>{current.tip}</span>
               </div>
             </div>
 
-            {/* Right Column: Actual Screen Recording Video Player */}
+            {/* Right Column: HUD Viewfinder Video Player */}
             <div className="lg:col-span-7">
-              <div className="relative aspect-video w-full rounded-xl border border-neutral-700 bg-black overflow-hidden shadow-2xl flex flex-col justify-between">
+              <div className="relative aspect-video w-full rounded-xl border border-white/[0.12] bg-black overflow-hidden shadow-2xl flex flex-col justify-between group">
+                {/* HUD Crosshairs and Animated Corner Brackets */}
+                <div className="pointer-events-none absolute inset-0 z-30 p-3">
+                  {/* Top-left corner */}
+                  <motion.div
+                    className="absolute top-3 left-3 size-4 border-t-2 border-l-2 border-white/40"
+                    animate={{ opacity: [0.4, 0.9, 0.4] }}
+                    transition={{ repeat: Infinity, duration: 2, ease: "easeInOut" }}
+                  />
+                  {/* Top-right corner */}
+                  <motion.div
+                    className="absolute top-3 right-3 size-4 border-t-2 border-r-2 border-white/40"
+                    animate={{ opacity: [0.4, 0.9, 0.4] }}
+                    transition={{ repeat: Infinity, duration: 2, ease: "easeInOut", delay: 0.5 }}
+                  />
+                  {/* Bottom-left corner */}
+                  <motion.div
+                    className="absolute bottom-12 left-3 size-4 border-b-2 border-l-2 border-white/40"
+                    animate={{ opacity: [0.4, 0.9, 0.4] }}
+                    transition={{ repeat: Infinity, duration: 2, ease: "easeInOut", delay: 1 }}
+                  />
+                  {/* Bottom-right corner */}
+                  <motion.div
+                    className="absolute bottom-12 right-3 size-4 border-b-2 border-r-2 border-white/40"
+                    animate={{ opacity: [0.4, 0.9, 0.4] }}
+                    transition={{ repeat: Infinity, duration: 2, ease: "easeInOut", delay: 1.5 }}
+                  />
+
+                  {/* Center HUD Reticle (subtle) */}
+                  <div className="absolute inset-0 flex items-center justify-center opacity-20">
+                    <Crosshair className="size-10 text-white" />
+                  </div>
+                </div>
+
                 {/* Titlebar with window indicators */}
-                <div className="flex items-center justify-between border-b border-neutral-800 bg-neutral-950 px-4 py-2.5 z-20">
+                <div className="flex items-center justify-between border-b border-white/[0.08] bg-black/90 px-4 py-2.5 z-20 backdrop-blur-md">
                   <div className="flex items-center gap-1.5">
                     <span className="size-2.5 rounded-full bg-neutral-700" />
                     <span className="size-2.5 rounded-full bg-neutral-700" />
@@ -239,10 +297,8 @@ export function ShowcaseSimulatorSection() {
                       DomoLens Studio App — Live Screen Recording
                     </span>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <span className="rounded bg-neutral-800 px-2 py-0.5 font-mono text-[10px] text-neutral-300">
-                      1080p 60 FPS
-                    </span>
+                  <div className="flex items-center gap-2 font-mono text-xs text-neutral-400">
+                    <span>1080p 60 FPS</span>
                   </div>
                 </div>
 
@@ -260,12 +316,12 @@ export function ShowcaseSimulatorSection() {
                 </div>
 
                 {/* Bottom Video Controls Bar */}
-                <div className="border-t border-neutral-800 bg-neutral-950/95 px-4 py-2.5 flex items-center justify-between z-20 font-mono text-xs">
+                <div className="border-t border-white/[0.08] bg-black/95 px-4 py-2.5 flex items-center justify-between z-20 font-mono text-xs">
                   <div className="flex items-center gap-3">
                     <button
                       type="button"
                       onClick={togglePlay}
-                      className="flex size-7 items-center justify-center rounded-lg bg-neutral-800 text-white hover:bg-neutral-700 transition-colors"
+                      className="flex size-7 items-center justify-center rounded-lg border border-white/[0.08] bg-white/[0.06] text-white hover:bg-white/[0.12] transition-colors"
                       title={isPlaying ? "Pause" : "Play"}
                     >
                       {isPlaying ? <Pause className="size-3.5" /> : <Play className="size-3.5 ml-0.5" />}
@@ -273,7 +329,7 @@ export function ShowcaseSimulatorSection() {
                     <button
                       type="button"
                       onClick={handleRestart}
-                      className="flex size-7 items-center justify-center rounded-lg bg-neutral-800 text-neutral-300 hover:text-white hover:bg-neutral-700 transition-colors"
+                      className="flex size-7 items-center justify-center rounded-lg border border-white/[0.08] bg-white/[0.06] text-neutral-300 hover:text-white hover:bg-white/[0.12] transition-colors"
                       title="Restart Video"
                     >
                       <RotateCcw className="size-3.5" />
@@ -286,7 +342,7 @@ export function ShowcaseSimulatorSection() {
                   {/* Scrubber track */}
                   <div className="mx-4 flex-1 hidden sm:block">
                     <div
-                      className="relative h-1.5 w-full rounded-full bg-neutral-800 cursor-pointer overflow-hidden"
+                      className="relative h-1.5 w-full rounded-full bg-white/[0.1] cursor-pointer overflow-hidden"
                       onClick={(e) => {
                         const rect = e.currentTarget.getBoundingClientRect();
                         const pos = (e.clientX - rect.left) / rect.width;
@@ -306,7 +362,7 @@ export function ShowcaseSimulatorSection() {
                     <button
                       type="button"
                       onClick={toggleMute}
-                      className="flex size-7 items-center justify-center rounded-lg bg-neutral-800 text-neutral-300 hover:text-white hover:bg-neutral-700 transition-colors"
+                      className="flex size-7 items-center justify-center rounded-lg border border-white/[0.08] bg-white/[0.06] text-neutral-300 hover:text-white hover:bg-white/[0.12] transition-colors"
                       title={isMuted ? "Unmute" : "Mute"}
                     >
                       {isMuted ? <VolumeX className="size-3.5" /> : <Volume2 className="size-3.5" />}
