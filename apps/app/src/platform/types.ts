@@ -97,4 +97,11 @@ export interface Platform {
   exportSourceVideoFile?(sourcePath: string, destinationPath: string): Promise<string>;
   /** Reveals an exported file in the native file manager (Finder / File Explorer / Nautilus). */
   showItemInFolder?(path: string): Promise<void>;
+  /** Subscribes to actions triggered from the macOS menu bar / system tray quick icon. */
+  onMenuAction?(callback: (action: string) => void): Off;
+  /** Syncs recording state to update the native menu bar tray icon and menu items. */
+  syncTrayRecordingState?(isRecording: boolean, isPaused: boolean): Promise<void>;
+  /** Syncs recent projects list to the native menu bar tray dropdown. */
+  syncTrayRecentProjects?(projects: ProjectSummary[]): Promise<void>;
 }
+

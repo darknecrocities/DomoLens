@@ -271,5 +271,25 @@ export function createTauriPlatform(opts: { isMobile: boolean; isTouch: boolean;
         console.warn("show_item_in_folder failed:", err);
       }
     },
+
+    onMenuAction: (callback) => {
+      return lazyOff(listen<string>("domolens://menu-action", (ev) => callback(ev.payload)));
+    },
+
+    syncTrayRecordingState: async (isRecording: boolean, isPaused: boolean) => {
+      try {
+        await invoke<void>("sync_tray_recording_state", { isRecording, isPaused });
+      } catch (err) {
+        console.warn("Failed to sync tray recording state:", err);
+      }
+    },
+
+    syncTrayRecentProjects: async (projects) => {
+      try {
+        await invoke<void>("sync_tray_recent_projects", { projects });
+      } catch (err) {
+        console.warn("Failed to sync tray recent projects:", err);
+      }
+    },
   };
 }

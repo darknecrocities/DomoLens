@@ -40,7 +40,7 @@ describe("useUpdateStore", () => {
     setUpdateProvider({
       check: vi.fn().mockResolvedValue({
         version: "0.2.0",
-        currentVersion: "0.1.8",
+        currentVersion: "0.1.9",
         date: "2026-10-08",
         body: "Major performance upgrade and new customization features",
         downloadAndInstall: mockDownload,
@@ -53,7 +53,7 @@ describe("useUpdateStore", () => {
     expect(useUpdateStore.getState().status).toBe("available");
     expect(useUpdateStore.getState().isModalOpen).toBe(true);
     expect(useUpdateStore.getState().updateInfo?.version).toBe("0.2.0");
-    expect(useUpdateStore.getState().updateInfo?.currentVersion).toBe("0.1.8");
+    expect(useUpdateStore.getState().updateInfo?.currentVersion).toBe("0.1.9");
   });
 
   it("anti-spam: suppresses checks while screen recording is active", async () => {
@@ -84,7 +84,7 @@ describe("useUpdateStore", () => {
     setUpdateProvider({
       check: vi.fn().mockResolvedValue({
         version: "0.2.0",
-        currentVersion: "0.1.8",
+        currentVersion: "0.1.9",
         downloadAndInstall: mockDownload,
       }),
       relaunch: vi.fn(),
@@ -123,7 +123,7 @@ describe("useUpdateStore", () => {
     setUpdateProvider({
       check: vi.fn().mockResolvedValue({
         version: "0.2.0",
-        currentVersion: "0.1.8",
+        currentVersion: "0.1.9",
         downloadAndInstall: mockDownload,
       }),
       relaunch: vi.fn(),
@@ -147,7 +147,7 @@ describe("useUpdateStore", () => {
     setUpdateProvider({
       check: vi.fn().mockResolvedValue({
         version: "0.2.0",
-        currentVersion: "0.1.8",
+        currentVersion: "0.1.9",
         downloadAndInstall: mockDownload,
       }),
       relaunch: vi.fn(),

@@ -17,6 +17,8 @@ import { FloatingQuickBar } from "./components/recording/FloatingQuickBar";
 import { GlobalHudWindow } from "./components/recording/GlobalHudWindow";
 import { initBackgroundAutoUpdater } from "./lib/updater";
 
+import { useUpdateStore } from "./store/update";
+
 export function App() {
   const isHudWindow = typeof window !== "undefined" && (window.location.search.includes("hud=true") || window.location.hash.includes("hud"));
 
@@ -25,7 +27,7 @@ export function App() {
   }
 
   const { screen } = useNav();
-  const { load, importFiles } = useProjects();
+  const { load, importFiles, projects } = useProjects();
   const recorderState = useRecorder((s) => s.state);
   const [isDragging, setIsDragging] = useState(false);
 
@@ -53,12 +55,63 @@ export function App() {
     // Auto-updater background scheduler (desktop app only)
     const unbindUpdater = initBackgroundAutoUpdater();
 
+    // Listen for QuickIcon / Menu bar actions
+    const unbindMenu = platform.onMenuAction?.((action) => {
+      if (action === "start_recording") {
+        const rec = useRecorder.getState();
+        if (rec.state === "idle") {
+          void rec.startCountdown();
+        }
+      } else if (action === "stop_recording") {
+        const rec = useRecorder.getState();
+        if (rec.state === "recording" || rec.state === "paused") {
+          void rec.stopRecording();
+        }
+      } else if (action === "toggle_pause") {
+        const rec = useRecorder.getState();
+        if (rec.state === "recording") {
+          rec.pauseRecording();
+        } else if (rec.state === "paused") {
+          rec.resumeRecording();
+        }
+      } else if (action === "open_editor") {
+        const currentProjects = useProjects.getState().projects;
+        if (currentProjects.length > 0 && currentProjects[0]) {
+          useNav.getState().go({ name: "editor", id: currentProjects[0].id });
+        } else {
+          useNav.getState().go({ name: "home" });
+        }
+      } else if (action === "open_home") {
+        useNav.getState().go({ name: "home" });
+      } else if (action === "check_updates") {
+        void useUpdateStore.getState().checkForUpdates({ silent: false });
+      } else if (action.startsWith("recent:")) {
+        const projectId = action.slice("recent:".length);
+        useNav.getState().go({ name: "editor", id: projectId });
+      }
+    });
+
     return () => {
       unbindProjects();
       unbindDrops();
       unbindUpdater();
+      unbindMenu?.();
     };
   }, [load, importFiles]);
+
+  // Sync recording status to menu bar quick icon
+  useEffect(() => {
+    const isRecording = recorderState === "recording" || recorderState === "paused";
+    const isPaused = recorderState === "paused";
+    void platform.syncTrayRecordingState?.(isRecording, isPaused);
+  }, [recorderState]);
+
+  // Sync recent projects to menu bar quick icon
+  useEffect(() => {
+    if (projects && projects.length > 0) {
+      void platform.syncTrayRecentProjects?.(projects);
+    }
+  }, [projects]);
 
   const isBrowserLanding = !platform.isApp && screen.name === "landing";
 

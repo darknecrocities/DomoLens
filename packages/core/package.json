@@ -1,6 +1,6 @@
 {
   "name": "@domolens/core",
-  "version": "0.1.8",
+  "version": "0.1.9",
   "private": true,
   "type": "module",
   "description": "The DomoLens brain: project format, timeline and auto zoom. Plain TypeScript that runs on every platform.",

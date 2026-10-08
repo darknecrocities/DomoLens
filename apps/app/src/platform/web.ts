@@ -354,5 +354,8 @@ export function createWebPlatform(opts: { isTouch: boolean; isMac: boolean }): P
     },
 
     showItemInFolder: async () => {},
+    onMenuAction: () => () => {},
+    syncTrayRecordingState: async () => {},
+    syncTrayRecentProjects: async () => {},
   };
 }

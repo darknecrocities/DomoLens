@@ -76,7 +76,7 @@ export function UpdateModal() {
             <div className="mt-4 inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-white/5 px-3 py-1 font-mono text-xs text-neutral-400">
               <span>Current version:</span>
               <span className="font-semibold text-white">
-                v{updateInfo?.currentVersion || "0.1.8"}
+                v{updateInfo?.currentVersion || "0.1.9"}
               </span>
             </div>
             <div className="mt-6 w-full flex justify-end">

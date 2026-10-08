@@ -3,8 +3,13 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
+use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
+use tauri::tray::{TrayIconBuilder, TrayIconEvent};
 use tauri::{Emitter, Manager, State};
 use uuid::Uuid;
+
+
+
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct ProjectSummary {
@@ -73,6 +78,8 @@ pub struct ScreenDimensions {
 #[derive(Default)]
 pub struct AppState {
     pub projects: Mutex<Vec<ProjectSummary>>,
+    pub is_recording: AtomicBool,
+    pub is_paused: AtomicBool,
 }
 
 static RECORDING_ACTIVE: AtomicBool = AtomicBool::new(false);
@@ -116,6 +123,223 @@ fn save_projects_to_disk(projects: &[ProjectSummary]) {
         let _ = fs::write(file, json);
     }
 }
+
+fn build_tray_menu(
+    app: &tauri::AppHandle,
+    is_recording: bool,
+    is_paused: bool,
+    recent_projects: &[ProjectSummary],
+) -> Result<Menu<tauri::Wry>, Box<dyn std::error::Error>> {
+    let menu = Menu::new(app)?;
+
+    // 1. Status header indicator
+    let header_title = if is_recording {
+        if is_paused {
+            "⏸  DomoLens (Paused)"
+        } else {
+            "🔴  DomoLens (Recording...)"
+        }
+    } else {
+        "DomoLens Studio"
+    };
+    let header_item = MenuItem::with_id(app, "status_info", header_title, false, None::<&str>)?;
+    menu.append(&header_item)?;
+
+    let sep1 = PredefinedMenuItem::separator(app)?;
+    menu.append(&sep1)?;
+
+    // 2. Primary Record action
+    if is_recording {
+        let stop_item = MenuItem::with_id(app, "stop_record", "⏹  Stop Recording", true, Some("Option+R"))?;
+        menu.append(&stop_item)?;
+
+        let pause_label = if is_paused { "▶  Resume Recording" } else { "⏸  Pause Recording" };
+        let pause_item = MenuItem::with_id(app, "toggle_pause", pause_label, true, None::<&str>)?;
+        menu.append(&pause_item)?;
+    } else {
+        let start_item = MenuItem::with_id(app, "start_record", "🔴  Start Recording", true, Some("Option+R"))?;
+        menu.append(&start_item)?;
+    }
+
+    let sep2 = PredefinedMenuItem::separator(app)?;
+    menu.append(&sep2)?;
+
+    // 3. Studio / Editor
+    let editor_item = MenuItem::with_id(app, "open_editor", "🎬  Open Studio Editor", true, Some("Option+E"))?;
+    menu.append(&editor_item)?;
+
+    let home_item = MenuItem::with_id(app, "open_home", "📋  All Recordings & Projects", true, None::<&str>)?;
+    menu.append(&home_item)?;
+
+    // 4. Recent Projects (up to 3)
+    if !recent_projects.is_empty() {
+        let sep3 = PredefinedMenuItem::separator(app)?;
+        menu.append(&sep3)?;
+
+        for proj in recent_projects.iter().take(3) {
+            let label = if proj.name.len() > 24 {
+                format!("  ▸ {}...", &proj.name[..21])
+            } else {
+                format!("  ▸ {}", proj.name)
+            };
+            let recent_item = MenuItem::with_id(app, format!("recent:{}", proj.id), label, true, None::<&str>)?;
+            menu.append(&recent_item)?;
+        }
+    }
+
+    let sep4 = PredefinedMenuItem::separator(app)?;
+    menu.append(&sep4)?;
+
+    // 5. Window & Update
+    let show_win = MenuItem::with_id(app, "show_window", "🪟  Show DomoLens Window", true, None::<&str>)?;
+    menu.append(&show_win)?;
+
+    let check_updates = MenuItem::with_id(app, "check_updates", "🔄  Check for Updates...", true, None::<&str>)?;
+    menu.append(&check_updates)?;
+
+    let sep5 = PredefinedMenuItem::separator(app)?;
+    menu.append(&sep5)?;
+
+    // 6. Quit DomoLens
+    let quit_item = MenuItem::with_id(app, "quit_app", "Quit DomoLens", true, Some("CmdOrControl+Q"))?;
+    menu.append(&quit_item)?;
+
+    Ok(menu)
+}
+
+fn update_tray_ui(app: &tauri::AppHandle, state: &AppState) {
+    let is_rec = state.is_recording.load(Ordering::SeqCst);
+    let is_paused = state.is_paused.load(Ordering::SeqCst);
+    let mut projects = state.projects.lock().map(|p| p.clone()).unwrap_or_default();
+    if projects.is_empty() {
+        projects = load_projects_from_disk();
+    }
+    projects.sort_by(|a, b| b.updated_at.cmp(&a.updated_at));
+
+    if let Some(tray) = app.tray_by_id("main-tray") {
+        if let Ok(menu) = build_tray_menu(app, is_rec, is_paused, &projects) {
+            let _ = tray.set_menu(Some(menu));
+        }
+
+        if is_rec {
+            let _ = tray.set_tooltip(Some("DomoLens - Recording in progress..."));
+            if let Ok(icon) = tauri::image::Image::from_bytes(include_bytes!("../icons/tray-recording@2x.png")) {
+                let _ = tray.set_icon(Some(icon));
+                let _ = tray.set_icon_as_template(false);
+            }
+        } else {
+            let _ = tray.set_tooltip(Some("DomoLens - Screen Recorder & Studio"));
+            if let Ok(icon) = tauri::image::Image::from_bytes(include_bytes!("../icons/tray-mac@2x.png")) {
+                let _ = tray.set_icon(Some(icon));
+                #[cfg(target_os = "macos")]
+                let _ = tray.set_icon_as_template(true);
+            }
+        }
+    }
+}
+
+fn handle_tray_menu_action(app: &tauri::AppHandle, id: &str) {
+    match id {
+        "start_record" => {
+            if let Some(win) = app.get_webview_window("main") {
+                let _ = win.unminimize();
+                let _ = win.show();
+                let _ = win.set_focus();
+            }
+            let _ = app.emit("domolens://menu-action", "start_recording");
+        }
+        "stop_record" => {
+            let _ = app.emit("domolens://menu-action", "stop_recording");
+        }
+        "toggle_pause" => {
+            let _ = app.emit("domolens://menu-action", "toggle_pause");
+        }
+        "open_editor" => {
+            if let Some(win) = app.get_webview_window("main") {
+                let _ = win.unminimize();
+                let _ = win.show();
+                let _ = win.set_focus();
+            }
+            let _ = app.emit("domolens://menu-action", "open_editor");
+        }
+        "open_home" => {
+            if let Some(win) = app.get_webview_window("main") {
+                let _ = win.unminimize();
+                let _ = win.show();
+                let _ = win.set_focus();
+            }
+            let _ = app.emit("domolens://menu-action", "open_home");
+        }
+        "show_window" => {
+            if let Some(win) = app.get_webview_window("main") {
+                let _ = win.unminimize();
+                let _ = win.show();
+                let _ = win.set_focus();
+            }
+        }
+        "check_updates" => {
+            if let Some(win) = app.get_webview_window("main") {
+                let _ = win.unminimize();
+                let _ = win.show();
+                let _ = win.set_focus();
+            }
+            let _ = app.emit("domolens://menu-action", "check_updates");
+        }
+        "quit_app" => {
+            app.exit(0);
+        }
+        other if other.starts_with("recent:") => {
+            if let Some(win) = app.get_webview_window("main") {
+                let _ = win.unminimize();
+                let _ = win.show();
+                let _ = win.set_focus();
+            }
+            let _ = app.emit("domolens://menu-action", other);
+        }
+        _ => {}
+    }
+}
+
+fn setup_tray_icon(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>> {
+    let handle = app.handle();
+    let initial_projects = load_projects_from_disk();
+    let menu = build_tray_menu(&handle, false, false, &initial_projects)?;
+    let icon_bytes = include_bytes!("../icons/tray-mac@2x.png");
+    let icon = tauri::image::Image::from_bytes(icon_bytes)?;
+
+    let mut builder = TrayIconBuilder::with_id("main-tray")
+        .icon(icon)
+        .menu(&menu)
+        .tooltip("DomoLens - Screen Recorder & Studio")
+        .show_menu_on_left_click(true);
+
+    #[cfg(target_os = "macos")]
+    {
+        builder = builder.icon_as_template(true);
+    }
+
+    let _tray = builder
+        .on_menu_event(|app, event| {
+            handle_tray_menu_action(app, event.id().as_ref());
+        })
+        .on_tray_icon_event(|_tray, event| {
+            if let TrayIconEvent::Click { button: tauri::tray::MouseButton::Left, button_state: tauri::tray::MouseButtonState::Up, .. } = event {
+                #[cfg(not(target_os = "macos"))]
+                {
+                    let app = _tray.app_handle();
+                    if let Some(win) = app.get_webview_window("main") {
+                        let _ = win.unminimize();
+                        let _ = win.show();
+                        let _ = win.set_focus();
+                    }
+                }
+            }
+        })
+        .build(app)?;
+
+    Ok(())
+}
+
 
 fn get_full_project_file(id: &str) -> PathBuf {
     let dir = get_data_dir().join("projects");
@@ -704,18 +928,50 @@ fn request_accessibility_permission() -> bool {
 }
 
 #[tauri::command]
-fn start_global_input_capture() -> Result<(), String> {
+fn start_global_input_capture(app_handle: tauri::AppHandle, state: State<'_, AppState>) -> Result<(), String> {
     #[cfg(target_os = "macos")]
     {
         let _ = request_accessibility_permission();
     }
     RECORDING_ACTIVE.store(true, Ordering::Relaxed);
+    state.is_recording.store(true, Ordering::SeqCst);
+    state.is_paused.store(false, Ordering::SeqCst);
+    update_tray_ui(&app_handle, &state);
     Ok(())
 }
 
 #[tauri::command]
-fn stop_global_input_capture() -> Result<(), String> {
+fn stop_global_input_capture(app_handle: tauri::AppHandle, state: State<'_, AppState>) -> Result<(), String> {
     RECORDING_ACTIVE.store(false, Ordering::Relaxed);
+    state.is_recording.store(false, Ordering::SeqCst);
+    state.is_paused.store(false, Ordering::SeqCst);
+    update_tray_ui(&app_handle, &state);
+    Ok(())
+}
+
+#[tauri::command]
+fn sync_tray_recording_state(
+    app_handle: tauri::AppHandle,
+    state: State<'_, AppState>,
+    is_recording: bool,
+    is_paused: bool,
+) -> Result<(), String> {
+    state.is_recording.store(is_recording, Ordering::SeqCst);
+    state.is_paused.store(is_paused, Ordering::SeqCst);
+    update_tray_ui(&app_handle, &state);
+    Ok(())
+}
+
+#[tauri::command]
+fn sync_tray_recent_projects(
+    app_handle: tauri::AppHandle,
+    state: State<'_, AppState>,
+    projects: Vec<ProjectSummary>,
+) -> Result<(), String> {
+    if let Ok(mut list) = state.projects.lock() {
+        *list = projects;
+    }
+    update_tray_ui(&app_handle, &state);
     Ok(())
 }
 
@@ -747,8 +1003,13 @@ pub fn run() {
         .plugin(tauri_plugin_process::init())
         .manage(AppState {
             projects: Mutex::new(load_projects_from_disk()),
+            is_recording: AtomicBool::new(false),
+            is_paused: AtomicBool::new(false),
         })
         .setup(|app| {
+            if let Err(e) = setup_tray_icon(app) {
+                eprintln!("Warning: Failed to setup tray icon: {e}");
+            }
             let handle_clone = app.handle().clone();
 
             #[cfg(target_os = "macos")]
@@ -1088,8 +1349,21 @@ pub fn run() {
             get_default_export_path,
             save_exported_video,
             export_source_video_file,
-            show_item_in_folder
+            show_item_in_folder,
+            sync_tray_recording_state,
+            sync_tray_recent_projects
         ])
+        .on_window_event(|window, event| {
+            if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                if window.label() == "main" {
+                    #[cfg(target_os = "macos")]
+                    {
+                        let _ = window.hide();
+                        api.prevent_close();
+                    }
+                }
+            }
+        })
         .run(tauri::generate_context!())
         .expect("error while running DomoLens");
 }
