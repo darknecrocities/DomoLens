@@ -1,14 +1,18 @@
 import { useEffect, useRef, useState } from "react";
-import { CheckCircle2, Download, Film, Folder, FolderOpen, Sparkles } from "lucide-react";
+import { CheckCircle2, Download, Film, Folder, FolderOpen, Sparkles, Video } from "lucide-react";
 import { copy } from "../../copy/en";
 import { Button } from "../ui/Button";
 import { Modal } from "../ui/Modal";
 import { toast } from "../../store/toast";
 import { platform } from "../../platform";
 import type { ProjectData } from "@domolens/core";
-import { renderProjectVideo, type ExportResolution } from "../../lib/video-renderer";
+import {
+  renderProjectVideo,
+  type ExportResolution,
+  type ExportFormat,
+} from "../../lib/video-renderer";
 
-export type { ExportResolution };
+export type { ExportResolution, ExportFormat };
 
 interface ExportModalProps {
   open: boolean;
@@ -18,6 +22,10 @@ interface ExportModalProps {
 
 export function ExportModal({ open, project, onClose }: ExportModalProps) {
   const [resolution, setResolution] = useState<ExportResolution>("1080p");
+  // Default format based on hardware platform: .mov on macOS, .mp4 on Windows/Linux
+  const defaultFormat: ExportFormat = platform.isMac ? "mov" : "mp4";
+  const [format, setFormat] = useState<ExportFormat>(defaultFormat);
+
   const [isExporting, setIsExporting] = useState(false);
   const [progress, setProgress] = useState(0);
   const [statusText, setStatusText] = useState("Preparing video export...");
@@ -27,9 +35,9 @@ export function ExportModal({ open, project, onClose }: ExportModalProps) {
 
   const safeName = (project.summary.name || "DomoLens_Recording").replace(/[^\w.-]+/g, "_");
 
-  // Determine file extension and default filename based on resolution
-  const getFilenameForResolution = (res: ExportResolution) => {
-    const ext = res === "gif" ? "gif" : "mp4";
+  // Determine file extension and default filename based on resolution & format
+  const getFilenameForExport = (res: ExportResolution, fmt: ExportFormat) => {
+    const ext = res === "gif" ? "gif" : fmt;
     return `${safeName}_${res}.${ext}`;
   };
 
@@ -47,7 +55,7 @@ export function ExportModal({ open, project, onClose }: ExportModalProps) {
       return;
     }
 
-    const filename = getFilenameForResolution(resolution);
+    const filename = getFilenameForExport(resolution, format);
     let cancelled = false;
 
     if (platform.getDefaultExportPath) {
@@ -67,17 +75,44 @@ export function ExportModal({ open, project, onClose }: ExportModalProps) {
     return () => {
       cancelled = true;
     };
-  }, [open, resolution, safeName]);
+  }, [open, resolution, format, safeName]);
+
+  const handleFormatChange = (newFormat: ExportFormat) => {
+    setFormat(newFormat);
+    if (destinationPath) {
+      const updated = destinationPath.replace(/\.(mp4|mov|webm|gif)$/i, `.${newFormat}`);
+      setDestinationPath(updated);
+    }
+  };
+
+  const handleResolutionChange = (newRes: ExportResolution) => {
+    setResolution(newRes);
+    const ext = newRes === "gif" ? "gif" : format;
+    if (destinationPath) {
+      const updated = destinationPath.replace(/\.(mp4|mov|webm|gif)$/i, `.${ext}`);
+      setDestinationPath(updated);
+    }
+  };
 
   const handleBrowseDestination = async () => {
-    const filename = getFilenameForResolution(resolution);
-    const ext = resolution === "gif" ? "gif" : "mp4";
+    const activeExt = resolution === "gif" ? "gif" : format;
+    const filename = getFilenameForExport(resolution, format);
+
+    const filterName =
+      activeExt === "mov"
+        ? "QuickTime Movie (*.mov)"
+        : activeExt === "mp4"
+        ? "MP4 Video (*.mp4)"
+        : activeExt === "webm"
+        ? "WebM Video (*.webm)"
+        : "GIF Image (*.gif)";
+
     if (platform.pickExportPath) {
       const picked = await platform.pickExportPath({
         defaultPath: destinationPath || filename,
         defaultName: filename,
         filters: [
-          { name: resolution === "gif" ? "GIF Image" : "Video", extensions: [ext] },
+          { name: filterName, extensions: [activeExt] },
           { name: "All Files", extensions: ["*"] },
         ],
       });
@@ -96,18 +131,24 @@ export function ExportModal({ open, project, onClose }: ExportModalProps) {
     const abortCtrl = new AbortController();
     abortControllerRef.current = abortCtrl;
 
-    const targetPath = destinationPath || getFilenameForResolution(resolution);
+    const activeFormat = resolution === "gif" ? "gif" : format;
+    const targetPath = destinationPath || getFilenameForExport(resolution, activeFormat);
 
     try {
       const result = await renderProjectVideo({
         project,
         resolution,
+        format: activeFormat,
         onProgress: (pct, status) => {
           setProgress(pct);
           setStatusText(status);
         },
         signal: abortCtrl.signal,
       });
+
+      if (!result.data || result.data.length === 0) {
+        throw new Error("Rendered video data is empty (0 bytes)");
+      }
 
       setProgress(98);
       setStatusText("Saving video to disk...");
@@ -151,18 +192,18 @@ export function ExportModal({ open, project, onClose }: ExportModalProps) {
       }
 
       console.warn("Canvas video render fallback:", err);
-      setStatusText("Rendering fallback: exporting source video...");
+      setStatusText("Rendering fallback: exporting source video with compatibility...");
 
-      // Graceful fallback to source video
+      // Graceful fallback to source video copy / remux
       if (project.summary.media && platform.exportSourceVideoFile) {
         try {
           const fallbackPath = await platform.exportSourceVideoFile(project.summary.media, targetPath);
           setSavedFilePath(fallbackPath);
-          toast.success(`Exported recording to ${fallbackPath}`);
+          toast.success(`Exported video to ${fallbackPath}`);
           setIsExporting(false);
           return;
         } catch (copyErr) {
-          console.error("Source video copy failed:", copyErr);
+          console.error("Source video copy/remux failed:", copyErr);
         }
       }
 
@@ -170,7 +211,7 @@ export function ExportModal({ open, project, onClose }: ExportModalProps) {
       if (project.summary.media) {
         const link = document.createElement("a");
         link.href = project.summary.media.startsWith("/") ? project.summary.media : platform.mediaUrl(project.summary.media);
-        link.download = getFilenameForResolution(resolution);
+        link.download = getFilenameForExport(resolution, activeFormat);
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
@@ -197,6 +238,31 @@ export function ExportModal({ open, project, onClose }: ExportModalProps) {
     setIsExporting(false);
     onClose();
   };
+
+  const formats: Array<{
+    id: ExportFormat;
+    label: string;
+    desc: string;
+    badge?: string;
+  }> = [
+    {
+      id: "mov",
+      label: "QuickTime (.mov)",
+      desc: "Native Apple format. 100% compatible with Mac QuickTime Player & Final Cut Pro.",
+      badge: platform.isMac ? "Default on Mac" : undefined,
+    },
+    {
+      id: "mp4",
+      label: "Universal MP4 (.mp4)",
+      desc: "Universal standard. Compatible with Windows Media Player, Mac, Web, & mobile.",
+      badge: !platform.isMac ? "Default on Windows" : "Universal",
+    },
+    {
+      id: "webm",
+      label: "WebM Video (.webm)",
+      desc: "High-efficiency open web video container.",
+    },
+  ];
 
   const resolutions: Array<{ id: ExportResolution; label: string; desc: string }> = [
     { id: "1080p", label: "1080p Full HD", desc: "Crisp and fast. Studio quality." },
@@ -285,20 +351,69 @@ export function ExportModal({ open, project, onClose }: ExportModalProps) {
           </div>
         ) : (
           <div className="space-y-4">
+            {/* Format Option Selector (Hardware aware) */}
+            {resolution !== "gif" && (
+              <div className="space-y-2">
+                <div className="flex items-center justify-between text-xs">
+                  <label className="font-semibold uppercase tracking-wider text-fg-muted">
+                    Video Format
+                  </label>
+                  <span className="text-[11px] font-mono text-neutral-400">
+                    Hardware default: {platform.isMac ? ".MOV (Apple)" : ".MP4 (Windows)"}
+                  </span>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                  {formats.map((fmt) => {
+                    const isSelected = format === fmt.id;
+                    return (
+                      <button
+                        key={fmt.id}
+                        type="button"
+                        onClick={() => handleFormatChange(fmt.id)}
+                        className={`flex flex-col justify-between rounded-xl border p-2.5 text-left transition-all ${
+                          isSelected
+                            ? "border-white bg-white/10 shadow-sm"
+                            : "border-ink-700 bg-ink-900/60 hover:border-ink-600"
+                        }`}
+                      >
+                        <div className="flex items-center justify-between w-full">
+                          <span className="text-xs font-bold text-fg flex items-center gap-1.5">
+                            <Video className="size-3.5 text-indigo-400" />
+                            {fmt.label}
+                          </span>
+                          {isSelected && <CheckCircle2 className="size-3.5 text-white" />}
+                        </div>
+                        {fmt.badge && (
+                          <div className="mt-1.5">
+                            <span className="font-mono text-[9px] uppercase font-bold px-1.5 py-0.5 rounded bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">
+                              {fmt.badge}
+                            </span>
+                          </div>
+                        )}
+                        <p className="mt-1 text-[10px] text-fg-muted leading-tight">
+                          {fmt.desc}
+                        </p>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
             {/* Resolution Options */}
             <div className="space-y-2">
               <label className="text-xs font-semibold uppercase tracking-wider text-fg-muted">
                 {copy.export.resolution}
               </label>
-              <div className="grid grid-cols-1 gap-2">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                 {resolutions.map((res) => {
                   const isSelected = resolution === res.id;
                   return (
                     <button
                       key={res.id}
                       type="button"
-                      onClick={() => setResolution(res.id)}
-                      className={`flex items-center justify-between rounded-xl border p-3 text-left transition-all ${
+                      onClick={() => handleResolutionChange(res.id)}
+                      className={`flex items-center justify-between rounded-xl border p-2.5 text-left transition-all ${
                         isSelected
                           ? "border-white bg-white/10 shadow-sm"
                           : "border-ink-700 bg-ink-900/60 hover:border-ink-600"
@@ -306,14 +421,14 @@ export function ExportModal({ open, project, onClose }: ExportModalProps) {
                     >
                       <div>
                         <div className="flex items-center gap-2">
-                          <span className="text-sm font-semibold text-fg">{res.label}</span>
+                          <span className="text-xs font-semibold text-fg">{res.label}</span>
                           {res.id === "1080p" && (
                             <span className="font-mono text-[9px] uppercase font-bold px-1.5 py-0.5 rounded bg-white/20 text-white border border-white/30">
                               Recommended
                             </span>
                           )}
                         </div>
-                        <span className="text-xs text-fg-muted">{res.desc}</span>
+                        <span className="text-[10px] text-fg-muted">{res.desc}</span>
                       </div>
                       {isSelected && <CheckCircle2 className="size-4 text-white" />}
                     </button>
@@ -329,7 +444,7 @@ export function ExportModal({ open, project, onClose }: ExportModalProps) {
                   Save Destination
                 </label>
                 <span className="text-[11px] font-mono text-neutral-400">
-                  Default: Downloads
+                  Format: .{resolution === "gif" ? "gif" : format}
                 </span>
               </div>
               <div className="flex items-center gap-2 rounded-xl border border-neutral-700/80 bg-neutral-900/90 p-2">

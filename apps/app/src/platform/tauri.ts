@@ -245,6 +245,9 @@ export function createTauriPlatform(opts: { isMobile: boolean; isTouch: boolean;
     },
 
     saveExportedVideo: async (destinationPath: string, data: Uint8Array | number[]) => {
+      if (!data || data.length === 0) {
+        throw new Error("Cannot save empty video data (0 bytes)");
+      }
       const payload = Array.isArray(data) ? data : Array.from(data);
       const saved = await invoke<string>("save_exported_video", {
         destinationPath,

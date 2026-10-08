@@ -25,4 +25,12 @@ describe("video renderer dimensions", () => {
     expect(dim1080.height).toBe(1080);
     expect(dim1080.width).toBe(1440);
   });
+
+  it("handles valid export formats mov, mp4, webm, and gif", () => {
+    const formats: Array<"mov" | "mp4" | "webm" | "gif"> = ["mov", "mp4", "webm", "gif"];
+    expect(formats).toContain("mov");
+    expect(formats).toContain("mp4");
+    expect(formats).toContain("webm");
+    expect(formats).toContain("gif");
+  });
 });

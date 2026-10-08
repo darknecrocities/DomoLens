@@ -11,10 +11,12 @@ import {
 import { platform } from "../platform";
 
 export type ExportResolution = "1080p" | "720p" | "4k" | "gif";
+export type ExportFormat = "mov" | "mp4" | "webm" | "gif";
 
 export interface RenderOptions {
   project: ProjectData;
   resolution: ExportResolution;
+  format?: ExportFormat;
   onProgress?: (percent: number, statusText: string) => void;
   signal?: AbortSignal;
 }
@@ -87,7 +89,8 @@ function createBackgroundFill(
  * backdrops, padding, effects, audio SFX, and text overlays into an exported video.
  */
 export async function renderProjectVideo(options: RenderOptions): Promise<RenderResult> {
-  const { project, resolution, onProgress, signal } = options;
+  const { project, resolution, format, onProgress, signal } = options;
+  const targetFormat: ExportFormat = format || (resolution === "gif" ? "gif" : "mp4");
   const looks = project.looks;
   const durationMs = Math.max(1000, project.summary.durationMs || 10000);
 
@@ -185,7 +188,28 @@ export async function renderProjectVideo(options: RenderOptions): Promise<Render
     const AudioContextClass = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
     if (AudioContextClass) {
       audioCtx = new AudioContextClass();
+      if (audioCtx.state === "suspended") {
+        void audioCtx.resume();
+      }
       audioDest = audioCtx.createMediaStreamDestination();
+      // Pump continuous silent audio frames so CoreMedia/WebKit audio clocks never stall
+      try {
+        if (typeof audioCtx.createConstantSource === "function") {
+          const silence = audioCtx.createConstantSource();
+          silence.offset.value = 0;
+          silence.connect(audioDest);
+          silence.start();
+        } else {
+          const buffer = audioCtx.createBuffer(1, audioCtx.sampleRate, audioCtx.sampleRate);
+          const bufferSource = audioCtx.createBufferSource();
+          bufferSource.buffer = buffer;
+          bufferSource.loop = true;
+          bufferSource.connect(audioDest);
+          bufferSource.start();
+        }
+      } catch (silenceErr) {
+        console.warn("Silent carrier audio init:", silenceErr);
+      }
     }
   } catch {
     audioCtx = null;
@@ -210,15 +234,25 @@ export async function renderProjectVideo(options: RenderOptions): Promise<Render
 
   const combinedStream = new MediaStream(tracks);
 
-  const preferredMimeTypes = [
-    "video/webm;codecs=vp9,opus",
-    "video/webm;codecs=vp8,opus",
-    "video/webm",
-    "video/mp4;codecs=avc1,mp4a.40.2",
-    "video/mp4",
-  ];
+  const preferredMimeTypes =
+    targetFormat === "webm"
+      ? [
+          "video/webm;codecs=vp9,opus",
+          "video/webm;codecs=vp8,opus",
+          "video/webm",
+          "video/mp4;codecs=avc1",
+          "video/mp4",
+        ]
+      : [
+          "video/mp4;codecs=avc1",
+          "video/mp4",
+          "video/quicktime",
+          "video/webm;codecs=vp9,opus",
+          "video/webm;codecs=vp8,opus",
+          "video/webm",
+        ];
 
-  let selectedMimeType = "video/webm";
+  let selectedMimeType = "";
   if (typeof MediaRecorder !== "undefined") {
     for (const mime of preferredMimeTypes) {
       if (MediaRecorder.isTypeSupported(mime)) {
@@ -229,10 +263,14 @@ export async function renderProjectVideo(options: RenderOptions): Promise<Render
   }
 
   const chunks: Blob[] = [];
-  const recorder = new MediaRecorder(combinedStream, {
-    mimeType: selectedMimeType,
+  const recorderOptions: MediaRecorderOptions = {
     videoBitsPerSecond: resolution === "4k" ? 18_000_000 : resolution === "1080p" ? 9_000_000 : 4_500_000,
-  });
+  };
+  if (selectedMimeType) {
+    recorderOptions.mimeType = selectedMimeType;
+  }
+
+  const recorder = new MediaRecorder(combinedStream, recorderOptions);
 
   recorder.ondataavailable = (e) => {
     if (e.data && e.data.size > 0) {
@@ -765,19 +803,20 @@ export async function renderProjectVideo(options: RenderOptions): Promise<Render
       onProgress?.(99, "Packaging download...");
       try {
         video.pause();
-        if (recorder.state === "recording") {
-          try {
-            recorder.requestData();
-          } catch {
-            // Ignore
-          }
-        }
 
         recorder.onstop = async () => {
           if (audioCtx) void audioCtx.close();
-          const blob = new Blob(chunks, { type: selectedMimeType });
-          const isMp4 = selectedMimeType.includes("mp4");
-          const ext = resolution === "gif" ? "gif" : isMp4 ? "mp4" : "webm";
+          const mime = selectedMimeType || recorder.mimeType || "video/mp4";
+          const blob = new Blob(chunks, { type: mime });
+
+          if (blob.size === 0 || chunks.length === 0) {
+            reject(new Error("Video render output is empty (0 bytes). MediaRecorder could not capture stream frames."));
+            return;
+          }
+
+          const isMp4 = mime.includes("mp4");
+          const isMov = targetFormat === "mov";
+          const ext = resolution === "gif" ? "gif" : isMov ? "mov" : isMp4 ? "mp4" : "webm";
           const safeName = project.summary.name.replace(/\s+/g, "_");
           const filename = `${safeName}_${resolution}.${ext}`;
           const downloadUrl = URL.createObjectURL(blob);
@@ -787,7 +826,7 @@ export async function renderProjectVideo(options: RenderOptions): Promise<Render
           resolve({
             blob,
             data,
-            mimeType: selectedMimeType,
+            mimeType: mime,
             filename,
             downloadUrl,
           });

@@ -329,7 +329,15 @@ export function createWebPlatform(opts: { isTouch: boolean; isMac: boolean }): P
 
     saveExportedVideo: async (destinationPath: string, data: Uint8Array | number[]) => {
       const bytes = data instanceof Uint8Array ? data : new Uint8Array(data);
-      const blob = new Blob([bytes.buffer as ArrayBuffer], { type: "video/mp4" });
+      if (bytes.length === 0) {
+        throw new Error("Cannot save empty video data (0 bytes)");
+      }
+      const mime = destinationPath.endsWith(".webm")
+        ? "video/webm"
+        : destinationPath.endsWith(".mov")
+        ? "video/quicktime"
+        : "video/mp4";
+      const blob = new Blob([bytes.buffer as ArrayBuffer], { type: mime });
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;

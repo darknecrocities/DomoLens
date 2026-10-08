@@ -293,15 +293,117 @@ fn get_default_export_path(filename: String) -> Result<String, String> {
     Ok(full_path.to_string_lossy().to_string())
 }
 
+fn find_ffmpeg() -> Option<PathBuf> {
+    if let Ok(output) = std::process::Command::new("ffmpeg").arg("-version").output() {
+        if output.status.success() {
+            return Some(PathBuf::from("ffmpeg"));
+        }
+    }
+    for p in &[
+        "/opt/homebrew/bin/ffmpeg",
+        "/usr/local/bin/ffmpeg",
+        "/usr/bin/ffmpeg",
+    ] {
+        let path = PathBuf::from(p);
+        if path.exists() {
+            return Some(path);
+        }
+    }
+    #[cfg(target_os = "windows")]
+    {
+        for p in &[
+            "C:\\Program Files\\ffmpeg\\bin\\ffmpeg.exe",
+            "C:\\ffmpeg\\bin\\ffmpeg.exe",
+        ] {
+            let path = PathBuf::from(p);
+            if path.exists() {
+                return Some(path);
+            }
+        }
+    }
+    None
+}
+
 #[tauri::command]
 fn save_exported_video(
     destination_path: String,
     data: Vec<u8>,
 ) -> Result<String, String> {
+    if data.is_empty() {
+        return Err("Export failed: video data is empty (0 bytes)".to_string());
+    }
+
     let path = PathBuf::from(&destination_path);
     if let Some(parent) = path.parent() {
         let _ = fs::create_dir_all(parent);
     }
+
+    let lower_dest = destination_path.to_lowercase();
+    let is_mov = lower_dest.ends_with(".mov");
+    let is_mp4 = lower_dest.ends_with(".mp4");
+
+    let is_webm_data = data.len() >= 4 && data[0] == 0x1A && data[1] == 0x45 && data[2] == 0xDF && data[3] == 0xA3;
+    let is_mp4_data = data.len() >= 8 && &data[4..8] == b"ftyp";
+
+    if let Some(ffmpeg_bin) = find_ffmpeg() {
+        if is_webm_data && (is_mp4 || is_mov) {
+            let temp_in = get_data_dir().join(format!("temp_export_in_{}.webm", Uuid::new_v4()));
+            let _ = fs::write(&temp_in, &data);
+
+            let mut cmd = std::process::Command::new(&ffmpeg_bin);
+            cmd.arg("-y")
+                .arg("-i")
+                .arg(&temp_in)
+                .arg("-c:v")
+                .arg("libx264")
+                .arg("-pix_fmt")
+                .arg("yuv420p")
+                .arg("-preset")
+                .arg("fast")
+                .arg("-c:a")
+                .arg("aac")
+                .arg("-b:a")
+                .arg("192k");
+
+            if is_mp4 {
+                cmd.arg("-movflags").arg("+faststart");
+            }
+
+            cmd.arg(&path);
+
+            let res = cmd.output();
+            let _ = fs::remove_file(&temp_in);
+
+            if let Ok(output) = res {
+                if output.status.success() && path.exists() {
+                    return Ok(destination_path);
+                }
+            }
+        } else if is_mp4_data && is_mov {
+            let temp_in = get_data_dir().join(format!("temp_export_in_{}.mp4", Uuid::new_v4()));
+            let _ = fs::write(&temp_in, &data);
+
+            let mut cmd = std::process::Command::new(&ffmpeg_bin);
+            cmd.arg("-y")
+                .arg("-i")
+                .arg(&temp_in)
+                .arg("-c:v")
+                .arg("copy")
+                .arg("-c:a")
+                .arg("copy")
+                .arg(&path);
+
+            let res = cmd.output();
+            let _ = fs::remove_file(&temp_in);
+
+            if let Ok(output) = res {
+                if output.status.success() && path.exists() {
+                    return Ok(destination_path);
+                }
+            }
+        }
+    }
+
     fs::write(&path, data).map_err(|e| format!("Failed to write video file to {}: {}", destination_path, e))?;
     Ok(destination_path)
 }
@@ -319,6 +421,49 @@ fn export_source_video_file(
     if let Some(parent) = dest.parent() {
         let _ = fs::create_dir_all(parent);
     }
+
+    let lower_dest = destination_path.to_lowercase();
+    let is_mov = lower_dest.ends_with(".mov");
+    let is_mp4 = lower_dest.ends_with(".mp4");
+
+    if let Some(ffmpeg_bin) = find_ffmpeg() {
+        if is_mov {
+            let mut cmd = std::process::Command::new(&ffmpeg_bin);
+            cmd.arg("-y")
+                .arg("-i")
+                .arg(&src)
+                .arg("-c:v")
+                .arg("copy")
+                .arg("-c:a")
+                .arg("copy")
+                .arg(&dest);
+
+            if let Ok(output) = cmd.output() {
+                if output.status.success() && dest.exists() {
+                    return Ok(destination_path);
+                }
+            }
+        } else if is_mp4 {
+            let mut cmd = std::process::Command::new(&ffmpeg_bin);
+            cmd.arg("-y")
+                .arg("-i")
+                .arg(&src)
+                .arg("-c:v")
+                .arg("copy")
+                .arg("-c:a")
+                .arg("copy")
+                .arg("-movflags")
+                .arg("+faststart")
+                .arg(&dest);
+
+            if let Ok(output) = cmd.output() {
+                if output.status.success() && dest.exists() {
+                    return Ok(destination_path);
+                }
+            }
+        }
+    }
+
     fs::copy(&src, &dest).map_err(|e| format!("Failed to export video to {}: {}", destination_path, e))?;
     Ok(destination_path)
 }
