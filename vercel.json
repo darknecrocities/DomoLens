@@ -6,10 +6,17 @@
       "framework": "vite"
     },
     "engine": {
-      "root": "engine"
+      "root": "engine",
+      "entrypoint": "api/index.py"
     }
   },
   "rewrites": [
+    {
+      "source": "/api/(.*)",
+      "destination": {
+        "service": "engine"
+      }
+    },
     {
       "source": "/(.*)",
       "destination": {

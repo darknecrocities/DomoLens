@@ -83,4 +83,14 @@ export interface Platform {
   readMediaBlob?(path: string): Promise<string>;
   /** Associates an in-memory blob URL with a disk path. */
   registerBlobUrl?(path: string, url: string): void;
+  /** Returns the default export destination path for a given filename (defaulting to OS Downloads directory). */
+  getDefaultExportPath?(filename: string): Promise<string>;
+  /** Opens a native save file dialog allowing user to pick any save destination path on their device. */
+  pickExportPath?(options: { defaultPath?: string; defaultName?: string; filters?: Array<{ name: string; extensions: string[] }> }): Promise<string | null>;
+  /** Saves exported video to a destination path on disk. */
+  saveExportedVideo?(destinationPath: string, data: Uint8Array | number[]): Promise<string>;
+  /** Copies / exports source recording file directly to a destination path on disk. */
+  exportSourceVideoFile?(sourcePath: string, destinationPath: string): Promise<string>;
+  /** Reveals an exported file in the native file manager (Finder / File Explorer / Nautilus). */
+  showItemInFolder?(path: string): Promise<void>;
 }

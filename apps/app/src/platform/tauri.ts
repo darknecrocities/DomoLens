@@ -1,7 +1,7 @@
 import { convertFileSrc, invoke } from "@tauri-apps/api/core";
 import { emit, listen } from "@tauri-apps/api/event";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
-import { open } from "@tauri-apps/plugin-dialog";
+import { open, save } from "@tauri-apps/plugin-dialog";
 import { SUPPORTED_VIDEO_EXTENSIONS, baseName, type ProjectSummary } from "@domolens/core";
 import { copy } from "../copy/en";
 import type { FileDropHandlers, IncomingFile, Off, Platform } from "./types";
@@ -158,6 +158,60 @@ export function createTauriPlatform(opts: { isMobile: boolean; isTouch: boolean;
 
     onHudCommand(callback) {
       return lazyOff(listen<{ action: string }>("domolens://hud-command", (ev) => callback(ev.payload.action)));
+    },
+
+    getDefaultExportPath: async (filename: string) => {
+      try {
+        const path = await invoke<string>("get_default_export_path", { filename });
+        return path;
+      } catch (err) {
+        console.warn("Failed to get default export path from Tauri:", err);
+        return filename;
+      }
+    },
+
+    pickExportPath: async (options) => {
+      try {
+        const picked = await save({
+          title: "Export Video As",
+          defaultPath: options.defaultPath,
+          filters: options.filters || [
+            { name: "MP4 Video", extensions: ["mp4"] },
+            { name: "WebM Video", extensions: ["webm"] },
+            { name: "All Files", extensions: ["*"] },
+          ],
+        });
+        if (typeof picked !== "string") return null;
+        return picked;
+      } catch (err) {
+        console.warn("Save dialog failed or cancelled:", err);
+        return null;
+      }
+    },
+
+    saveExportedVideo: async (destinationPath: string, data: Uint8Array | number[]) => {
+      const payload = Array.isArray(data) ? data : Array.from(data);
+      const saved = await invoke<string>("save_exported_video", {
+        destinationPath,
+        data: payload,
+      });
+      return saved;
+    },
+
+    exportSourceVideoFile: async (sourcePath: string, destinationPath: string) => {
+      const saved = await invoke<string>("export_source_video_file", {
+        sourcePath,
+        destinationPath,
+      });
+      return saved;
+    },
+
+    showItemInFolder: async (path: string) => {
+      try {
+        await invoke<void>("show_item_in_folder", { path });
+      } catch (err) {
+        console.warn("show_item_in_folder failed:", err);
+      }
     },
   };
 }

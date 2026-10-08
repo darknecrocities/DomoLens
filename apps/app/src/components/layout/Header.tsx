@@ -1,4 +1,4 @@
-import { FolderOpen, Globe, Monitor, Mic, RefreshCw, Sliders, Zap } from "lucide-react";
+import { FolderOpen, Globe, RefreshCw, Sliders, Zap } from "lucide-react";
 import { copy } from "../../copy/en";
 import { platform } from "../../platform";
 import { useNav } from "../../store/nav";
@@ -73,7 +73,7 @@ export function Header() {
           - In Browser: Apple-Style Glass Pill Navigation Links
           - In Native App: Hardware & Engine Status Indicators
       */}
-      {!platform.isApp ? (
+      {!platform.isApp && (
         <nav className="hidden md:flex items-center gap-1 rounded-full border border-white/[0.12] bg-white/[0.05] p-1 backdrop-blur-2xl shadow-[inset_0_1px_1px_rgba(255,255,255,0.15),0_2px_10px_rgba(0,0,0,0.3)]">
           {navLinks.map((link) => (
             <button
@@ -86,21 +86,6 @@ export function Header() {
             </button>
           ))}
         </nav>
-      ) : (
-        <div className="hidden xl:flex items-center gap-3 text-xs font-mono text-neutral-400">
-          <div className="flex items-center gap-1.5 rounded-full border border-white/10 bg-white/5 px-2.5 py-1">
-            <Monitor className="size-3 text-white" />
-            <span className="text-neutral-300">Display Ready</span>
-          </div>
-          <div className="flex items-center gap-1.5 rounded-full border border-white/10 bg-white/5 px-2.5 py-1">
-            <Mic className="size-3 text-white" />
-            <span className="text-neutral-300">Audio 48kHz</span>
-          </div>
-          <div className="flex items-center gap-1.5 rounded-full border border-white/10 bg-white/5 px-2.5 py-1">
-            <span className="size-1.5 rounded-full bg-white animate-pulse" />
-            <span className="text-white font-semibold">60 FPS Engine</span>
-          </div>
-        </div>
       )}
 
       {/* Right Quick Action Navigation Bar */}

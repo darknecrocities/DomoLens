@@ -237,6 +237,102 @@ fn save_recording_file(
 }
 
 #[tauri::command]
+fn get_default_downloads_dir() -> Result<String, String> {
+    if let Some(user_dirs) = directories::UserDirs::new() {
+        if let Some(download_dir) = user_dirs.download_dir() {
+            return Ok(download_dir.to_string_lossy().to_string());
+        }
+    }
+    let fallback = std::env::var("HOME")
+        .or_else(|_| std::env::var("USERPROFILE"))
+        .map(|h| PathBuf::from(h).join("Downloads"))
+        .unwrap_or_else(|_| PathBuf::from("."));
+    Ok(fallback.to_string_lossy().to_string())
+}
+
+#[tauri::command]
+fn get_default_export_path(filename: String) -> Result<String, String> {
+    let download_dir = if let Some(user_dirs) = directories::UserDirs::new() {
+        user_dirs.download_dir().map(|p| p.to_path_buf())
+    } else {
+        None
+    };
+
+    let base_dir = download_dir.unwrap_or_else(|| {
+        std::env::var("HOME")
+            .or_else(|_| std::env::var("USERPROFILE"))
+            .map(|h| PathBuf::from(h).join("Downloads"))
+            .unwrap_or_else(|_| PathBuf::from("."))
+    });
+
+    let _ = fs::create_dir_all(&base_dir);
+    let full_path = base_dir.join(filename);
+    Ok(full_path.to_string_lossy().to_string())
+}
+
+#[tauri::command]
+fn save_exported_video(
+    destination_path: String,
+    data: Vec<u8>,
+) -> Result<String, String> {
+    let path = PathBuf::from(&destination_path);
+    if let Some(parent) = path.parent() {
+        let _ = fs::create_dir_all(parent);
+    }
+    fs::write(&path, data).map_err(|e| format!("Failed to write video file to {}: {}", destination_path, e))?;
+    Ok(destination_path)
+}
+
+#[tauri::command]
+fn export_source_video_file(
+    source_path: String,
+    destination_path: String,
+) -> Result<String, String> {
+    let src = PathBuf::from(&source_path);
+    if !src.exists() {
+        return Err(format!("Source video file not found at: {}", source_path));
+    }
+    let dest = PathBuf::from(&destination_path);
+    if let Some(parent) = dest.parent() {
+        let _ = fs::create_dir_all(parent);
+    }
+    fs::copy(&src, &dest).map_err(|e| format!("Failed to export video to {}: {}", destination_path, e))?;
+    Ok(destination_path)
+}
+
+#[tauri::command]
+fn show_item_in_folder(path: String) -> Result<(), String> {
+    let p = Path::new(&path);
+    if !p.exists() {
+        return Err(format!("Path does not exist: {}", path));
+    }
+    #[cfg(target_os = "macos")]
+    {
+        let _ = std::process::Command::new("open")
+            .args(["-R", &path])
+            .spawn()
+            .map_err(|e| e.to_string())?;
+    }
+    #[cfg(target_os = "windows")]
+    {
+        let _ = std::process::Command::new("explorer")
+            .args([&format!("/select,\"{}\"", path)])
+            .spawn()
+            .map_err(|e| e.to_string())?;
+    }
+    #[cfg(target_os = "linux")]
+    {
+        if let Some(parent) = p.parent() {
+            let _ = std::process::Command::new("xdg-open")
+                .arg(parent)
+                .spawn()
+                .map_err(|e| e.to_string())?;
+        }
+    }
+    Ok(())
+}
+
+#[tauri::command]
 fn import_video(
     path: String,
     state: State<'_, AppState>,
@@ -795,7 +891,12 @@ pub fn run() {
             stop_global_input_capture,
             check_accessibility_permission,
             request_accessibility_permission,
-            get_screen_dimensions
+            get_screen_dimensions,
+            get_default_downloads_dir,
+            get_default_export_path,
+            save_exported_video,
+            export_source_video_file,
+            show_item_in_folder
         ])
         .run(tauri::generate_context!())
         .expect("error while running DomoLens");

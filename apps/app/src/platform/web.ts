@@ -267,5 +267,33 @@ export function createWebPlatform(opts: { isTouch: boolean; isMac: boolean }): P
     setAlwaysOnTop() {
       return Promise.resolve();
     },
+
+    getDefaultExportPath: async (filename: string) => {
+      return `Downloads/${filename}`;
+    },
+
+    pickExportPath: async (options) => {
+      return options.defaultPath || `Downloads/export.mp4`;
+    },
+
+    saveExportedVideo: async (destinationPath: string, data: Uint8Array | number[]) => {
+      const bytes = data instanceof Uint8Array ? data : new Uint8Array(data);
+      const blob = new Blob([bytes.buffer as ArrayBuffer], { type: "video/mp4" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = destinationPath.split("/").pop() || "export.mp4";
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      setTimeout(() => URL.revokeObjectURL(url), 60000);
+      return destinationPath;
+    },
+
+    exportSourceVideoFile: async (_sourcePath: string, destinationPath: string) => {
+      return destinationPath;
+    },
+
+    showItemInFolder: async () => {},
   };
 }

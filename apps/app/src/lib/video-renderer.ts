@@ -19,6 +19,7 @@ export interface RenderOptions {
 
 export interface RenderResult {
   blob: Blob;
+  data: Uint8Array;
   mimeType: string;
   filename: string;
   downloadUrl: string;
@@ -110,13 +111,31 @@ export async function renderProjectVideo(options: RenderOptions): Promise<Render
   // Setup video element
   const rawMedia = project.summary.media;
   const isSampleOrEmpty = !rawMedia || rawMedia.startsWith("sample://") || rawMedia.startsWith("mock://");
-  const mediaSrc = isSampleOrEmpty
+  let mediaSrc = isSampleOrEmpty
     ? "/domolens_smooth_autozoom_demo.mp4"
     : platform.mediaUrl(rawMedia);
 
+  if (platform.readMediaBlob && rawMedia && !isSampleOrEmpty && !rawMedia.startsWith("blob:") && !rawMedia.startsWith("data:")) {
+    try {
+      const blobUrl = await platform.readMediaBlob(rawMedia);
+      if (blobUrl) {
+        mediaSrc = blobUrl;
+      }
+    } catch {
+      // Keep platform.mediaUrl fallback
+    }
+  }
+
   const video = document.createElement("video");
   video.src = mediaSrc;
-  video.crossOrigin = "anonymous";
+  if (
+    mediaSrc.startsWith("http://") ||
+    mediaSrc.startsWith("https://")
+  ) {
+    if (!mediaSrc.includes("localhost") && !mediaSrc.includes("127.0.0.1")) {
+      video.crossOrigin = "anonymous";
+    }
+  }
   video.playsInline = true;
   video.muted = true;
   video.preload = "auto";
@@ -171,7 +190,10 @@ export async function renderProjectVideo(options: RenderOptions): Promise<Render
   }
 
   // Setup MediaStream & MediaRecorder
-  const canvasStream = canvas.captureStream ? canvas.captureStream(30) : null;
+  const captureStreamFn =
+    canvas.captureStream ||
+    (canvas as unknown as { webkitCaptureStream?: (fps: number) => MediaStream }).webkitCaptureStream;
+  const canvasStream = captureStreamFn ? captureStreamFn.call(canvas, 30) : null;
   if (!canvasStream) {
     throw new Error("canvas.captureStream is not supported in this environment");
   }
@@ -702,7 +724,15 @@ export async function renderProjectVideo(options: RenderOptions): Promise<Render
       onProgress?.(99, "Packaging download...");
       try {
         video.pause();
-        recorder.onstop = () => {
+        if (recorder.state === "recording") {
+          try {
+            recorder.requestData();
+          } catch {
+            // Ignore
+          }
+        }
+
+        recorder.onstop = async () => {
           if (audioCtx) void audioCtx.close();
           const blob = new Blob(chunks, { type: selectedMimeType });
           const isMp4 = selectedMimeType.includes("mp4");
@@ -710,15 +740,23 @@ export async function renderProjectVideo(options: RenderOptions): Promise<Render
           const safeName = project.summary.name.replace(/\s+/g, "_");
           const filename = `${safeName}_${resolution}.${ext}`;
           const downloadUrl = URL.createObjectURL(blob);
+          const arrayBuffer = await blob.arrayBuffer();
+          const data = new Uint8Array(arrayBuffer);
 
           resolve({
             blob,
+            data,
             mimeType: selectedMimeType,
             filename,
             downloadUrl,
           });
         };
-        recorder.stop();
+
+        if (recorder.state === "recording") {
+          recorder.stop();
+        } else {
+          recorder.onstop?.(new Event("stop"));
+        }
       } catch (err) {
         reject(err);
       }
