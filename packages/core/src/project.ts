@@ -103,13 +103,14 @@ export type BackgroundKind = "solid" | "gradient" | "mesh" | "image";
 
 export type WindowFrameStyle =
   | "macos"
+  | "windows"
   | "safari"
   | "chrome"
   | "glass"
   | "terminal"
   | "none";
 
-export type CameraPhysicsPreset = "spring" | "smooth" | "snappy" | "linear";
+export type CameraPhysicsPreset = "smooth" | "snappy" | "spring" | "linear";
 
 export interface ProjectLooks {
   backgroundType: BackgroundKind;
@@ -196,6 +197,28 @@ export interface KeyframeNode {
   soundVolume?: number;
 }
 
+/** Typography styling configuration for text overlays and motion templates. */
+export interface TemplateTypography {
+  /** CSS font-family string (e.g. "'Plus Jakarta Sans', sans-serif"). */
+  fontFamily: string;
+  /** CSS font-weight (e.g. '600', '700', '800', '900', 'bold'). */
+  fontWeight?: string;
+  /** CSS letter-spacing (e.g. '-0.02em', '0.05em'). */
+  letterSpacing?: string;
+  /** Tailwind or CSS class name for additional headline treatment. */
+  headlineClass?: string;
+}
+
+/** Visual styling for pill badges in templates and overlays. */
+export interface TemplateBadgeStyle {
+  /** CSS background color or gradient (e.g. 'rgba(99, 102, 241, 0.2)'). */
+  bg: string;
+  /** Text color (e.g. '#818cf8'). */
+  text: string;
+  /** Border stroke color (e.g. 'rgba(99, 102, 241, 0.45)'). */
+  border?: string;
+}
+
 /** A text caption or graphic title on the timeline. */
 export interface TextOverlay {
   id: string;
@@ -209,6 +232,10 @@ export interface TextOverlay {
   bgColor?: string;
   badge?: string; // Optional pill badge e.g. "STEP 1" or "NEW"
   style?: "headline" | "badge" | "callout" | "subtitle";
+  /** Optional typography specification. */
+  typography?: TemplateTypography;
+  /** Optional badge pill styling. */
+  badgeStyle?: TemplateBadgeStyle;
 }
 
 /** An audio track or sound effect on the timeline. */

@@ -72,4 +72,114 @@ describe("Studio Motion Templates & Expanded Audio Engine", () => {
     // Thick: sub-bass muted profile
     expect(TYPING_SOUND_PROFILES.thick.thockFreq).toBeLessThanOrEqual(150);
   });
+
+  it("enhances all 10 templates with badgeStyle, typography, transitionTiming, and cameraPhysics", () => {
+    const validPhysics = ["smooth", "snappy", "spring", "linear"];
+
+    for (const tpl of STUDIO_MOTION_TEMPLATES) {
+      // Badge style
+      expect(tpl.badgeStyle).toBeDefined();
+      expect(tpl.badgeStyle?.bg).toBeTruthy();
+      expect(tpl.badgeStyle?.text).toBeTruthy();
+
+      // Typography
+      expect(tpl.typography).toBeDefined();
+      expect(tpl.typography?.fontFamily).toBeTruthy();
+      expect(tpl.typography?.letterSpacing).toBeDefined();
+
+      // Transition timing
+      expect(tpl.transitionTiming).toBeDefined();
+      expect(tpl.transitionTiming?.cameraLeadInMs).toBeGreaterThan(0);
+      expect(tpl.transitionTiming?.entranceDurationMs).toBeGreaterThan(0);
+
+      // Camera physics
+      expect(tpl.cameraPhysics).toBeDefined();
+      expect(validPhysics).toContain(tpl.cameraPhysics);
+      expect(tpl.looks.cameraPhysics).toBe(tpl.cameraPhysics);
+
+      // Default text overlays
+      expect(tpl.defaultTextOverlays[0]?.typography).toBeDefined();
+      expect(tpl.defaultTextOverlays[0]?.badgeStyle).toBeDefined();
+    }
+  });
+
+  it("implements the SaaS Launch core identity (saas-launch-hero) with spring physics and Jakarta typography", () => {
+    const tpl = STUDIO_MOTION_TEMPLATES.find((t) => t.id === "saas-launch-hero");
+    expect(tpl).toBeDefined();
+    expect(tpl?.aspectRatio).toBe("16:9");
+    expect(tpl?.cameraPhysics).toBe("spring");
+    expect(tpl?.looks.cameraPhysics).toBe("spring");
+    expect(tpl?.badge).toBe("NEW RELEASE");
+    expect(tpl?.badgeStyle).toEqual({
+      bg: "rgba(99, 102, 241, 0.2)",
+      text: "#818cf8",
+      border: "rgba(99, 102, 241, 0.45)",
+    });
+    expect(tpl?.typography?.fontFamily).toContain("Plus Jakarta Sans");
+    expect(tpl?.typography?.fontWeight).toBe("800");
+    expect(tpl?.transitionTiming?.cameraLeadInMs).toBe(280);
+    expect(tpl?.transitionTiming?.entranceDurationMs).toBe(450);
+    expect(tpl?.audioSettings.clickSoundPreset).toBe("bop");
+    expect(tpl?.audioSettings.typingSoundPreset).toBe("creamy");
+  });
+
+  it("implements the Social Reel core identity (viral-short-tiktok) with snappy physics and vertical 9:16 aspect", () => {
+    const tpl = STUDIO_MOTION_TEMPLATES.find((t) => t.id === "viral-short-tiktok");
+    expect(tpl).toBeDefined();
+    expect(tpl?.aspectRatio).toBe("9:16");
+    expect(tpl?.cameraPhysics).toBe("snappy");
+    expect(tpl?.looks.cameraPhysics).toBe("snappy");
+    expect(tpl?.badge).toBe("MUST WATCH");
+    expect(tpl?.badgeStyle).toEqual({
+      bg: "rgba(250, 204, 21, 0.22)",
+      text: "#facc15",
+      border: "rgba(250, 204, 21, 0.6)",
+    });
+    expect(tpl?.typography?.fontFamily).toContain("Inter");
+    expect(tpl?.typography?.fontWeight).toBe("900");
+    expect(tpl?.transitionTiming?.cameraLeadInMs).toBe(150);
+    expect(tpl?.transitionTiming?.entranceDurationMs).toBe(350);
+    expect(tpl?.audioSettings.clickSoundPreset).toBe("bop");
+    expect(tpl?.audioSettings.typingSoundPreset).toBe("creamy");
+  });
+
+  it("implements the Kinetic Developer core identity (developer-cli) with terminal framing, snappy physics, and thock audio", () => {
+    const tpl = STUDIO_MOTION_TEMPLATES.find((t) => t.id === "developer-cli");
+    expect(tpl).toBeDefined();
+    expect(tpl?.aspectRatio).toBe("16:9");
+    expect(tpl?.cameraPhysics).toBe("snappy");
+    expect(tpl?.looks.cameraPhysics).toBe("snappy");
+    expect(tpl?.badge).toBe("CLI TOOL");
+    expect(tpl?.badgeStyle).toEqual({
+      bg: "rgba(34, 197, 94, 0.15)",
+      text: "#4ade80",
+      border: "rgba(34, 197, 94, 0.4)",
+    });
+    expect(tpl?.typography?.fontFamily).toContain("JetBrains Mono");
+    expect(tpl?.typography?.fontWeight).toBe("700");
+    expect(tpl?.transitionTiming?.cameraLeadInMs).toBe(200);
+    expect(tpl?.transitionTiming?.entranceDurationMs).toBe(400);
+    expect(tpl?.audioSettings.clickSoundPreset).toBe("tap");
+    expect(tpl?.audioSettings.typingSoundPreset).toBe("thock");
+  });
+
+  it("implements the Keynote Spotlight core identity (apple-keynote-polish) with smooth physics and SF Pro typography", () => {
+    const tpl = STUDIO_MOTION_TEMPLATES.find((t) => t.id === "apple-keynote-polish");
+    expect(tpl).toBeDefined();
+    expect(tpl?.aspectRatio).toBe("16:9");
+    expect(tpl?.cameraPhysics).toBe("smooth");
+    expect(tpl?.looks.cameraPhysics).toBe("smooth");
+    expect(tpl?.badge).toBe("PRO DEMO");
+    expect(tpl?.badgeStyle).toEqual({
+      bg: "rgba(0, 113, 227, 0.12)",
+      text: "#0071e3",
+      border: "rgba(0, 113, 227, 0.3)",
+    });
+    expect(tpl?.typography?.fontFamily).toContain("-apple-system");
+    expect(tpl?.typography?.fontWeight).toBe("600");
+    expect(tpl?.transitionTiming?.cameraLeadInMs).toBe(300);
+    expect(tpl?.transitionTiming?.entranceDurationMs).toBe(500);
+    expect(tpl?.audioSettings.clickSoundPreset).toBe("click");
+    expect(tpl?.audioSettings.typingSoundPreset).toBe("laptop");
+  });
 });

@@ -384,6 +384,7 @@ export async function renderProjectVideo(options: RenderOptions): Promise<Render
           autoTrackCursor: Boolean(looks.autoTrackCursor),
           autoTrackScale: looks.autoTrackScale || 1.6,
           cursorSmoothing: looks.cursorSmoothing || "smooth",
+          cameraPhysics: looks.cameraPhysics,
           clicks: project.clicks,
           alreadySmoothed: true,
         },
@@ -421,7 +422,21 @@ export async function renderProjectVideo(options: RenderOptions): Promise<Render
         if (effectsState.filterStyle) {
           ctx.filter = effectsState.filterStyle;
         }
-        ctx.drawImage(video, -winW / 2, -winH / 2, winW, winH);
+        const vW = video.videoWidth || winW;
+        const vH = video.videoHeight || winH;
+        const vAspect = vW / vH;
+        const winAspect = winW / winH;
+        let sx = 0, sy = 0, sw = vW, sh = vH;
+        if (vAspect > winAspect) {
+          // Source video is wider than viewport window: crop horizontal edges
+          sw = vH * winAspect;
+          sx = (vW - sw) / 2;
+        } else {
+          // Source video is taller than viewport window: crop vertical edges
+          sh = vW / winAspect;
+          sy = (vH - sh) / 2;
+        }
+        ctx.drawImage(video, sx, sy, sw, sh, -winW / 2, -winH / 2, winW, winH);
         ctx.filter = "none";
       } else {
         // High quality fallback presentation canvas

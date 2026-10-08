@@ -7,6 +7,8 @@ import {
   classifySpatialTransition,
   detectZoomBlocksFromClicks,
   easeInOutCubic,
+  evaluateCameraEasing,
+  evaluateCameraPhysicsProgress,
   fillInteractionGaps,
   interpolateCursorAtTime,
   plotInteractionsToKeyframesAndZoomBlocks,
@@ -17,7 +19,7 @@ import {
   generateTourShiftSequence,
   getSteadicamBreathing,
 } from "./zoom";
-import type { ClickEvent, InteractionEvent, TimelineClip } from "./project";
+import type { CameraPhysicsPreset, ClickEvent, InteractionEvent, TimelineClip } from "./project";
 import { removeClipAndRipple, splitClip, splitZoomBlock } from "./timeline";
 import { BACKGROUND_PRESETS, SHADOW_PRESETS } from "./looks";
 
@@ -1238,5 +1240,112 @@ describe("looks presets", () => {
   it("provides valid background and shadow presets", () => {
     expect(BACKGROUND_PRESETS.length).toBeGreaterThan(4);
     expect(SHADOW_PRESETS.length).toBe(4);
+  });
+});
+
+describe("camera physics easing and interpolation", () => {
+  it("enforces boundary guards on all camera physics presets", () => {
+    const presets: CameraPhysicsPreset[] = ["smooth", "snappy", "spring", "linear"];
+    for (const preset of presets) {
+      expect(evaluateCameraEasing(0, preset)).toBe(0);
+      expect(evaluateCameraEasing(-0.25, preset)).toBe(0);
+      expect(evaluateCameraEasing(-10, preset)).toBe(0);
+      expect(evaluateCameraEasing(1, preset)).toBe(1);
+      expect(evaluateCameraEasing(1.25, preset)).toBe(1);
+      expect(evaluateCameraEasing(10, preset)).toBe(1);
+    }
+  });
+
+  it("evaluates 'smooth' physics with cubic ease-in-out curve", () => {
+    for (let t = 0; t <= 1; t += 0.1) {
+      expect(evaluateCameraEasing(t, "smooth")).toBeCloseTo(easeInOutCubic(t), 5);
+      expect(evaluateCameraPhysicsProgress(t, "smooth")).toBeCloseTo(easeInOutCubic(t), 5);
+    }
+    // Midpoint symmetry
+    expect(evaluateCameraEasing(0.5, "smooth")).toBe(0.5);
+    // Smooth start and end derivatives (slow start, fast middle, slow end)
+    expect(evaluateCameraEasing(0.1, "smooth")).toBeLessThan(0.1);
+    expect(evaluateCameraEasing(0.9, "smooth")).toBeGreaterThan(0.9);
+  });
+
+  it("evaluates 'snappy' physics with quartic ease-out curve", () => {
+    // Quartic ease-out: 1 - (1 - t)^4
+    expect(evaluateCameraEasing(0.5, "snappy")).toBeCloseTo(1 - Math.pow(0.5, 4), 5); // 0.9375
+    expect(evaluateCameraEasing(0.5, "snappy")).toBe(0.9375);
+
+    // Reaches near-completion very rapidly compared to smooth
+    expect(evaluateCameraEasing(0.3, "snappy")).toBeGreaterThan(evaluateCameraEasing(0.3, "smooth"));
+    expect(evaluateCameraEasing(0.3, "snappy")).toBeCloseTo(1 - Math.pow(0.7, 4), 4); // ~0.7599
+  });
+
+  it("evaluates 'spring' physics with damped harmonic overshoot settling at 1.0", () => {
+    // Formula: 1 - Math.exp(-6 * t) * Math.cos(2.5 * Math.PI * t)
+    // Settle at t = 1
+    expect(evaluateCameraEasing(1, "spring")).toBe(1);
+    // Boundary guard at t = 0
+    expect(evaluateCameraEasing(0, "spring")).toBe(0);
+
+    // Characteristic overshoot: around t ≈ 0.38 - 0.42, progress exceeds 1.0
+    const progressAt40 = evaluateCameraEasing(0.4, "spring");
+    expect(progressAt40).toBeGreaterThan(1.0);
+    expect(progressAt40).toBeCloseTo(1 - Math.exp(-2.4) * Math.cos(Math.PI), 3); // 1 - 0.0907 * (-1) = ~1.091
+
+    // Checks maximum overshoot is modest (~1.05 to 1.15)
+    let maxProgress = 0;
+    for (let t = 0; t <= 1; t += 0.02) {
+      const p = evaluateCameraEasing(t, "spring");
+      if (p > maxProgress) maxProgress = p;
+    }
+    expect(maxProgress).toBeGreaterThan(1.05);
+    expect(maxProgress).toBeLessThan(1.15);
+
+    // Damps down and finishes cleanly at 1.0
+    expect(evaluateCameraEasing(0.95, "spring")).toBeCloseTo(1.0, 1);
+    expect(evaluateCameraEasing(1.0, "spring")).toBe(1.0);
+  });
+
+  it("evaluates 'linear' physics with strict identity progression", () => {
+    for (let t = 0; t <= 1; t += 0.1) {
+      expect(evaluateCameraEasing(t, "linear")).toBeCloseTo(t, 5);
+    }
+  });
+
+  it("calculateCameraAtTime applies cameraPhysics preset to keyframe span interpolation", () => {
+    const keyframes = [
+      { id: "kf1", timeMs: 1000, scale: 1.0, targetX: 0.5, targetY: 0.5, easing: "cubic" as const },
+      { id: "kf2", timeMs: 2000, scale: 2.0, targetX: 0.2, targetY: 0.3, easing: "cubic" as const },
+    ];
+
+    // Midpoint t = 1500ms (span is 1000ms, progress at t=0.5)
+    // 1. Snappy physics: at t = 1500ms, scale is already > 90% towards 2.0 (scale ≈ 1.9375)
+    const snappyCam = calculateCameraAtTime(1500, [], 500, 400, undefined, keyframes, {
+      cameraPhysics: "snappy",
+    });
+    expect(snappyCam.scale).toBeCloseTo(1.0 + 1.0 * 0.9375, 2);
+
+    // 2. Smooth physics: at t = 1500ms, scale is exactly at 50% midpoint (scale = 1.5)
+    const smoothCam = calculateCameraAtTime(1500, [], 500, 400, undefined, keyframes, {
+      cameraPhysics: "smooth",
+    });
+    expect(smoothCam.scale).toBeCloseTo(1.5, 2);
+
+    // 3. Linear physics: at t = 1500ms, scale is 1.5
+    const linearCam = calculateCameraAtTime(1500, [], 500, 400, undefined, keyframes, {
+      cameraPhysics: "linear",
+    });
+    expect(linearCam.scale).toBeCloseTo(1.5, 2);
+
+    // 4. Spring physics: around t = 1400ms (t=0.4 in span), camera scale overshoots 2.0x!
+    const springCamOvershoot = calculateCameraAtTime(1400, [], 500, 400, undefined, keyframes, {
+      cameraPhysics: "spring",
+    });
+    expect(springCamOvershoot.scale).toBeGreaterThan(2.0); // Overshoots target scale!
+    expect(springCamOvershoot.scale).toBeLessThan(2.15);
+
+    // At keyframe completion t = 2000ms, spring camera settles exactly at target
+    const springCamEnd = calculateCameraAtTime(2000, [], 500, 400, undefined, keyframes, {
+      cameraPhysics: "spring",
+    });
+    expect(springCamEnd.scale).toBeCloseTo(2.0, 2);
   });
 });

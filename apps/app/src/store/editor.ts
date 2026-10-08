@@ -109,7 +109,7 @@ interface EditorState {
   isTemplateModalOpen: boolean;
   setTemplateModalOpen: (open: boolean) => void;
   activeTemplateId: string | null;
-  applyTemplate: (templateId: string) => void;
+  applyTemplate: (templateId: string, customFields?: Record<string, string>) => void;
 
   selectBlock: (id: string | null) => void;
   selectClip: (id: string | null) => void;
@@ -500,21 +500,25 @@ export const useEditor = create<EditorState>((set, get) => ({
   setExportModalOpen: (open) => set({ isExportModalOpen: open }),
   setTemplateModalOpen: (open) => set({ isTemplateModalOpen: open }),
 
-  applyTemplate: (templateId) => {
+  applyTemplate: (templateId, customFields) => {
     const state = get();
     if (!state.project) return;
     const template = STUDIO_MOTION_TEMPLATES.find((t) => t.id === templateId);
     if (!template) return;
 
-    // Generate fresh IDs for template text overlays
+    // Generate fresh IDs for template text overlays with user-customized fields merged
     const newTextOverlays: TextOverlay[] = template.defaultTextOverlays.map((to, i) => ({
       ...to,
       id: `text-tpl-${Date.now()}-${i}`,
+      text: customFields?.["headline"] || to.text,
+      badge: customFields?.["badge"] || to.badge,
+      color: customFields?.["accent"] ? "#ffffff" : to.color,
     }));
 
     const updatedLooks: ProjectLooks = {
       ...state.project.looks,
       ...template.looks,
+      brandAccentColor: customFields?.["accent"] || template.looks.brandAccentColor || state.project.looks.brandAccentColor,
     };
 
     const updatedAudio: ProjectAudioSettings = {

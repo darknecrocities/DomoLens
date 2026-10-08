@@ -1,4 +1,21 @@
-import type { ProjectAudioSettings, ProjectLooks, TextOverlay } from "./project";
+import type {
+  CameraPhysicsPreset,
+  ProjectAudioSettings,
+  ProjectLooks,
+  TemplateBadgeStyle,
+  TemplateTypography,
+  TextOverlay,
+} from "./project";
+
+export type { TemplateBadgeStyle, TemplateTypography };
+
+/** Transition and choreography timing specifications for a motion template. */
+export interface TemplateTransitionTiming {
+  /** Milliseconds delay before camera zooms in/out (defaults to 250ms). */
+  cameraLeadInMs?: number;
+  /** Duration in milliseconds for text overlay and element entrance animations (defaults to 500ms). */
+  entranceDurationMs?: number;
+}
 
 export type TemplateCategory =
   | "saas"
@@ -26,6 +43,14 @@ export interface MotionTemplate {
   aspectRatio: "16:9" | "9:16" | "1:1" | "4:3";
   accentColor: string;
   badge: string;
+  /** Custom badge pill styling (background, text color, and border). */
+  badgeStyle?: TemplateBadgeStyle;
+  /** Visual typography styling for headlines and overlays. */
+  typography?: TemplateTypography;
+  /** Choreography transition timings for camera moves and entrances. */
+  transitionTiming?: TemplateTransitionTiming;
+  /** Camera physics motion curve ('smooth' | 'snappy' | 'spring' | 'linear'). */
+  cameraPhysics?: CameraPhysicsPreset;
   looks: Partial<ProjectLooks>;
   audioSettings: Partial<ProjectAudioSettings>;
   customizableFields: TemplateCustomizableField[];
@@ -42,6 +67,22 @@ export const STUDIO_MOTION_TEMPLATES: MotionTemplate[] = [
     aspectRatio: "16:9",
     accentColor: "#6366f1",
     badge: "NEW RELEASE",
+    badgeStyle: {
+      bg: "rgba(99, 102, 241, 0.2)",
+      text: "#818cf8",
+      border: "rgba(99, 102, 241, 0.45)",
+    },
+    typography: {
+      fontFamily: "'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
+      fontWeight: "800",
+      letterSpacing: "-0.03em",
+      headlineClass: "font-extrabold tracking-tight text-white drop-shadow-md",
+    },
+    transitionTiming: {
+      cameraLeadInMs: 280,
+      entranceDurationMs: 450,
+    },
+    cameraPhysics: "spring",
     looks: {
       aspectRatio: "16:9",
       backgroundType: "gradient",
@@ -87,6 +128,16 @@ export const STUDIO_MOTION_TEMPLATES: MotionTemplate[] = [
         color: "#ffffff",
         bgColor: "rgba(15, 23, 42, 0.85)",
         style: "headline",
+        typography: {
+          fontFamily: "'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
+          fontWeight: "800",
+          letterSpacing: "-0.03em",
+        },
+        badgeStyle: {
+          bg: "rgba(99, 102, 241, 0.2)",
+          text: "#818cf8",
+          border: "rgba(99, 102, 241, 0.45)",
+        },
       },
     ],
   },
@@ -99,6 +150,22 @@ export const STUDIO_MOTION_TEMPLATES: MotionTemplate[] = [
     aspectRatio: "16:9",
     accentColor: "#0071e3",
     badge: "PRO DEMO",
+    badgeStyle: {
+      bg: "rgba(0, 113, 227, 0.12)",
+      text: "#0071e3",
+      border: "rgba(0, 113, 227, 0.3)",
+    },
+    typography: {
+      fontFamily: "-apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text', 'Helvetica Neue', Helvetica, Arial, sans-serif",
+      fontWeight: "600",
+      letterSpacing: "-0.015em",
+      headlineClass: "font-semibold tracking-tight text-slate-900",
+    },
+    transitionTiming: {
+      cameraLeadInMs: 300,
+      entranceDurationMs: 500,
+    },
+    cameraPhysics: "smooth",
     looks: {
       aspectRatio: "16:9",
       backgroundType: "gradient",
@@ -144,6 +211,16 @@ export const STUDIO_MOTION_TEMPLATES: MotionTemplate[] = [
         color: "#0f172a",
         bgColor: "rgba(255, 255, 255, 0.9)",
         style: "callout",
+        typography: {
+          fontFamily: "-apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text', 'Helvetica Neue', Helvetica, Arial, sans-serif",
+          fontWeight: "600",
+          letterSpacing: "-0.015em",
+        },
+        badgeStyle: {
+          bg: "rgba(0, 113, 227, 0.12)",
+          text: "#0071e3",
+          border: "rgba(0, 113, 227, 0.3)",
+        },
       },
     ],
   },
@@ -156,6 +233,22 @@ export const STUDIO_MOTION_TEMPLATES: MotionTemplate[] = [
     aspectRatio: "16:9",
     accentColor: "#a855f7",
     badge: "v2.4 UPDATE",
+    badgeStyle: {
+      bg: "rgba(168, 85, 247, 0.2)",
+      text: "#c084fc",
+      border: "rgba(168, 85, 247, 0.45)",
+    },
+    typography: {
+      fontFamily: "'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif",
+      fontWeight: "700",
+      letterSpacing: "-0.02em",
+      headlineClass: "font-bold tracking-tight text-purple-200",
+    },
+    transitionTiming: {
+      cameraLeadInMs: 200,
+      entranceDurationMs: 450,
+    },
+    cameraPhysics: "snappy",
     looks: {
       aspectRatio: "16:9",
       backgroundType: "gradient",
@@ -200,6 +293,16 @@ export const STUDIO_MOTION_TEMPLATES: MotionTemplate[] = [
         color: "#ffffff",
         bgColor: "rgba(30, 10, 60, 0.85)",
         style: "headline",
+        typography: {
+          fontFamily: "'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif",
+          fontWeight: "700",
+          letterSpacing: "-0.02em",
+        },
+        badgeStyle: {
+          bg: "rgba(168, 85, 247, 0.2)",
+          text: "#c084fc",
+          border: "rgba(168, 85, 247, 0.45)",
+        },
       },
     ],
   },
@@ -212,6 +315,22 @@ export const STUDIO_MOTION_TEMPLATES: MotionTemplate[] = [
     aspectRatio: "9:16",
     accentColor: "#facc15",
     badge: "MUST WATCH",
+    badgeStyle: {
+      bg: "rgba(250, 204, 21, 0.22)",
+      text: "#facc15",
+      border: "rgba(250, 204, 21, 0.6)",
+    },
+    typography: {
+      fontFamily: "'Inter', system-ui, -apple-system, BlinkMacSystemFont, sans-serif",
+      fontWeight: "900",
+      letterSpacing: "-0.02em",
+      headlineClass: "font-black tracking-tight text-yellow-400 drop-shadow-lg",
+    },
+    transitionTiming: {
+      cameraLeadInMs: 150,
+      entranceDurationMs: 350,
+    },
+    cameraPhysics: "snappy",
     looks: {
       aspectRatio: "9:16",
       backgroundType: "gradient",
@@ -256,6 +375,16 @@ export const STUDIO_MOTION_TEMPLATES: MotionTemplate[] = [
         color: "#ffffff",
         bgColor: "rgba(0, 0, 0, 0.85)",
         style: "headline",
+        typography: {
+          fontFamily: "'Inter', system-ui, -apple-system, BlinkMacSystemFont, sans-serif",
+          fontWeight: "900",
+          letterSpacing: "-0.02em",
+        },
+        badgeStyle: {
+          bg: "rgba(250, 204, 21, 0.22)",
+          text: "#facc15",
+          border: "rgba(250, 204, 21, 0.6)",
+        },
       },
     ],
   },
@@ -268,6 +397,22 @@ export const STUDIO_MOTION_TEMPLATES: MotionTemplate[] = [
     aspectRatio: "16:9",
     accentColor: "#22c55e",
     badge: "CLI TOOL",
+    badgeStyle: {
+      bg: "rgba(34, 197, 94, 0.15)",
+      text: "#4ade80",
+      border: "rgba(34, 197, 94, 0.4)",
+    },
+    typography: {
+      fontFamily: "'JetBrains Mono', 'Fira Code', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace",
+      fontWeight: "700",
+      letterSpacing: "-0.01em",
+      headlineClass: "font-mono font-bold tracking-tight text-emerald-400",
+    },
+    transitionTiming: {
+      cameraLeadInMs: 200,
+      entranceDurationMs: 400,
+    },
+    cameraPhysics: "snappy",
     looks: {
       aspectRatio: "16:9",
       backgroundType: "gradient",
@@ -277,7 +422,7 @@ export const STUDIO_MOTION_TEMPLATES: MotionTemplate[] = [
       shadow: "lift",
       windowFrame: "terminal",
       tiltAngle: 3.5,
-      cameraPhysics: "spring",
+      cameraPhysics: "snappy",
       cursorStyle: "dot",
       showCursor: true,
       cursorSize: 1.4,
@@ -312,6 +457,16 @@ export const STUDIO_MOTION_TEMPLATES: MotionTemplate[] = [
         color: "#22c55e",
         bgColor: "rgba(5, 15, 10, 0.9)",
         style: "headline",
+        typography: {
+          fontFamily: "'JetBrains Mono', 'Fira Code', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace",
+          fontWeight: "700",
+          letterSpacing: "-0.01em",
+        },
+        badgeStyle: {
+          bg: "rgba(34, 197, 94, 0.15)",
+          text: "#4ade80",
+          border: "rgba(34, 197, 94, 0.4)",
+        },
       },
     ],
   },
@@ -324,6 +479,22 @@ export const STUDIO_MOTION_TEMPLATES: MotionTemplate[] = [
     aspectRatio: "16:9",
     accentColor: "#0ea5e9",
     badge: "STEP-BY-STEP",
+    badgeStyle: {
+      bg: "rgba(14, 165, 233, 0.2)",
+      text: "#38bdf8",
+      border: "rgba(14, 165, 233, 0.4)",
+    },
+    typography: {
+      fontFamily: "'Inter', system-ui, -apple-system, BlinkMacSystemFont, sans-serif",
+      fontWeight: "600",
+      letterSpacing: "-0.01em",
+      headlineClass: "font-semibold tracking-tight text-sky-200",
+    },
+    transitionTiming: {
+      cameraLeadInMs: 300,
+      entranceDurationMs: 600,
+    },
+    cameraPhysics: "smooth",
     looks: {
       aspectRatio: "16:9",
       backgroundType: "gradient",
@@ -368,6 +539,16 @@ export const STUDIO_MOTION_TEMPLATES: MotionTemplate[] = [
         color: "#ffffff",
         bgColor: "rgba(11, 25, 44, 0.9)",
         style: "callout",
+        typography: {
+          fontFamily: "'Inter', system-ui, -apple-system, BlinkMacSystemFont, sans-serif",
+          fontWeight: "600",
+          letterSpacing: "-0.01em",
+        },
+        badgeStyle: {
+          bg: "rgba(14, 165, 233, 0.2)",
+          text: "#38bdf8",
+          border: "rgba(14, 165, 233, 0.4)",
+        },
       },
     ],
   },
@@ -380,6 +561,22 @@ export const STUDIO_MOTION_TEMPLATES: MotionTemplate[] = [
     aspectRatio: "1:1",
     accentColor: "#ea580c",
     badge: "LIVE TODAY",
+    badgeStyle: {
+      bg: "rgba(234, 88, 12, 0.25)",
+      text: "#fb923c",
+      border: "rgba(234, 88, 12, 0.5)",
+    },
+    typography: {
+      fontFamily: "'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif",
+      fontWeight: "800",
+      letterSpacing: "-0.03em",
+      headlineClass: "font-extrabold tracking-tight text-orange-200",
+    },
+    transitionTiming: {
+      cameraLeadInMs: 180,
+      entranceDurationMs: 450,
+    },
+    cameraPhysics: "spring",
     looks: {
       aspectRatio: "1:1",
       backgroundType: "gradient",
@@ -424,6 +621,16 @@ export const STUDIO_MOTION_TEMPLATES: MotionTemplate[] = [
         color: "#ffffff",
         bgColor: "rgba(40, 15, 5, 0.9)",
         style: "headline",
+        typography: {
+          fontFamily: "'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif",
+          fontWeight: "800",
+          letterSpacing: "-0.03em",
+        },
+        badgeStyle: {
+          bg: "rgba(234, 88, 12, 0.25)",
+          text: "#fb923c",
+          border: "rgba(234, 88, 12, 0.5)",
+        },
       },
     ],
   },
@@ -436,6 +643,22 @@ export const STUDIO_MOTION_TEMPLATES: MotionTemplate[] = [
     aspectRatio: "16:9",
     accentColor: "#38bdf8",
     badge: "SOC2 TYPE II",
+    badgeStyle: {
+      bg: "rgba(56, 189, 248, 0.15)",
+      text: "#38bdf8",
+      border: "rgba(56, 189, 248, 0.35)",
+    },
+    typography: {
+      fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
+      fontWeight: "600",
+      letterSpacing: "-0.01em",
+      headlineClass: "font-semibold tracking-tight text-slate-100",
+    },
+    transitionTiming: {
+      cameraLeadInMs: 350,
+      entranceDurationMs: 750,
+    },
+    cameraPhysics: "smooth",
     looks: {
       aspectRatio: "16:9",
       backgroundType: "gradient",
@@ -480,6 +703,16 @@ export const STUDIO_MOTION_TEMPLATES: MotionTemplate[] = [
         color: "#ffffff",
         bgColor: "rgba(15, 23, 42, 0.9)",
         style: "headline",
+        typography: {
+          fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
+          fontWeight: "600",
+          letterSpacing: "-0.01em",
+        },
+        badgeStyle: {
+          bg: "rgba(56, 189, 248, 0.15)",
+          text: "#38bdf8",
+          border: "rgba(56, 189, 248, 0.35)",
+        },
       },
     ],
   },
@@ -492,6 +725,22 @@ export const STUDIO_MOTION_TEMPLATES: MotionTemplate[] = [
     aspectRatio: "16:9",
     accentColor: "#06b6d4",
     badge: "INTERACTIONS",
+    badgeStyle: {
+      bg: "rgba(6, 182, 212, 0.2)",
+      text: "#22d3ee",
+      border: "rgba(6, 182, 212, 0.45)",
+    },
+    typography: {
+      fontFamily: "'Inter', system-ui, -apple-system, BlinkMacSystemFont, sans-serif",
+      fontWeight: "700",
+      letterSpacing: "-0.02em",
+      headlineClass: "font-bold tracking-tight text-cyan-200",
+    },
+    transitionTiming: {
+      cameraLeadInMs: 240,
+      entranceDurationMs: 550,
+    },
+    cameraPhysics: "spring",
     looks: {
       aspectRatio: "16:9",
       backgroundType: "gradient",
@@ -536,6 +785,16 @@ export const STUDIO_MOTION_TEMPLATES: MotionTemplate[] = [
         color: "#ffffff",
         bgColor: "rgba(8, 47, 73, 0.9)",
         style: "headline",
+        typography: {
+          fontFamily: "'Inter', system-ui, -apple-system, BlinkMacSystemFont, sans-serif",
+          fontWeight: "700",
+          letterSpacing: "-0.02em",
+        },
+        badgeStyle: {
+          bg: "rgba(6, 182, 212, 0.2)",
+          text: "#22d3ee",
+          border: "rgba(6, 182, 212, 0.45)",
+        },
       },
     ],
   },
@@ -548,6 +807,22 @@ export const STUDIO_MOTION_TEMPLATES: MotionTemplate[] = [
     aspectRatio: "4:3",
     accentColor: "#ec4899",
     badge: "FIGMA REEL",
+    badgeStyle: {
+      bg: "rgba(236, 72, 153, 0.18)",
+      text: "#db2777",
+      border: "rgba(236, 72, 153, 0.35)",
+    },
+    typography: {
+      fontFamily: "'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif",
+      fontWeight: "600",
+      letterSpacing: "-0.02em",
+      headlineClass: "font-semibold tracking-tight text-pink-700",
+    },
+    transitionTiming: {
+      cameraLeadInMs: 320,
+      entranceDurationMs: 700,
+    },
+    cameraPhysics: "smooth",
     looks: {
       aspectRatio: "4:3",
       backgroundType: "gradient",
@@ -592,6 +867,16 @@ export const STUDIO_MOTION_TEMPLATES: MotionTemplate[] = [
         color: "#831843",
         bgColor: "rgba(255, 255, 255, 0.92)",
         style: "callout",
+        typography: {
+          fontFamily: "'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif",
+          fontWeight: "600",
+          letterSpacing: "-0.02em",
+        },
+        badgeStyle: {
+          bg: "rgba(236, 72, 153, 0.18)",
+          text: "#db2777",
+          border: "rgba(236, 72, 153, 0.35)",
+        },
       },
     ],
   },

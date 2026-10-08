@@ -1,4 +1,4 @@
-import type { ClickEvent, ZoomBlock } from "./project";
+import type { CameraPhysicsPreset, ClickEvent, ZoomBlock } from "./project";
 
 export interface AutoZoomOptions {
   minScale: number;
@@ -126,6 +126,38 @@ export function videoToScreenCoordinates(
 export function easeInOutCubic(t: number): number {
   return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
 }
+
+/**
+ * Evaluates camera physics easing progress [0, 1] for a given normalized time t [0, 1].
+ * Supported physics presets:
+ * - 'smooth': easeInOutCubic
+ * - 'snappy': 1 - Math.pow(1 - t, 4) (quartic ease-out)
+ * - 'spring': damped harmonic curve 1 - Math.exp(-6 * t) * Math.cos(2.5 * Math.PI * t) with slight overshoot (~1.05) and settling at 1.0 at t=1
+ * - 'linear': t
+ * Boundary guard: t <= 0 returns 0, t >= 1 returns 1.
+ */
+export function evaluateCameraEasing(
+  t: number,
+  physics: CameraPhysicsPreset = "smooth",
+): number {
+  if (t <= 0) return 0;
+  if (t >= 1) return 1;
+
+  switch (physics) {
+    case "spring":
+      return 1 - Math.exp(-6 * t) * Math.cos(2.5 * Math.PI * t);
+    case "snappy":
+      return 1 - Math.pow(1 - t, 4);
+    case "linear":
+      return t;
+    case "smooth":
+    default:
+      return easeInOutCubic(t);
+  }
+}
+
+/** Alias for evaluateCameraEasing for backward compatibility. */
+export const evaluateCameraPhysicsProgress = evaluateCameraEasing;
 
 export interface SpatialTransitionClassification {
   distance: number;
@@ -411,6 +443,8 @@ export interface CameraOptions {
   continuousGlide?: boolean;
   /** Maximum time gap in milliseconds to bridge with continuous glide. */
   maxGlideGapMs?: number;
+  /** Camera transition physics preset curve. */
+  cameraPhysics?: CameraPhysicsPreset;
 }
 
 /**
@@ -560,7 +594,7 @@ export function calculateCameraAtTime(
           cursorY: defaultCursor.y,
         };
       }
-      const progress = easeInOutCubic((timeMs - lastKf.timeMs) / outDuration);
+      const progress = evaluateCameraEasing((timeMs - lastKf.timeMs) / outDuration, options?.cameraPhysics || "smooth");
       const scale = lastKf.scale + (1.0 - lastKf.scale) * progress;
       const target = clampCameraToBounds(lastKf.targetX, lastKf.targetY, lastKf.scale, "center");
       const finalX = target.x + (0.5 - target.x) * progress;
@@ -580,7 +614,7 @@ export function calculateCameraAtTime(
       const k2 = sortedKf[k + 1]!;
       if (timeMs >= k1.timeMs && timeMs <= k2.timeMs) {
         const span = k2.timeMs - k1.timeMs;
-        const progress = span > 0 ? easeInOutCubic((timeMs - k1.timeMs) / span) : 1;
+        const progress = span > 0 ? evaluateCameraEasing((timeMs - k1.timeMs) / span, options?.cameraPhysics || "smooth") : 1;
         let scale = k1.scale + (k2.scale - k1.scale) * progress;
         const baseTargetX = k1.targetX + (k2.targetX - k1.targetX) * progress;
         const baseTargetY = k1.targetY + (k2.targetY - k1.targetY) * progress;
@@ -691,7 +725,7 @@ export function calculateCameraAtTime(
     // 1. Inside lead-in transition: smoothly zoom in directly on block target
     if (!glidedFromPrev && timeMs >= transitionInStart && timeMs < transitionInEnd) {
       const span = transitionInEnd - transitionInStart;
-      const progress = span > 0 ? easeInOutCubic((timeMs - transitionInStart) / span) : 1;
+      const progress = span > 0 ? evaluateCameraEasing((timeMs - transitionInStart) / span, options?.cameraPhysics || "smooth") : 1;
       const target = clampCameraToBounds(block.targetX, block.targetY, block.scale, "center");
       const currentScale = 1.0 + (block.scale - 1.0) * progress;
       return {
@@ -734,7 +768,7 @@ export function calculateCameraAtTime(
     ) {
       if (timeMs > transitionOutStart && timeMs <= nextBlock.startTimeMs) {
         const span = nextBlock.startTimeMs - transitionOutStart;
-        const progress = span > 0 ? easeInOutCubic((timeMs - transitionOutStart) / span) : 1;
+        const progress = span > 0 ? evaluateCameraEasing((timeMs - transitionOutStart) / span, options?.cameraPhysics || "smooth") : 1;
         const target1 = clampCameraToBounds(block.targetX, block.targetY, block.scale, "center");
         const nextCursor = interpolateCursorAtTime(timeMs, effectiveTrajectory, nextBlock.targetX, nextBlock.targetY);
         const target2 = clampCameraToBounds(nextCursor.x, nextCursor.y, nextBlock.scale, "center");
@@ -761,7 +795,7 @@ export function calculateCameraAtTime(
     // 4. Return to full frame (1.0x) during lead-out
     if (timeMs > transitionOutStart && timeMs <= transitionOutEnd) {
       const span = transitionOutEnd - transitionOutStart;
-      const progress = span > 0 ? easeInOutCubic((timeMs - transitionOutStart) / span) : 1;
+      const progress = span > 0 ? evaluateCameraEasing((timeMs - transitionOutStart) / span, options?.cameraPhysics || "smooth") : 1;
       const target = clampCameraToBounds(block.targetX, block.targetY, block.scale, "center");
       const currentScale = block.scale + (1.0 - block.scale) * progress;
       return {

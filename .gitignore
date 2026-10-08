@@ -76,3 +76,6 @@ tauri-updater.key*
 *.AppImage
 *.deb
 *.tar.gz
+
+# Teamwork agent scratchpad
+.agents/

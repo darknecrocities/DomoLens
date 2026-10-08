@@ -18,6 +18,7 @@ import { Modal } from "../ui/Modal";
 import { Button } from "../ui/Button";
 import { useEditor } from "../../store/editor";
 import { sfx } from "../../lib/sound-effects";
+import { TemplateVideoPreview } from "./TemplateVideoPreview";
 
 interface TemplatePickerModalProps {
   open: boolean;
@@ -75,36 +76,7 @@ export function TemplatePickerModal({ open, onClose }: TemplatePickerModalProps)
   };
 
   const handleApply = () => {
-    applyTemplate(selectedTemplate.id);
-
-    // If user edited custom text in the modal, apply the customized headline to project text overlays
-    const state = useEditor.getState();
-    if (state.project && customFields["headline"]) {
-      const overlays = state.project.textOverlays || [];
-      const updatedOverlays = overlays.map((o) => {
-        if (o.id.startsWith("text-tpl-")) {
-          return {
-            ...o,
-            text: customFields["headline"] || o.text,
-            badge: customFields["badge"] || o.badge,
-            color: customFields["accent"] ? "#ffffff" : o.color,
-          };
-        }
-        return o;
-      });
-
-      useEditor.setState({
-        project: {
-          ...state.project,
-          textOverlays: updatedOverlays,
-          looks: {
-            ...state.project.looks,
-            brandAccentColor: customFields["accent"] || state.project.looks.brandAccentColor,
-          },
-        },
-      });
-    }
-
+    applyTemplate(selectedTemplate.id, customFields);
     onClose();
   };
 
@@ -249,76 +221,11 @@ export function TemplatePickerModal({ open, onClose }: TemplatePickerModalProps)
 
           {/* Right: Selected Template Live Preview & Customizer (5 Cols) */}
           <div className="lg:col-span-5 h-[490px] overflow-y-auto flex flex-col rounded-xl border border-white/10 bg-neutral-950/70 p-4 space-y-3.5">
-            {/* Live Animated Canvas Mockup */}
-            <div
-              className="relative w-full aspect-video rounded-xl overflow-hidden border border-white/10 shadow-2xl flex flex-col justify-between p-3 select-none transition-all duration-300 shrink-0"
-              style={{
-                background:
-                  selectedTemplate.looks.backgroundValue ||
-                  "linear-gradient(135deg, #09090b 0%, #1e1b4b 50%, #09090b 100%)",
-              }}
-            >
-              {/* Top bar with traffic lights and aspect ratio badge */}
-              <div className="flex items-center justify-between z-10">
-                <div className="flex items-center gap-1.5 bg-black/50 backdrop-blur-md px-2 py-0.5 rounded-full border border-white/10">
-                  <span className="size-1.5 rounded-full bg-rose-500/90" />
-                  <span className="size-1.5 rounded-full bg-amber-500/90" />
-                  <span className="size-1.5 rounded-full bg-emerald-500/90" />
-                  <span className="ml-1 text-[9px] font-mono text-neutral-300 capitalize">
-                    {selectedTemplate.looks.windowFrame || "macOS"}
-                  </span>
-                </div>
-                <div className="flex items-center gap-1.5">
-                  {selectedTemplate.looks.tiltAngle && selectedTemplate.looks.tiltAngle > 0 && (
-                    <span className="rounded bg-indigo-500/25 text-indigo-300 px-1.5 py-0.5 text-[9px] font-mono border border-indigo-500/30">
-                      {selectedTemplate.looks.tiltAngle}° 3D
-                    </span>
-                  )}
-                  <span className="flex items-center gap-1 rounded bg-black/50 text-neutral-200 px-1.5 py-0.5 text-[9px] font-mono border border-white/10">
-                    {getAspectIcon(selectedTemplate.aspectRatio)}
-                    <span>{selectedTemplate.aspectRatio}</span>
-                  </span>
-                </div>
-              </div>
-
-              {/* Simulated Window Screen with 3D tilt */}
-              <div
-                className="my-auto mx-auto w-[88%] rounded-lg border border-white/15 bg-neutral-900/80 backdrop-blur-md p-2.5 text-center shadow-2xl transition-transform duration-300"
-                style={{
-                  transform: selectedTemplate.looks.tiltAngle
-                    ? `perspective(800px) rotateX(${selectedTemplate.looks.tiltAngle * 0.7}deg) rotateY(-${selectedTemplate.looks.tiltAngle * 0.4}deg)`
-                    : undefined,
-                }}
-              >
-                {/* Live Badge Preview */}
-                <span
-                  className="inline-block rounded-full px-2 py-0.5 text-[9px] font-bold tracking-wider uppercase mb-1 shadow-sm"
-                  style={{
-                    backgroundColor: `${customFields["accent"] || selectedTemplate.accentColor}25`,
-                    color: customFields["accent"] || selectedTemplate.accentColor,
-                    border: `1px solid ${customFields["accent"] || selectedTemplate.accentColor}50`,
-                  }}
-                >
-                  {customFields["badge"] || selectedTemplate.badge}
-                </span>
-                {/* Live Headline Preview */}
-                <h5 className="text-xs font-bold text-white tracking-tight line-clamp-1">
-                  {customFields["headline"] || selectedTemplate.name}
-                </h5>
-                <div className="mt-1.5 mx-auto h-0.5 w-10 rounded-full bg-white/20" />
-              </div>
-
-              {/* Bottom audio indicator */}
-              <div className="flex items-center justify-between text-[10px] text-neutral-400 z-10">
-                <span className="flex items-center gap-1 bg-black/50 px-2 py-0.5 rounded backdrop-blur border border-white/5 font-mono text-[9px]">
-                  <Volume2 className="size-2.5 text-amber-400" />
-                  <span className="capitalize">{selectedTemplate.audioSettings.typingSoundPreset || "Mechanical"}</span>
-                </span>
-                <span className="text-[9px] text-neutral-400 font-mono opacity-80">
-                  Motion Choreography
-                </span>
-              </div>
-            </div>
+            {/* Live Dynamic Video Canvas Preview Engine */}
+            <TemplateVideoPreview
+              template={selectedTemplate}
+              customFields={customFields}
+            />
 
             {/* Template Specs Grid */}
             <div className="grid grid-cols-2 gap-2 text-xs">

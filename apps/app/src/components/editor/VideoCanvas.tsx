@@ -66,6 +66,7 @@ export function VideoCanvas({ project, currentTimeMs: propTimeMs }: VideoCanvasP
       autoTrackCursor: Boolean(looks.autoTrackCursor),
       autoTrackScale: looks.autoTrackScale || 1.6,
       cursorSmoothing: looks.cursorSmoothing || "smooth",
+      cameraPhysics: looks.cameraPhysics,
       clicks,
       alreadySmoothed: true,
       continuousGlide: true,
@@ -81,6 +82,7 @@ export function VideoCanvas({ project, currentTimeMs: propTimeMs }: VideoCanvasP
     looks.autoTrackCursor,
     looks.autoTrackScale,
     looks.cursorSmoothing,
+    looks.cameraPhysics,
     clicks,
   ]);
   const computeCameraRef = useRef(computeCamera);
@@ -359,9 +361,7 @@ export function VideoCanvas({ project, currentTimeMs: propTimeMs }: VideoCanvasP
       if (looks.aspectRatio === "9:16") return "9 / 16";
       if (looks.aspectRatio === "1:1") return "1 / 1";
       if (looks.aspectRatio === "4:3") return "4 / 3";
-      if (looks.aspectRatio === "16:9") {
-        return naturalAspectRatio || (summary.width && summary.height ? `${summary.width} / ${summary.height}` : "16 / 9");
-      }
+      if (looks.aspectRatio === "16:9") return "16 / 9";
     }
     return naturalAspectRatio || (summary.width && summary.height ? `${summary.width} / ${summary.height}` : "16 / 9");
   }, [looks.aspectRatio, naturalAspectRatio, summary.width, summary.height]);
