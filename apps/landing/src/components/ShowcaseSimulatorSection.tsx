@@ -195,9 +195,6 @@ export function ShowcaseSimulatorSection() {
                   exit={{ opacity: 0, x: 12 }}
                   transition={{ duration: 0.3 }}
                 >
-                  <div className="font-mono text-xs uppercase tracking-wider text-neutral-400 mb-1">
-                    Mode Focus
-                  </div>
                   <h3 className="text-2xl font-bold uppercase text-white tracking-tight">
                     {current.name}
                   </h3>

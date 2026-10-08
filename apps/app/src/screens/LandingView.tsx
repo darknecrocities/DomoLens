@@ -747,9 +747,6 @@ export function LandingView() {
                   {/* Left Column: Live Specs & Active Chapter Description */}
                   <div className="lg:col-span-5 space-y-6">
                     <div>
-                      <div className="inline-block font-mono text-[11px] font-bold uppercase tracking-wider text-neutral-400 border border-neutral-700 px-2.5 py-1 rounded-md mb-2">
-                        {current.tag}
-                      </div>
                       <h3 className="text-2xl font-bold uppercase text-white tracking-tight">
                         {current.name}
                       </h3>
@@ -799,10 +796,8 @@ export function LandingView() {
                             DomoLens Studio App — Live Screen Recording
                           </span>
                         </div>
-                        <div className="flex items-center gap-2">
-                          <span className="rounded bg-neutral-800 px-2 py-0.5 font-mono text-[10px] text-neutral-300">
-                            1080p 60 FPS
-                          </span>
+                        <div className="flex items-center gap-2 font-mono text-xs text-neutral-400">
+                          <span>1080p 60 FPS</span>
                         </div>
                       </div>
 
@@ -943,8 +938,8 @@ export function LandingView() {
                       <div className="flex size-10 items-center justify-center rounded-lg bg-neutral-800 text-white border border-neutral-700">
                         <Icon className="size-5" />
                       </div>
-                      <span className="font-mono text-[10px] font-bold uppercase tracking-wider text-neutral-400 border border-neutral-800 px-2 py-0.5 rounded">
-                        {feat.tag}
+                      <span className="font-mono text-xs font-semibold text-neutral-400">
+                        /0{idx + 1}
                       </span>
                     </div>
 
@@ -1090,8 +1085,8 @@ export function LandingView() {
                       <div className="flex size-10 items-center justify-center rounded-lg bg-neutral-800 text-white border border-neutral-700">
                         <Icon className="size-5" />
                       </div>
-                      <span className="font-mono text-[10px] font-bold uppercase tracking-wider text-neutral-400 border border-neutral-800 px-2 py-0.5 rounded">
-                        {uc.tag}
+                      <span className="font-mono text-xs font-semibold text-neutral-400">
+                        /0{idx + 1}
                       </span>
                     </div>
 
@@ -1360,8 +1355,8 @@ export function LandingView() {
                     <h3 className="text-xl font-bold uppercase text-white">DomoLens for macOS</h3>
                     <p className="text-xs text-neutral-400 mt-1">Universal binary for Apple Silicon (M1/M2/M3/M4) & Intel</p>
                   </div>
-                  <span className="font-mono text-xs font-bold text-white border border-neutral-700 px-2.5 py-1 rounded">
-                    Stable
+                  <span className="font-mono text-xs text-neutral-400">
+                    Latest Release
                   </span>
                 </div>
               <div className="mt-6 flex flex-wrap gap-3">
@@ -1405,8 +1400,8 @@ export function LandingView() {
                   <h3 className="text-xl font-bold uppercase text-white">DomoLens for Windows</h3>
                   <p className="text-xs text-neutral-400 mt-1">Windows 11 and Windows 10 (64-bit Architecture)</p>
                 </div>
-                <span className="font-mono text-xs font-bold text-white border border-neutral-700 px-2.5 py-1 rounded">
-                  Stable
+                <span className="font-mono text-xs text-neutral-400">
+                  Latest Release
                 </span>
               </div>
               <div className="mt-6 flex flex-wrap gap-3">
@@ -1436,8 +1431,8 @@ export function LandingView() {
                   <h3 className="text-xl font-bold uppercase text-white">DomoLens for Linux</h3>
                   <p className="text-xs text-neutral-400 mt-1">Ubuntu, Debian, Fedora, Arch (Wayland & PipeWire Support)</p>
                 </div>
-                <span className="font-mono text-xs font-bold text-white border border-neutral-700 px-2.5 py-1 rounded">
-                  Stable
+                <span className="font-mono text-xs text-neutral-400">
+                  Latest Release
                 </span>
               </div>
               <div className="mt-6 flex flex-wrap gap-3">
