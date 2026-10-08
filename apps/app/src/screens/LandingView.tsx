@@ -266,39 +266,55 @@ export function LandingView() {
   const workflowChapters = {
     zoom: {
       id: "zoom" as const,
-      name: "Auto-Zoom Focus",
+      name: "Smart Auto-Zoom",
       time: 0.5,
-      tag: "16:9 • 1.85x Zoom",
-      scale: "1.85x",
-      desc: "Camera detects the button target, smoothly zooms in at 60 FPS, tracks the cursor trajectory, and pulls back gently to reveal context.",
-      tip: "Perfect for high-impact call-to-actions, navigation clicks, and onboarding flows.",
+      desc: "Automatically glides the camera directly to your clicks and typing. Your viewers instantly see what matters most without squinting at a huge screen.",
+      benefits: [
+        { label: "Viewer Focus", value: "Follows Every Action", desc: "Draws attention to where you click and type" },
+        { label: "Effort Saved", value: "Zero Keyframes", desc: "Camera moves smoothly on its own" },
+        { label: "Mobile Feeds", value: "Crystal-Clear View", desc: "No tiny, unreadable text on phone screens" },
+        { label: "Time To Ship", value: "Ready In Seconds", desc: "Record once and your demo is done" },
+      ],
+      howItHelps: "Viewers scroll away when videos are boring or hard to follow. Auto-zoom turns everyday screen recordings into high-converting product demos that hook attention immediately.",
     },
     silence: {
       id: "silence" as const,
-      name: "AI Silence Trim",
+      name: "Silence Remover",
       time: 3.2,
-      tag: "Timeline • Auto Cut",
-      scale: "1.0x",
-      desc: "One click in the AI Director analyzes the speech waveform, automatically identifies dead pauses, and trims them from the timeline.",
-      tip: "Eliminates hesitation gaps without manually slicing clips in an NLE editor.",
+      desc: "Removes awkward pauses, hesitations, and dead air with a single click. Keeps your walkthroughs fast, energetic, and engaging.",
+      benefits: [
+        { label: "Video Pacing", value: "Fast & Punchy", desc: "Cuts dead air so viewers stay engaged" },
+        { label: "Editing Work", value: "1-Click Cleanup", desc: "No tedious splicing or timeline slicing" },
+        { label: "Engagement", value: "Higher Watch Time", desc: "Tighter demos get watched to the end" },
+        { label: "Speech Flow", value: "Sounds Confident", desc: "Smooth rhythm without jarring jumps" },
+      ],
+      howItHelps: "Dead pauses cause viewers to click away. Removing hesitations makes your pitch sound crisp, confident, and professional without spending hours trimming audio.",
     },
     composition: {
       id: "composition" as const,
-      name: "Studio Composition",
+      name: "Keynote-Style Framing",
       time: 6.0,
-      tag: "Studio • Frosted Bezel",
-      scale: "Live",
-      desc: "Live adjustments to corner roundness, soft drop shadows, background padding, and frosted ambient blur render in real time on canvas.",
-      tip: "Gives standard desktop screen recordings the polish of an official keynote presentation.",
+      desc: "Adds modern rounded corners, soft drop shadows, and clean backdrops. Gives your desktop recording the polish of an official Apple keynote.",
+      benefits: [
+        { label: "Presentation", value: "Studio-Grade Look", desc: "Elevates standard desktop screen shares" },
+        { label: "Brand Match", value: "Custom Colors", desc: "Match your company theme and wallpapers" },
+        { label: "Depth & Style", value: "Soft Shadows", desc: "Modern rounded corners that pop in feeds" },
+        { label: "Social Ready", value: "Perfect Framing", desc: "Optimized for Twitter, LinkedIn & YouTube" },
+      ],
+      howItHelps: "First impressions decide whether customers trust your product. Studio framing gives your demo the look of a venture-backed tech company with zero design effort.",
     },
     export: {
       id: "export" as const,
-      name: "Instant GPU Export",
+      name: "Instant Video Export",
       time: 9.6,
-      tag: "Hardware • 60 FPS",
-      scale: "1080p/4K",
-      desc: "Renders directly on your local GPU via embedded FFmpeg with zero cloud upload queues, zero watermarks, and lossless clarity.",
-      tip: "Ready to share on Product Hunt, YouTube, and X in seconds.",
+      desc: "Saves high-quality video directly to your computer in seconds. No waiting in cloud queues, no subscriptions, and zero watermarks.",
+      benefits: [
+        { label: "Turnaround", value: "Instant Download", desc: "Ready to share the second you finish" },
+        { label: "Privacy", value: "100% On-Device", desc: "Your screen captures never leave your machine" },
+        { label: "Pricing", value: "No Monthly Fees", desc: "Free forever with zero cloud subscriptions" },
+        { label: "Branding", value: "Zero Watermarks", desc: "Unbranded, clean video ready for clients" },
+      ],
+      howItHelps: "Never wait 15 minutes for cloud recorders to process your files. Export immediately, upload straight to Product Hunt or clients, and get right back to building.",
     },
   };
 
@@ -698,7 +714,7 @@ export function LandingView() {
             Real Screen Recording. Zero Dummy Demos.
           </h2>
           <p className="mt-2 max-w-2xl text-sm text-neutral-400 leading-relaxed">
-            Watch the actual DomoLens Studio interface track clicks, zoom the camera, tighten silences, and render high-framerate video directly on device.
+            Watch how DomoLens automatically follows your clicks, cleans up dead air, and frames your app in studio quality — without opening a video editor.
           </p>
 
           {/* Chapter Switcher Buttons */}
@@ -755,31 +771,34 @@ export function LandingView() {
                       </p>
                     </div>
 
-                    {/* Technical Parameter Readouts */}
+                    {/* Marketing-Minded Benefit Highlights (4 Cards) */}
                     <div className="grid grid-cols-2 gap-3 pt-4 border-t border-neutral-800">
-                      <div className="rounded-lg border border-neutral-800 bg-black/50 p-3">
-                        <span className="block font-mono text-[10px] text-neutral-500 uppercase">Camera Zoom</span>
-                        <span className="block font-mono text-sm font-bold text-white mt-0.5">{current.scale}</span>
-                      </div>
-                      <div className="rounded-lg border border-neutral-800 bg-black/50 p-3">
-                        <span className="block font-mono text-[10px] text-neutral-500 uppercase">Frame Rate</span>
-                        <span className="block font-mono text-sm font-bold text-white mt-0.5">60 FPS Hardware</span>
-                      </div>
-                      <div className="rounded-lg border border-neutral-800 bg-black/50 p-3">
-                        <span className="block font-mono text-[10px] text-neutral-500 uppercase">Timestamp</span>
-                        <span className="block font-mono text-xs font-semibold text-neutral-200 mt-0.5">
-                          {formatSec(showcaseTime)} / {formatSec(showcaseDuration)}
-                        </span>
-                      </div>
-                      <div className="rounded-lg border border-neutral-800 bg-black/50 p-3">
-                        <span className="block font-mono text-[10px] text-neutral-500 uppercase">Processing</span>
-                        <span className="block font-mono text-xs font-semibold text-neutral-200 mt-0.5">100% Local GPU</span>
-                      </div>
+                      {current.benefits.map((b, idx) => (
+                        <div
+                          key={idx}
+                          className="rounded-xl border border-neutral-800 bg-black/60 p-3.5 transition-colors hover:border-neutral-700"
+                        >
+                          <span className="block font-mono text-[10px] text-neutral-400 uppercase tracking-wider">
+                            {b.label}
+                          </span>
+                          <span className="block font-sans text-sm font-bold text-white mt-1 tracking-tight">
+                            {b.value}
+                          </span>
+                          <span className="block text-[11px] text-neutral-400 mt-1 leading-snug">
+                            {b.desc}
+                          </span>
+                        </div>
+                      ))}
                     </div>
 
-                    <div className="rounded-xl border border-neutral-800 bg-neutral-950 p-3.5 text-xs text-neutral-400 font-mono">
-                      <span className="text-white font-bold block mb-1">PRO TIP</span>
-                      <span>{current.tip}</span>
+                    {/* 5th Card: How This Helps You */}
+                    <div className="rounded-xl border border-neutral-800 bg-neutral-950 p-4 text-xs">
+                      <span className="text-white font-bold block mb-1.5 font-mono text-xs uppercase tracking-wider">
+                        How This Helps You
+                      </span>
+                      <p className="leading-relaxed text-neutral-300">
+                        {current.howItHelps}
+                      </p>
                     </div>
                   </div>
 
@@ -797,7 +816,7 @@ export function LandingView() {
                           </span>
                         </div>
                         <div className="flex items-center gap-2 font-mono text-xs text-neutral-400">
-                          <span>1080p 60 FPS</span>
+                          <span>Studio Quality</span>
                         </div>
                       </div>
 

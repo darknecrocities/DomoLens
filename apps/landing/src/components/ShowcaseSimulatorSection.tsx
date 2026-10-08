@@ -2,47 +2,73 @@ import { useRef, useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Pause, Play, RotateCcw, Volume2, VolumeX, Sparkles, Crosshair } from "lucide-react";
 
+interface WorkflowBenefit {
+  label: string;
+  value: string;
+  desc: string;
+}
+
 interface WorkflowChapter {
   id: "zoom" | "silence" | "composition" | "export";
-  name: "Auto-Zoom Focus" | "AI Silence Trim" | "Studio Composition" | "Instant GPU Export";
+  name: string;
   time: number;
-  scale: string;
   desc: string;
-  tip: string;
+  benefits: WorkflowBenefit[];
+  howItHelps: string;
 }
 
 const WORKFLOW_CHAPTERS: Record<string, WorkflowChapter> = {
   zoom: {
     id: "zoom",
-    name: "Auto-Zoom Focus",
+    name: "Smart Auto-Zoom",
     time: 0.5,
-    scale: "1.85x",
-    desc: "Camera detects the button target, smoothly zooms in at 60 FPS, tracks the cursor trajectory, and pulls back gently to reveal context.",
-    tip: "Perfect for high-impact call-to-actions, navigation clicks, and onboarding flows.",
+    desc: "Automatically glides the camera directly to your clicks and typing. Your viewers instantly see what matters most without squinting at a huge screen.",
+    benefits: [
+      { label: "Viewer Focus", value: "Follows Every Action", desc: "Draws attention to where you click and type" },
+      { label: "Effort Saved", value: "Zero Keyframes", desc: "Camera moves smoothly on its own" },
+      { label: "Mobile Feeds", value: "Crystal-Clear View", desc: "No tiny, unreadable text on phone screens" },
+      { label: "Time To Ship", value: "Ready In Seconds", desc: "Record once and your demo is done" },
+    ],
+    howItHelps: "Viewers scroll away when videos are boring or hard to follow. Auto-zoom turns everyday screen recordings into high-converting product demos that hook attention immediately.",
   },
   silence: {
     id: "silence",
-    name: "AI Silence Trim",
+    name: "Silence Remover",
     time: 3.2,
-    scale: "1.0x",
-    desc: "One click in the AI Director analyzes the speech waveform, automatically identifies dead pauses, and trims them from the timeline.",
-    tip: "Eliminates hesitation gaps without manually slicing clips in an NLE editor.",
+    desc: "Removes awkward pauses, hesitations, and dead air with a single click. Keeps your walkthroughs fast, energetic, and engaging.",
+    benefits: [
+      { label: "Video Pacing", value: "Fast & Punchy", desc: "Cuts dead air so viewers stay engaged" },
+      { label: "Editing Work", value: "1-Click Cleanup", desc: "No tedious splicing or timeline slicing" },
+      { label: "Engagement", value: "Higher Watch Time", desc: "Tighter demos get watched to the end" },
+      { label: "Speech Flow", value: "Sounds Confident", desc: "Smooth rhythm without jarring jumps" },
+    ],
+    howItHelps: "Dead pauses cause viewers to click away. Removing hesitations makes your pitch sound crisp, confident, and professional without spending hours trimming audio.",
   },
   composition: {
     id: "composition",
-    name: "Studio Composition",
+    name: "Keynote-Style Framing",
     time: 6.0,
-    scale: "Live",
-    desc: "Live adjustments to corner roundness, soft drop shadows, background padding, and frosted ambient blur render in real time on canvas.",
-    tip: "Gives standard desktop screen recordings the polish of an official keynote presentation.",
+    desc: "Adds modern rounded corners, soft drop shadows, and clean backdrops. Gives your desktop recording the polish of an official Apple keynote.",
+    benefits: [
+      { label: "Presentation", value: "Studio-Grade Look", desc: "Elevates standard desktop screen shares" },
+      { label: "Brand Match", value: "Custom Colors", desc: "Match your company theme and wallpapers" },
+      { label: "Depth & Style", value: "Soft Shadows", desc: "Modern rounded corners that pop in feeds" },
+      { label: "Social Ready", value: "Perfect Framing", desc: "Optimized for Twitter, LinkedIn & YouTube" },
+    ],
+    howItHelps: "First impressions decide whether customers trust your product. Studio framing gives your demo the look of a venture-backed tech company with zero design effort.",
   },
   export: {
     id: "export",
-    name: "Instant GPU Export",
+    name: "Instant Video Export",
     time: 9.6,
-    scale: "1080p/4K",
-    desc: "Renders directly on your local GPU via embedded FFmpeg with zero cloud upload queues, zero watermarks, and lossless clarity.",
-    tip: "Ready to share on Product Hunt, YouTube, and X in seconds.",
+    desc: "Saves high-quality video directly to your computer in seconds. No waiting in cloud queues, no subscriptions, and zero watermarks.",
+    benefits: [
+      { label: "Turnaround", value: "Instant Download", desc: "Ready to share the second you finish" },
+      { label: "Privacy", value: "100% On-Device", desc: "Your screen captures never leave your machine" },
+      { label: "Pricing", value: "No Monthly Fees", desc: "Free forever with zero cloud subscriptions" },
+      { label: "Branding", value: "Zero Watermarks", desc: "Unbranded, clean video ready for clients" },
+    ],
+    howItHelps: "Never wait 15 minutes for cloud recorders to process your files. Export immediately, upload straight to Product Hunt or clients, and get right back to building.",
   },
 };
 
@@ -143,13 +169,13 @@ export function ShowcaseSimulatorSection() {
     >
       <div className="mx-auto max-w-6xl">
         <div className="font-mono text-xs uppercase tracking-widest text-neutral-400">
-          // Real App In Action
+          // See It In Action
         </div>
         <h2 className="mt-2 text-3xl font-black uppercase tracking-tight text-white sm:text-5xl">
-          Real Screen Recording. Zero Dummy Demos.
+          Everything You Need To Showcase Your Work.
         </h2>
         <p className="mt-2 max-w-2xl text-sm text-neutral-400 leading-relaxed">
-          Watch the actual DomoLens Studio interface track clicks, zoom the camera, tighten silences, and render high-framerate video directly on device.
+          Watch how DomoLens automatically follows your clicks, cleans up dead air, and frames your app in studio quality — without opening a video editor.
         </p>
 
         {/* Chapter Switcher Buttons with Animated Layout Pill */}
@@ -185,7 +211,7 @@ export function ShowcaseSimulatorSection() {
         {/* Stage Container with Real Screen Recording Video */}
         <div className="mt-8 rounded-2xl border border-white/[0.08] bg-neutral-950/70 backdrop-blur-xl p-6 sm:p-8 shadow-2xl">
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-center">
-            {/* Left Column: Live Specs & Active Chapter Description */}
+            {/* Left Column: Marketing-Minded Feature Highlights & 5 Cards */}
             <div className="lg:col-span-5 space-y-6">
               <AnimatePresence mode="wait">
                 <motion.div
@@ -204,47 +230,34 @@ export function ShowcaseSimulatorSection() {
                 </motion.div>
               </AnimatePresence>
 
-              {/* Technical Parameter Readouts with Equalizer Animation */}
+              {/* Marketing-Minded Benefit Highlights (4 Cards) */}
               <div className="grid grid-cols-2 gap-3 pt-4 border-t border-white/[0.08]">
-                <div className="rounded-lg border border-white/[0.06] bg-black/60 p-3">
-                  <span className="block font-mono text-[10px] text-neutral-400 uppercase">Camera Zoom</span>
-                  <span className="block font-mono text-sm font-bold text-white mt-0.5">{current.scale}</span>
-                </div>
-                <div className="rounded-lg border border-white/[0.06] bg-black/60 p-3">
-                  <span className="block font-mono text-[10px] text-neutral-400 uppercase">Frame Rate</span>
-                  <span className="block font-mono text-sm font-bold text-white mt-0.5">60 FPS Hardware</span>
-                </div>
-                <div className="rounded-lg border border-white/[0.06] bg-black/60 p-3">
-                  <span className="block font-mono text-[10px] text-neutral-400 uppercase">Timestamp</span>
-                  <span className="block font-mono text-xs font-semibold text-neutral-200 mt-0.5">
-                    {formatTime(currentTime)} / {formatTime(duration)}
-                  </span>
-                </div>
-                <div className="rounded-lg border border-white/[0.06] bg-black/60 p-3">
-                  <span className="block font-mono text-[10px] text-neutral-400 uppercase">Audio Track</span>
-                  <div className="flex items-center gap-1 mt-1.5 h-3">
-                    {[0.6, 1, 0.4, 0.8, 0.5, 0.9, 0.3, 0.7].map((heightScale, i) => (
-                      <motion.div
-                        key={i}
-                        className="w-1 bg-white rounded-full"
-                        animate={isPlaying ? {
-                          height: ["30%", `${heightScale * 100}%`, "25%"]
-                        } : { height: "25%" }}
-                        transition={{
-                          repeat: Infinity,
-                          repeatType: "reverse",
-                          duration: 0.5 + i * 0.08,
-                          ease: "easeInOut"
-                        }}
-                      />
-                    ))}
+                {current.benefits.map((b, idx) => (
+                  <div
+                    key={idx}
+                    className="rounded-xl border border-white/[0.06] bg-black/60 p-3.5 transition-colors hover:border-white/15"
+                  >
+                    <span className="block font-mono text-[10px] text-neutral-400 uppercase tracking-wider">
+                      {b.label}
+                    </span>
+                    <span className="block font-sans text-sm font-bold text-white mt-1 tracking-tight">
+                      {b.value}
+                    </span>
+                    <span className="block text-[11px] text-neutral-400 mt-1 leading-snug">
+                      {b.desc}
+                    </span>
                   </div>
-                </div>
+                ))}
               </div>
 
-              <div className="rounded-xl border border-white/[0.08] bg-black/80 p-3.5 text-xs text-neutral-400 font-mono">
-                <span className="text-white font-bold block mb-1">PRO TIP</span>
-                <span>{current.tip}</span>
+              {/* 5th Card: How This Helps You */}
+              <div className="rounded-xl border border-white/[0.08] bg-black/80 p-4 text-xs">
+                <span className="text-white font-bold block mb-1.5 font-mono text-xs uppercase tracking-wider">
+                  How This Helps You
+                </span>
+                <p className="leading-relaxed text-neutral-300">
+                  {current.howItHelps}
+                </p>
               </div>
             </div>
 
@@ -253,32 +266,26 @@ export function ShowcaseSimulatorSection() {
               <div className="relative aspect-video w-full rounded-xl border border-white/[0.12] bg-black overflow-hidden shadow-2xl flex flex-col justify-between group">
                 {/* HUD Crosshairs and Animated Corner Brackets */}
                 <div className="pointer-events-none absolute inset-0 z-30 p-3">
-                  {/* Top-left corner */}
                   <motion.div
                     className="absolute top-3 left-3 size-4 border-t-2 border-l-2 border-white/40"
                     animate={{ opacity: [0.4, 0.9, 0.4] }}
                     transition={{ repeat: Infinity, duration: 2, ease: "easeInOut" }}
                   />
-                  {/* Top-right corner */}
                   <motion.div
                     className="absolute top-3 right-3 size-4 border-t-2 border-r-2 border-white/40"
                     animate={{ opacity: [0.4, 0.9, 0.4] }}
                     transition={{ repeat: Infinity, duration: 2, ease: "easeInOut", delay: 0.5 }}
                   />
-                  {/* Bottom-left corner */}
                   <motion.div
                     className="absolute bottom-12 left-3 size-4 border-b-2 border-l-2 border-white/40"
                     animate={{ opacity: [0.4, 0.9, 0.4] }}
                     transition={{ repeat: Infinity, duration: 2, ease: "easeInOut", delay: 1 }}
                   />
-                  {/* Bottom-right corner */}
                   <motion.div
                     className="absolute bottom-12 right-3 size-4 border-b-2 border-r-2 border-white/40"
                     animate={{ opacity: [0.4, 0.9, 0.4] }}
                     transition={{ repeat: Infinity, duration: 2, ease: "easeInOut", delay: 1.5 }}
                   />
-
-                  {/* Center HUD Reticle (subtle) */}
                   <div className="absolute inset-0 flex items-center justify-center opacity-20">
                     <Crosshair className="size-10 text-white" />
                   </div>
@@ -295,7 +302,7 @@ export function ShowcaseSimulatorSection() {
                     </span>
                   </div>
                   <div className="flex items-center gap-2 font-mono text-xs text-neutral-400">
-                    <span>1080p 60 FPS</span>
+                    <span>Studio Quality</span>
                   </div>
                 </div>
 

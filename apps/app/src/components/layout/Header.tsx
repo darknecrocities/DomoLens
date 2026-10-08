@@ -66,9 +66,6 @@ export function Header() {
           <span className="text-base font-bold tracking-tight text-white font-mono uppercase">
             {copy.appName}
           </span>
-          <span className="hidden sm:inline-flex rounded-full border border-white/10 bg-white/5 px-2 py-0.5 text-[10px] font-mono uppercase tracking-wider text-neutral-400">
-            {platform.isApp ? "Desktop Studio" : "Web Studio"}
-          </span>
         </button>
       </div>
 
