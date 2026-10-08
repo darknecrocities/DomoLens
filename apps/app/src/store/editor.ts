@@ -36,6 +36,7 @@ import {
   enforceNonOverlappingZoomBlocks,
 } from "@domolens/core";
 import { sfx } from "../lib/sound-effects";
+import { platform } from "../platform";
 import { useProjects } from "./projects";
 import { useNav } from "./nav";
 import { toast } from "./toast";
@@ -249,37 +250,103 @@ export const useEditor = create<EditorState>((set, get) => ({
   future: [],
 
   loadProject: async (id: string) => {
-    // 1. Check session storage for full project data
-    if (typeof sessionStorage !== "undefined") {
-      const stored = sessionStorage.getItem(`domolens_project_${id}`);
-      if (stored) {
-        try {
-          const parsed = JSON.parse(stored) as ProjectData;
-          if (!parsed.audioSettings) {
-            parsed.audioSettings = { ...DEFAULT_AUDIO_SETTINGS };
-          }
-          if (!parsed.effects) {
-            parsed.effects = [];
-          }
-          if (parsed.looks) {
-            parsed.looks.autoTrackCursor = false;
-            parsed.looks.showClickRipples = true;
-          }
-          set({
-            project: parsed,
-            currentTimeMs: 0,
-            durationMs: parsed.summary.durationMs || 10000,
-            selectedBlockId: parsed.zoomBlocks[0]?.id || null,
-            selectedKeyframeId: null,
-            selectedEffectId: null,
-            history: [],
-            future: [],
-          });
-          return true;
-        } catch {
-          // Fall through
+    // 1. First, check platform disk storage for full project data
+    let parsed: ProjectData | null = null;
+    if (platform.loadFullProject) {
+      try {
+        parsed = await platform.loadFullProject(id);
+      } catch (err) {
+        console.warn("Failed loading full project from platform:", err);
+      }
+    }
+
+    // 2. Check local storage fallback
+    if (!parsed && typeof localStorage !== "undefined") {
+      try {
+        const stored = localStorage.getItem(`domolens_full_project_${id}`);
+        if (stored) {
+          parsed = JSON.parse(stored) as ProjectData;
+        }
+      } catch {}
+    }
+
+    // 3. Check session storage fallback
+    if (!parsed && typeof sessionStorage !== "undefined") {
+      try {
+        const stored = sessionStorage.getItem(`domolens_project_${id}`);
+        if (stored) {
+          parsed = JSON.parse(stored) as ProjectData;
+        }
+      } catch {}
+    }
+
+    if (parsed) {
+      if (!parsed.audioSettings) {
+        parsed.audioSettings = { ...DEFAULT_AUDIO_SETTINGS };
+      }
+      if (!parsed.effects) {
+        parsed.effects = [];
+      }
+      if (parsed.looks) {
+        parsed.looks.autoTrackCursor = false;
+        parsed.looks.showClickRipples = true;
+      }
+      if (!parsed.zoomBlocks) parsed.zoomBlocks = [];
+      if (!parsed.keyframes) parsed.keyframes = [];
+      if (!parsed.clicks) parsed.clicks = [];
+      if (!parsed.interactions) parsed.interactions = [];
+      if (!parsed.cursorTrajectory) parsed.cursorTrajectory = [];
+      if (!parsed.textOverlays) parsed.textOverlays = [];
+      if (!parsed.audioTracks) parsed.audioTracks = [];
+
+      const duration = parsed.summary.durationMs || 10000;
+
+      // Self-heal: If project has media and duration, but 0 zoomBlocks and 0 keyframes (e.g. past recording before fix):
+      if (parsed.zoomBlocks.length === 0 && parsed.keyframes.length === 0 && duration >= 1000) {
+        if (parsed.interactions.length > 0) {
+          const plotted = plotInteractionsToKeyframesAndZoomBlocks(
+            parsed.interactions,
+            duration,
+            { holdDurationMs: 1400, leadInMs: 450, scale: 1.85 },
+          );
+          parsed.zoomBlocks = plotted.zoomBlocks;
+          parsed.keyframes = plotted.keyframes;
+        } else if (parsed.clicks.length > 0) {
+          const pseudoInteractions: InteractionEvent[] = parsed.clicks.map((c) => ({
+            id: c.id,
+            type: "click" as const,
+            timestampMs: c.timestampMs,
+            x: c.x,
+            y: c.y,
+            button: c.button,
+          }));
+          const plotted = plotInteractionsToKeyframesAndZoomBlocks(
+            pseudoInteractions,
+            duration,
+            { holdDurationMs: 1400, leadInMs: 450, scale: 1.85 },
+          );
+          parsed.zoomBlocks = plotted.zoomBlocks;
+          parsed.keyframes = plotted.keyframes;
+        }
+        if (parsed.zoomBlocks.length > 0) {
+          platform.saveFullProject?.(parsed);
         }
       }
+
+      set({
+        project: parsed,
+        currentTimeMs: 0,
+        durationMs: duration,
+        selectedBlockId: parsed.zoomBlocks[0]?.id || null,
+        selectedKeyframeId: null,
+        selectedEffectId: null,
+        selectedTextId: null,
+        selectedAudioId: null,
+        selectedClipId: parsed.clips?.[0]?.id || null,
+        history: [],
+        future: [],
+      });
+      return true;
     }
 
     // 2. Fall back to useProjects summary or built-in demo templates
@@ -398,6 +465,9 @@ export const useEditor = create<EditorState>((set, get) => ({
       looks: DEFAULT_LOOKS,
       audioSettings: { ...DEFAULT_AUDIO_SETTINGS },
     };
+
+    // Persist immediately to disk & storage
+    platform.saveFullProject?.(projectData);
 
     set({
       project: projectData,
@@ -1534,6 +1604,9 @@ export const useEditor = create<EditorState>((set, get) => ({
     if (typeof sessionStorage !== "undefined") {
       sessionStorage.removeItem(`domolens_project_${id}`);
     }
+    if (typeof localStorage !== "undefined") {
+      localStorage.removeItem(`domolens_full_project_${id}`);
+    }
     const success = await useProjects.getState().remove(id);
     if (success) {
       useNav.getState().go({ name: "home" });
@@ -1648,3 +1721,24 @@ export const useEditor = create<EditorState>((set, get) => ({
     toast.info("Redo");
   },
 }));
+
+let autoSaveTimer: ReturnType<typeof setTimeout> | null = null;
+useEditor.subscribe((state, prevState) => {
+  if (state.project && state.project !== prevState.project) {
+    const proj = state.project;
+    if (autoSaveTimer) clearTimeout(autoSaveTimer);
+    autoSaveTimer = setTimeout(() => {
+      try {
+        platform.saveFullProject?.(proj);
+        if (typeof localStorage !== "undefined") {
+          localStorage.setItem(`domolens_full_project_${proj.summary.id}`, JSON.stringify(proj));
+        }
+        if (typeof sessionStorage !== "undefined") {
+          sessionStorage.setItem(`domolens_project_${proj.summary.id}`, JSON.stringify(proj));
+        }
+      } catch (err) {
+        console.warn("Auto-save project failed:", err);
+      }
+    }, 400);
+  }
+});

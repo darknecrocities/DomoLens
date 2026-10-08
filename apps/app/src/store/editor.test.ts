@@ -647,5 +647,148 @@ describe("useEditor store", () => {
       useEditor.getState().playTypingSoundPreview("thick", 0.7);
     }).not.toThrow();
   });
+
+  it("restores complete project with keyframes and autozooms across app restart via platform storage", async () => {
+    const { platform } = await import("../platform");
+    const testProjectData = {
+      summary: {
+        id: "proj-saved",
+        name: "Saved Project",
+        source: "recording" as const,
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+        durationMs: 6000,
+        width: 1920,
+        height: 1080,
+        thumbnail: null,
+        media: "blob://saved-vid",
+      },
+      clicks: [{ id: "c-1", timestampMs: 1500, x: 0.4, y: 0.3, button: "left" as const }],
+      interactions: [{ id: "i-1", type: "click" as const, timestampMs: 1500, x: 0.4, y: 0.3, button: "left" as const }],
+      cursorTrajectory: [{ timestampMs: 0, x: 0.5, y: 0.5 }],
+      zoomBlocks: [
+        {
+          id: "zb-1",
+          startTimeMs: 1200,
+          endTimeMs: 2800,
+          scale: 1.8,
+          targetX: 0.4,
+          targetY: 0.3,
+          enabled: true,
+        },
+      ],
+      keyframes: [
+        { id: "kf-1", timeMs: 1500, scale: 1.8, targetX: 0.4, targetY: 0.3, easing: "easeInOutCubic" as const },
+      ],
+      textOverlays: [],
+      audioTracks: [],
+      clips: [],
+      looks: {
+        backgroundValue: "#000000",
+        borderRadius: 12,
+        padding: 32,
+        shadow: "soft" as const,
+        aspectRatio: "16:9" as const,
+        windowFrame: "macos" as const,
+        showCursor: true,
+        cursorStyle: "native" as const,
+        cursorSize: 1.2,
+        cursorSmoothing: "smooth" as const,
+        autoTrackCursor: false,
+        autoTrackScale: 1.6,
+        showClickRipples: true,
+      },
+      audioSettings: {
+        clickSoundEnabled: true,
+        clickSoundPreset: "thock" as const,
+        clickSoundVolume: 0.8,
+        typingSoundEnabled: true,
+        typingSoundPreset: "creamy" as const,
+        typingSoundVolume: 0.6,
+        musicDuckingEnabled: true,
+        musicVolume: 0.5,
+      },
+    };
+
+    // Save full project permanently
+    await platform.saveFullProject?.(testProjectData as any);
+
+    // Simulate clean restart: reset editor state
+    useEditor.setState({ project: null, currentTimeMs: 0, durationMs: 0 });
+
+    // Load project in editor
+    const ok = await useEditor.getState().loadProject("proj-saved");
+    expect(ok).toBe(true);
+
+    const loaded = useEditor.getState().project;
+    expect(loaded).toBeDefined();
+    expect(loaded?.summary.id).toBe("proj-saved");
+    expect(loaded?.zoomBlocks.length).toBe(1);
+    expect(loaded?.keyframes?.length).toBe(1);
+    expect(loaded?.zoomBlocks[0]?.scale).toBe(1.8);
+    expect(loaded?.audioSettings?.clickSoundPreset).toBe("thock");
+    expect(loaded?.clicks.length).toBe(1);
+  });
+
+  it("self-heals past recordings with interactions but 0 keyframes so zooms are restored", async () => {
+    const { platform } = await import("../platform");
+    const unplottedProjectData = {
+      summary: {
+        id: "proj-unplotted",
+        name: "Unplotted Past Recording",
+        source: "recording" as const,
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+        durationMs: 7000,
+        width: 1920,
+        height: 1080,
+        thumbnail: null,
+        media: "blob://unplotted-vid",
+      },
+      clicks: [{ id: "c-1", timestampMs: 2000, x: 0.45, y: 0.4, button: "left" as const }],
+      interactions: [{ id: "i-1", type: "click" as const, timestampMs: 2000, x: 0.45, y: 0.4, button: "left" as const }],
+      cursorTrajectory: [],
+      zoomBlocks: [],
+      keyframes: [],
+      textOverlays: [],
+      audioTracks: [],
+      clips: [],
+      looks: {
+        backgroundValue: "#000000",
+        borderRadius: 12,
+        padding: 32,
+        shadow: "soft" as const,
+        aspectRatio: "16:9" as const,
+        windowFrame: "macos" as const,
+        showCursor: true,
+        cursorStyle: "native" as const,
+        cursorSize: 1.2,
+        cursorSmoothing: "smooth" as const,
+        autoTrackCursor: false,
+        autoTrackScale: 1.6,
+        showClickRipples: true,
+      },
+      audioSettings: {
+        clickSoundEnabled: true,
+        clickSoundPreset: "bop" as const,
+        clickSoundVolume: 0.7,
+        typingSoundEnabled: true,
+        typingSoundPreset: "mechanical" as const,
+        typingSoundVolume: 0.55,
+        musicDuckingEnabled: true,
+        musicVolume: 0.5,
+      },
+    };
+
+    await platform.saveFullProject?.(unplottedProjectData as any);
+    useEditor.setState({ project: null, currentTimeMs: 0, durationMs: 0 });
+
+    const ok = await useEditor.getState().loadProject("proj-unplotted");
+    expect(ok).toBe(true);
+
+    const loaded = useEditor.getState().project;
+    expect(loaded?.zoomBlocks.length).toBeGreaterThan(0);
+    expect(loaded?.keyframes?.length ?? 0).toBeGreaterThan(0);
+  });
 });
 

@@ -1066,7 +1066,13 @@ export const useRecorder = create<RecorderStore>((set, get) => ({
     });
     await platform.saveProject?.(summary);
 
-    // Save project data to session storage for seamless editor reload
+    // Save full project data permanently on disk and storage across app restarts
+    await platform.saveFullProject?.(projectData);
+    if (typeof localStorage !== "undefined") {
+      try {
+        localStorage.setItem(`domolens_full_project_${id}`, JSON.stringify(projectData));
+      } catch {}
+    }
     if (typeof sessionStorage !== "undefined") {
       sessionStorage.setItem(`domolens_project_${id}`, JSON.stringify(projectData));
     }

@@ -2,6 +2,7 @@ import {
   SUPPORTED_VIDEO_EXTENSIONS,
   cleanProjectName,
   projectNameFromFile,
+  type ProjectData,
   type ProjectSummary,
 } from "@domolens/core";
 import type { FileDropHandlers, IncomingFile, Platform } from "./types";
@@ -15,6 +16,7 @@ import type { FileDropHandlers, IncomingFile, Platform } from "./types";
  */
 
 const projects = new Map<string, ProjectSummary>();
+const fullProjects = new Map<string, ProjectData>();
 const listeners = new Set<() => void>();
 
 function notify() {
@@ -205,12 +207,61 @@ export function createWebPlatform(opts: { isTouch: boolean; isMac: boolean }): P
       const current = projects.get(id);
       if (current?.media?.startsWith("blob:")) URL.revokeObjectURL(current.media);
       projects.delete(id);
+      fullProjects.delete(id);
+      try {
+        if (typeof localStorage !== "undefined") {
+          localStorage.removeItem(`domolens_full_project_${id}`);
+        }
+        if (typeof sessionStorage !== "undefined") {
+          sessionStorage.removeItem(`domolens_project_${id}`);
+        }
+      } catch {}
       notify();
     },
 
     async saveProject(project: ProjectSummary) {
       projects.set(project.id, project);
       notify();
+    },
+
+    async saveFullProject(project: ProjectData) {
+      const id = project.summary.id;
+      projects.set(id, project.summary);
+      fullProjects.set(id, project);
+      try {
+        if (typeof localStorage !== "undefined") {
+          localStorage.setItem(`domolens_full_project_${id}`, JSON.stringify(project));
+        }
+        if (typeof sessionStorage !== "undefined") {
+          sessionStorage.setItem(`domolens_project_${id}`, JSON.stringify(project));
+        }
+      } catch {}
+      notify();
+    },
+
+    async loadFullProject(id: string): Promise<ProjectData | null> {
+      if (fullProjects.has(id)) {
+        return JSON.parse(JSON.stringify(fullProjects.get(id)!)) as ProjectData;
+      }
+      try {
+        if (typeof localStorage !== "undefined") {
+          const stored = localStorage.getItem(`domolens_full_project_${id}`);
+          if (stored) {
+            const parsed = JSON.parse(stored) as ProjectData;
+            fullProjects.set(id, parsed);
+            return parsed;
+          }
+        }
+        if (typeof sessionStorage !== "undefined") {
+          const storedSession = sessionStorage.getItem(`domolens_project_${id}`);
+          if (storedSession) {
+            const parsed = JSON.parse(storedSession) as ProjectData;
+            fullProjects.set(id, parsed);
+            return parsed;
+          }
+        }
+      } catch {}
+      return null;
     },
 
     mediaUrl: (url) => url,

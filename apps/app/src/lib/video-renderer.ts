@@ -2,7 +2,9 @@ import {
   calculateActiveEffectsState,
   calculateCameraAtTime,
   smoothCursorTrajectory,
+  CLICK_SOUND_PROFILES,
   TYPING_SOUND_PROFILES,
+  type ClickSoundPreset,
   type ProjectData,
   type TypingSoundPreset,
 } from "@domolens/core";
@@ -678,26 +680,65 @@ export async function renderProjectVideo(options: RenderOptions): Promise<Render
         ctx.restore();
       }
 
-      // Trigger Web Audio synthetic bops if enabled
-      if (audioCtx && audioDest && project.audioSettings?.clickSoundEnabled !== false && project.clicks) {
-        const clickNow = project.clicks.find((c) => Math.abs(c.timestampMs - tMs) < frameIntervalMs / 2);
-        if (clickNow) {
-          playSyntheticBop(audioCtx, audioDest, project.audioSettings?.clickSoundVolume || 0.7);
-        }
-      }
+      // Synthesize audio events in time window (lastProcessedAudioMs, tMs]
+      const winStart = lastProcessedAudioMs;
+      const winEnd = tMs;
+      lastProcessedAudioMs = tMs;
 
-      // Trigger Web Audio synthetic typing keystrokes if enabled
-      if (audioCtx && audioDest && project.audioSettings?.typingSoundEnabled !== false && project.interactions) {
-        const typeNow = project.interactions.find(
-          (i) => i.type === "typing" && Math.abs(i.timestampMs - tMs) < frameIntervalMs / 2,
-        );
-        if (typeNow) {
-          playSyntheticKeystroke(
-            audioCtx,
-            audioDest,
-            project.audioSettings?.typingSoundPreset || "creamy",
-            project.audioSettings?.typingSoundVolume || 0.6,
-          );
+      if (audioCtx && audioDest) {
+        const audioSettings = project.audioSettings;
+        const clickEnabled = audioSettings?.clickSoundEnabled !== false;
+        const typingEnabled = audioSettings?.typingSoundEnabled !== false;
+
+        // 1. Procedural click sounds from recorded clicks
+        if (clickEnabled && project.clicks) {
+          for (const c of project.clicks) {
+            if (c.timestampMs > winStart && c.timestampMs <= winEnd) {
+              playSyntheticBop(
+                audioCtx,
+                audioDest,
+                audioSettings?.clickSoundVolume || 0.7,
+                audioSettings?.clickSoundPreset || "bop",
+              );
+            }
+          }
+        }
+
+        // 2. Procedural typing keystrokes from recorded typing interactions
+        if (typingEnabled && project.interactions) {
+          for (const i of project.interactions) {
+            if (i.type === "typing" && i.timestampMs > winStart && i.timestampMs <= winEnd) {
+              playSyntheticKeystroke(
+                audioCtx,
+                audioDest,
+                audioSettings?.typingSoundPreset || "mechanical",
+                audioSettings?.typingSoundVolume || 0.6,
+              );
+            }
+          }
+        }
+
+        // 3. Keyframe-attached sound cues
+        if (project.keyframes && project.keyframes.length > 0) {
+          for (const kf of project.keyframes) {
+            if (kf.sound && kf.timeMs > winStart && kf.timeMs <= winEnd) {
+              if (kf.sound === "click" && clickEnabled) {
+                playSyntheticBop(
+                  audioCtx,
+                  audioDest,
+                  kf.soundVolume || audioSettings?.clickSoundVolume || 0.7,
+                  (kf.soundPreset as any) || audioSettings?.clickSoundPreset || "bop",
+                );
+              } else if (kf.sound === "typing" && typingEnabled) {
+                playSyntheticKeystroke(
+                  audioCtx,
+                  audioDest,
+                  (kf.soundPreset as any) || audioSettings?.typingSoundPreset || "mechanical",
+                  kf.soundVolume || audioSettings?.typingSoundVolume || 0.6,
+                );
+              }
+            }
+          }
         }
       }
 
@@ -762,7 +803,8 @@ export async function renderProjectVideo(options: RenderOptions): Promise<Render
       }
     };
 
-    // Begin render loop at time 0
+    // Begin render loop at time 0 with audio processing window
+    let lastProcessedAudioMs = -1;
     renderFrame(0);
   });
 }
@@ -774,24 +816,38 @@ function playSyntheticBop(
   ctx: AudioContext,
   dest: MediaStreamAudioDestinationNode,
   volume: number,
+  preset: ClickSoundPreset = "bop",
 ) {
+  if (preset === "none" || volume <= 0) return;
   try {
-    const osc = ctx.createOscillator();
-    const gain = ctx.createGain();
+    const profile = CLICK_SOUND_PROFILES[preset] || CLICK_SOUND_PROFILES.bop;
     const now = ctx.currentTime;
+    const pitchJitter = 1 + (Math.random() - 0.5) * 0.08;
+    const startF = profile.startFreq * pitchJitter;
+    const endF = profile.endFreq * pitchJitter;
 
+    const osc = ctx.createOscillator();
     osc.type = "sine";
-    osc.frequency.setValueAtTime(620, now);
-    osc.frequency.exponentialRampToValueAtTime(140, now + 0.08);
+    osc.frequency.setValueAtTime(startF, now);
+    osc.frequency.exponentialRampToValueAtTime(Math.max(20, endF), now + profile.durationSec);
 
-    gain.gain.setValueAtTime(volume * 0.45, now);
-    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.08);
+    const filter = ctx.createBiquadFilter();
+    filter.type = "lowpass";
+    filter.frequency.setValueAtTime(profile.filterCutoff || 1000, now);
+    filter.Q.setValueAtTime(profile.qFactor || 2.0, now);
 
-    osc.connect(gain);
+    const gain = ctx.createGain();
+    const peakGain = Math.min(1.0, Math.max(0.01, volume * 0.8));
+    gain.gain.setValueAtTime(0.001, now);
+    gain.gain.linearRampToValueAtTime(peakGain, now + 0.002);
+    gain.gain.exponentialRampToValueAtTime(0.0001, now + profile.durationSec);
+
+    osc.connect(filter);
+    filter.connect(gain);
     gain.connect(dest);
 
     osc.start(now);
-    osc.stop(now + 0.09);
+    osc.stop(now + profile.durationSec);
   } catch {
     // Ignore audio synthesis errors
   }

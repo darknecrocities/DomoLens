@@ -117,6 +117,29 @@ fn save_projects_to_disk(projects: &[ProjectSummary]) {
     }
 }
 
+fn get_full_project_file(id: &str) -> PathBuf {
+    let dir = get_data_dir().join("projects");
+    let _ = fs::create_dir_all(&dir);
+    dir.join(format!("{}.json", id))
+}
+
+#[tauri::command]
+fn save_full_project(id: String, project_json: String) -> Result<(), String> {
+    let file = get_full_project_file(&id);
+    fs::write(file, project_json).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn load_full_project(id: String) -> Result<Option<String>, String> {
+    let file = get_full_project_file(&id);
+    if file.exists() {
+        let content = fs::read_to_string(file).map_err(|e| e.to_string())?;
+        Ok(Some(content))
+    } else {
+        Ok(None)
+    }
+}
+
 fn get_screen_size(app_handle: &tauri::AppHandle) -> (f64, f64) {
     if let Ok(Some(monitor)) = app_handle.primary_monitor() {
         let scale = monitor.scale_factor();
@@ -379,10 +402,26 @@ fn rename_project(
 ) -> Result<ProjectSummary, String> {
     let mut list = state.projects.lock().map_err(|e| e.to_string())?;
     if let Some(p) = list.iter_mut().find(|p| p.id == id) {
-        p.name = name;
+        p.name = name.clone();
         p.updated_at = chrono::Utc::now().timestamp_millis();
         let updated = p.clone();
         save_projects_to_disk(&list);
+
+        let full_file = get_full_project_file(&id);
+        if full_file.exists() {
+            if let Ok(mut json_val) = fs::read_to_string(&full_file).and_then(|s| {
+                serde_json::from_str::<serde_json::Value>(&s).map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))
+            }) {
+                if let Some(summary_val) = json_val.get_mut("summary") {
+                    summary_val["name"] = serde_json::Value::String(name);
+                    summary_val["updatedAt"] = serde_json::Value::Number(serde_json::Number::from(updated.updated_at));
+                }
+                if let Ok(serialized) = serde_json::to_string_pretty(&json_val) {
+                    let _ = fs::write(&full_file, serialized);
+                }
+            }
+        }
+
         Ok(updated)
     } else {
         Err("Project not found".to_string())
@@ -394,6 +433,12 @@ fn delete_project(id: String, state: State<'_, AppState>) -> Result<(), String> 
     let mut list = state.projects.lock().map_err(|e| e.to_string())?;
     list.retain(|p| p.id != id);
     save_projects_to_disk(&list);
+
+    let full_file = get_full_project_file(&id);
+    if full_file.exists() {
+        let _ = fs::remove_file(full_file);
+    }
+
     Ok(())
 }
 
@@ -878,6 +923,8 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             list_projects,
             save_project,
+            save_full_project,
+            load_full_project,
             save_recording_file,
             import_video,
             rename_project,

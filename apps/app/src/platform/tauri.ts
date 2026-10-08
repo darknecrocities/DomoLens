@@ -2,7 +2,7 @@ import { convertFileSrc, invoke } from "@tauri-apps/api/core";
 import { emit, listen } from "@tauri-apps/api/event";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { open, save } from "@tauri-apps/plugin-dialog";
-import { SUPPORTED_VIDEO_EXTENSIONS, baseName, type ProjectSummary } from "@domolens/core";
+import { SUPPORTED_VIDEO_EXTENSIONS, baseName, type ProjectData, type ProjectSummary } from "@domolens/core";
 import { copy } from "../copy/en";
 import type { FileDropHandlers, IncomingFile, Off, Platform } from "./types";
 
@@ -53,10 +53,65 @@ export function createTauriPlatform(opts: { isMobile: boolean; isTouch: boolean;
     },
 
     renameProject: (id, name) => invoke<ProjectSummary>("rename_project", { id, name }),
-    deleteProject: (id) => invoke<void>("delete_project", { id }),
+    deleteProject: async (id) => {
+      await invoke<void>("delete_project", { id });
+      try {
+        if (typeof localStorage !== "undefined") {
+          localStorage.removeItem(`domolens_full_project_${id}`);
+        }
+        if (typeof sessionStorage !== "undefined") {
+          sessionStorage.removeItem(`domolens_project_${id}`);
+        }
+      } catch {}
+    },
 
     saveProject: async (project: ProjectSummary) => {
       await invoke<ProjectSummary>("save_project", { project });
+    },
+
+    saveFullProject: async (project: ProjectData) => {
+      const id = project.summary.id;
+      const projectJson = JSON.stringify(project);
+      try {
+        await invoke<void>("save_full_project", { id, projectJson });
+      } catch (err) {
+        console.warn("Failed saving full project to disk via Tauri command:", err);
+      }
+      try {
+        if (typeof localStorage !== "undefined") {
+          localStorage.setItem(`domolens_full_project_${id}`, projectJson);
+        }
+        if (typeof sessionStorage !== "undefined") {
+          sessionStorage.setItem(`domolens_project_${id}`, projectJson);
+        }
+      } catch {}
+    },
+
+    loadFullProject: async (id: string): Promise<ProjectData | null> => {
+      try {
+        const json = await invoke<string | null>("load_full_project", { id });
+        if (json) {
+          const parsed = JSON.parse(json) as ProjectData;
+          return parsed;
+        }
+      } catch (err) {
+        console.warn("Failed loading full project from disk via Tauri command:", err);
+      }
+      try {
+        if (typeof localStorage !== "undefined") {
+          const stored = localStorage.getItem(`domolens_full_project_${id}`);
+          if (stored) {
+            return JSON.parse(stored) as ProjectData;
+          }
+        }
+        if (typeof sessionStorage !== "undefined") {
+          const storedSession = sessionStorage.getItem(`domolens_project_${id}`);
+          if (storedSession) {
+            return JSON.parse(storedSession) as ProjectData;
+          }
+        }
+      } catch {}
+      return null;
     },
 
     saveRecordingFile: async (id: string, data: number[], ext: string) => {

@@ -206,6 +206,17 @@ export function VideoCanvas({ project, currentTimeMs: propTimeMs }: VideoCanvasP
     }
   }, [currentTimeMs, isPlaying]);
 
+  // Reset triggered events when playing starts or user seeks
+  const wasPlayingRef = useRef(false);
+  useEffect(() => {
+    if (isPlaying && !wasPlayingRef.current) {
+      triggeredEventsRef.current.clear();
+      lastClickSfxPlaybackTimeRef.current = -999999;
+      prevTimeRef.current = currentTimeMs;
+    }
+    wasPlayingRef.current = isPlaying;
+  }, [isPlaying, currentTimeMs]);
+
   // Synchronize audio sound effects (Bop on click, typing sounds, and audio ducking) with zero latency
   useEffect(() => {
     if (!isPlaying) {
@@ -216,11 +227,15 @@ export function VideoCanvas({ project, currentTimeMs: propTimeMs }: VideoCanvasP
     const prev = prevTimeRef.current;
     prevTimeRef.current = currentTimeMs;
 
-    // Reset triggered set when looping or seeking backward
-    if (currentTimeMs < prev) {
+    // Detect seeking, scrubbing, or looping backward
+    const isSeekOrLoop = currentTimeMs < prev || Math.abs(currentTimeMs - prev) > 250;
+    if (isSeekOrLoop) {
       triggeredEventsRef.current.clear();
-      return;
+      lastClickSfxPlaybackTimeRef.current = -999999;
     }
+
+    const windowStart = isSeekOrLoop ? Math.max(0, currentTimeMs - 40) : prev;
+    const windowEnd = currentTimeMs + 70;
 
     const audioSettings = project.audioSettings;
     const clickSoundEnabled = audioSettings?.clickSoundEnabled !== false;
@@ -232,13 +247,13 @@ export function VideoCanvas({ project, currentTimeMs: propTimeMs }: VideoCanvasP
       for (const click of clicks) {
         if (
           !triggeredEventsRef.current.has(click.id) &&
-          click.timestampMs >= prev &&
-          click.timestampMs <= currentTimeMs + 90
+          click.timestampMs >= windowStart &&
+          click.timestampMs <= windowEnd
         ) {
           triggeredEventsRef.current.add(click.id);
 
           const nowAudio = performance.now();
-          if (nowAudio - lastClickSfxPlaybackTimeRef.current >= 420) {
+          if (nowAudio - lastClickSfxPlaybackTimeRef.current >= 60) {
             lastClickSfxPlaybackTimeRef.current = nowAudio;
             sfx.playClickBop(audioSettings?.clickSoundPreset || "bop", audioSettings?.clickSoundVolume || 0.7);
           }
@@ -252,8 +267,8 @@ export function VideoCanvas({ project, currentTimeMs: propTimeMs }: VideoCanvasP
         if (
           interaction.type === "typing" &&
           !triggeredEventsRef.current.has(interaction.id) &&
-          interaction.timestampMs >= prev &&
-          interaction.timestampMs <= currentTimeMs + 90
+          interaction.timestampMs >= windowStart &&
+          interaction.timestampMs <= windowEnd
         ) {
           triggeredEventsRef.current.add(interaction.id);
           const hasKeyframeTyping = keyframes?.some(
@@ -278,8 +293,8 @@ export function VideoCanvas({ project, currentTimeMs: propTimeMs }: VideoCanvasP
         if (
           kf.sound &&
           !triggeredEventsRef.current.has(`kf-${kf.id}`) &&
-          kf.timeMs >= prev &&
-          kf.timeMs <= currentTimeMs + 90
+          kf.timeMs >= windowStart &&
+          kf.timeMs <= windowEnd
         ) {
           triggeredEventsRef.current.add(`kf-${kf.id}`);
           if (kf.sound === "typing" && typingSoundEnabled) {
@@ -290,7 +305,7 @@ export function VideoCanvas({ project, currentTimeMs: propTimeMs }: VideoCanvasP
             );
           } else if (kf.sound === "click" && clickSoundEnabled) {
             const nowAudio = performance.now();
-            if (nowAudio - lastClickSfxPlaybackTimeRef.current >= 420) {
+            if (nowAudio - lastClickSfxPlaybackTimeRef.current >= 60) {
               lastClickSfxPlaybackTimeRef.current = nowAudio;
               sfx.playClickBop(
                 (kf.soundPreset as any) || audioSettings?.clickSoundPreset || "bop",

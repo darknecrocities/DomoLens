@@ -1,4 +1,4 @@
-import type { ProjectSummary } from "@domolens/core";
+import type { ProjectData, ProjectSummary } from "@domolens/core";
 
 export type PlatformKind = "desktop" | "mobile" | "web";
 
@@ -47,6 +47,10 @@ export interface Platform {
   setAlwaysOnTop?(alwaysOnTop: boolean): Promise<void>;
   /** Saves or registers a project summary on the platform. */
   saveProject?(project: ProjectSummary): Promise<void>;
+  /** Saves full project state (keyframes, autozoom, looks, audio, text overlays, clips) permanently on disk. */
+  saveFullProject?(project: ProjectData): Promise<void>;
+  /** Loads full project state from permanent storage on disk. */
+  loadFullProject?(id: string): Promise<ProjectData | null>;
   /** Starts native OS-level global mouse/keyboard capture across entire computer. */
   startGlobalInputCapture?(): Promise<void>;
   /** Stops native OS-level global mouse/keyboard capture. */
