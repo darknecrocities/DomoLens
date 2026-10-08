@@ -4,10 +4,13 @@ import { platform } from "../../platform";
 import { useNav } from "../../store/nav";
 import { useProjects } from "../../store/projects";
 import { checkForAppUpdates } from "../../lib/updater";
+import { useUpdateStore } from "../../store/update";
 
 export function Header() {
   const { screen, go } = useNav();
   const { projects, pickAndImport } = useProjects();
+  const isCheckingUpdate = useUpdateStore((s) => s.isChecking);
+  const updateStatus = useUpdateStore((s) => s.status);
 
   const navLinks = [
     { label: "Overview", targetId: "hero" },
@@ -132,13 +135,41 @@ export function Header() {
         {platform.isApp && (
           <button
             type="button"
+            disabled={isCheckingUpdate}
             onClick={() => void checkForAppUpdates({ silent: false })}
-            className="flex min-h-[34px] items-center gap-1.5 rounded-full border border-white/10 bg-white/5 px-3 py-1.5 font-mono text-xs font-semibold uppercase text-neutral-300 hover:text-white hover:bg-white/10 transition-all shadow-[inset_0_1px_0_rgba(255,255,255,0.08)] touch-manipulation"
-            title="Check for DomoLens updates"
+            className="relative flex min-h-[34px] items-center gap-1.5 rounded-full border border-white/10 bg-white/5 px-3 py-1.5 font-mono text-xs font-semibold uppercase text-neutral-300 hover:text-white hover:bg-white/10 disabled:opacity-60 transition-all shadow-[inset_0_1px_0_rgba(255,255,255,0.08)] touch-manipulation"
+            title={
+              updateStatus === "ready"
+                ? "Update downloaded: click to relaunch"
+                : updateStatus === "available"
+                ? "New update available"
+                : "Check for DomoLens updates"
+            }
           >
-            <RefreshCw className="size-3.5" />
-            <span className="hidden xl:inline">Check Updates</span>
-            <span className="xl:hidden">Update</span>
+            <RefreshCw
+              className={`size-3.5 ${isCheckingUpdate ? "animate-spin text-indigo-400" : ""}`}
+            />
+            <span className="hidden xl:inline">
+              {isCheckingUpdate ? "Checking..." : updateStatus === "ready" ? "Update Ready" : "Check Updates"}
+            </span>
+            <span className="xl:hidden">
+              {isCheckingUpdate ? "Checking" : "Update"}
+            </span>
+
+            {/* Notification badge when update is available or ready */}
+            {(updateStatus === "available" || updateStatus === "ready") && (
+              <span
+                className={`absolute -top-1 -right-1 flex size-2.5 rounded-full ${
+                  updateStatus === "ready" ? "bg-emerald-400" : "bg-indigo-400"
+                } shadow-[0_0_8px_rgba(129,140,248,0.8)]`}
+              >
+                <span
+                  className={`inline-flex size-full animate-ping rounded-full ${
+                    updateStatus === "ready" ? "bg-emerald-400" : "bg-indigo-400"
+                  } opacity-75`}
+                />
+              </span>
+            )}
           </button>
         )}
 

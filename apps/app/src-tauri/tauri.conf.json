@@ -44,7 +44,7 @@
         "enable": true,
         "scope": ["$APPDATA/**", "$DOWNLOAD/**", "**"]
       },
-      "csp": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' asset: http://asset.localhost https://asset.localhost https: data: blob:; media-src 'self' asset: http://asset.localhost https://asset.localhost blob: data:; connect-src 'self' http://127.0.0.1:* ws://127.0.0.1:* https://github.com https://objects.githubusercontent.com;"
+      "csp": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' asset: http://asset.localhost https://asset.localhost https: data: blob:; media-src 'self' asset: http://asset.localhost https://asset.localhost blob: data:; connect-src 'self' http://127.0.0.1:* ws://127.0.0.1:* https://github.com https://*.github.com https://objects.githubusercontent.com https://*.githubusercontent.com;"
     }
   },
   "plugins": {
@@ -58,7 +58,7 @@
   "bundle": {
     "active": true,
     "targets": "all",
-    "createUpdaterArtifacts": false,
+    "createUpdaterArtifacts": true,
     "category": "Video",
     "shortDescription": "Record your screen with automatic camera zoom and motion tracking",
     "icon": [

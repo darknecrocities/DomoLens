@@ -20,10 +20,13 @@ import { DeleteModal } from "../components/home/DeleteModal";
 import { useNav } from "../store/nav";
 import { useProjects } from "../store/projects";
 import { checkForAppUpdates } from "../lib/updater";
+import { useUpdateStore } from "../store/update";
 
 export function HomeScreen() {
   const { go } = useNav();
   const { projects, status, pickAndImport, rename, remove } = useProjects();
+  const isCheckingUpdate = useUpdateStore((s) => s.isChecking);
+  const updateStatus = useUpdateStore((s) => s.status);
 
   const [projectToRename, setProjectToRename] = useState<ProjectSummary | null>(null);
   const [projectToDelete, setProjectToDelete] = useState<ProjectSummary | null>(null);
@@ -112,12 +115,37 @@ export function HomeScreen() {
 
               <button
                 type="button"
+                disabled={isCheckingUpdate}
                 onClick={() => void checkForAppUpdates({ silent: false })}
-                className="flex items-center gap-1.5 rounded-full border border-white/15 bg-white/5 px-3 py-1 font-mono text-[11px] text-neutral-300 hover:bg-white/15 hover:text-white transition-all shadow-sm active:scale-95"
-                title="Check for DomoLens updates"
+                className="relative flex items-center gap-1.5 rounded-full border border-white/15 bg-white/5 px-3 py-1 font-mono text-[11px] text-neutral-300 hover:bg-white/15 hover:text-white disabled:opacity-60 transition-all shadow-sm active:scale-95"
+                title={
+                  updateStatus === "ready"
+                    ? "Update downloaded: click to relaunch"
+                    : updateStatus === "available"
+                    ? "New update available"
+                    : "Check for DomoLens updates"
+                }
               >
-                <RefreshCw className="size-3 text-white" />
-                <span>Check Updates</span>
+                <RefreshCw
+                  className={`size-3 text-white ${isCheckingUpdate ? "animate-spin text-indigo-400" : ""}`}
+                />
+                <span>
+                  {isCheckingUpdate ? "Checking..." : updateStatus === "ready" ? "Update Ready" : "Check Updates"}
+                </span>
+
+                {(updateStatus === "available" || updateStatus === "ready") && (
+                  <span
+                    className={`absolute -top-1 -right-1 flex size-2 rounded-full ${
+                      updateStatus === "ready" ? "bg-emerald-400" : "bg-indigo-400"
+                    }`}
+                  >
+                    <span
+                      className={`inline-flex size-full animate-ping rounded-full ${
+                        updateStatus === "ready" ? "bg-emerald-400" : "bg-indigo-400"
+                      } opacity-75`}
+                    />
+                  </span>
+                )}
               </button>
             </div>
           </div>

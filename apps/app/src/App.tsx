@@ -3,6 +3,7 @@ import { AnimatePresence, motion } from "framer-motion";
 import { Header } from "./components/layout/Header";
 import { DropZoneOverlay } from "./components/home/DropZoneOverlay";
 import { Toaster } from "./components/ui/Toaster";
+import { UpdateModal } from "./components/ui/UpdateModal";
 import { HomeScreen } from "./screens/HomeScreen";
 import { RecordScreen } from "./screens/RecordScreen";
 import { ProjectScreen } from "./screens/ProjectScreen";
@@ -152,6 +153,7 @@ export function App() {
 
       <DropZoneOverlay isDragging={isDragging} />
       <Toaster />
+      <UpdateModal />
     </div>
   );
 }
