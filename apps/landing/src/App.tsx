@@ -11,40 +11,63 @@ import { WorksEverywhere } from "./components/WorksEverywhere";
 import { FinalCtaFooter } from "./components/FinalCtaFooter";
 
 export function App() {
+  const navLinks = [
+    { label: "Overview", targetId: "hero" },
+    { label: "Features", targetId: "features" },
+    { label: "Showcase", targetId: "showcase" },
+    { label: "How It Works", targetId: "how-it-works" },
+    { label: "Download", targetId: "download" },
+  ];
+
+  const handleNavClick = (targetId: string) => (e: React.MouseEvent) => {
+    e.preventDefault();
+    const el = document.getElementById(targetId);
+    if (el) {
+      el.scrollIntoView({ behavior: "smooth" });
+      window.history.pushState(null, "", `#${targetId}`);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-black text-white selection:bg-white selection:text-black">
       {/* Top Floating Apple-Style Liquid Glassmorphic Nav */}
-      <nav className="fixed top-0 inset-x-0 z-50 flex h-14 items-center justify-between border-b border-white/[0.08] bg-black/25 px-4 sm:px-8 backdrop-blur-2xl backdrop-saturate-200 shadow-[0_8px_32px_0_rgba(0,0,0,0.37),inset_0_1px_0_0_rgba(255,255,255,0.12)] before:pointer-events-none before:absolute before:inset-x-0 before:top-0 before:h-[1px] before:bg-gradient-to-r before:from-transparent before:via-white/30 before:to-transparent">
-        <a href="#" className="flex items-center gap-2.5 transition-opacity hover:opacity-90">
+      <nav className="fixed top-0 inset-x-0 z-50 flex h-14 items-center justify-between border-b border-white/[0.08] bg-black/40 px-4 sm:px-8 backdrop-blur-2xl backdrop-saturate-200 shadow-[0_8px_32px_0_rgba(0,0,0,0.37),inset_0_1px_0_0_rgba(255,255,255,0.12)] before:pointer-events-none before:absolute before:inset-x-0 before:top-0 before:h-[1px] before:bg-gradient-to-r before:from-transparent before:via-white/30 before:to-transparent">
+        {/* Brand logo & title */}
+        <a
+          href="#hero"
+          onClick={handleNavClick("hero")}
+          className="flex items-center gap-2.5 transition-opacity hover:opacity-90"
+        >
           <img src="/domolens.png" alt="DomoLens" className="size-7 object-contain rounded" />
           <span className="font-mono text-base font-bold tracking-tight text-white uppercase">
             DomoLens
           </span>
         </a>
 
-        {/* Apple-Style Glass Pill Navigation */}
-        <div className="flex items-center gap-3 sm:gap-4">
-          <div className="hidden sm:flex items-center gap-1 rounded-full border border-white/[0.12] bg-white/[0.05] p-1 backdrop-blur-2xl shadow-[inset_0_1px_1px_rgba(255,255,255,0.15)]">
+        {/* Center Pill Navigation: Overview, Features, Showcase, How It Works, Download */}
+        <div className="hidden md:flex items-center gap-1 rounded-full border border-white/[0.12] bg-white/[0.05] p-1 backdrop-blur-2xl shadow-[inset_0_1px_1px_rgba(255,255,255,0.15),0_2px_10px_rgba(0,0,0,0.3)]">
+          {navLinks.map((link) => (
             <a
-              href="#features"
-              className="rounded-full px-3 py-1 font-mono text-xs uppercase tracking-wider text-neutral-300 hover:text-white hover:bg-white/[0.12] transition-all"
+              key={link.targetId}
+              href={`#${link.targetId}`}
+              onClick={handleNavClick(link.targetId)}
+              className="rounded-full px-3 py-1 font-mono text-xs font-semibold uppercase tracking-wider text-neutral-300 hover:text-white hover:bg-white/[0.12] active:bg-white/20 transition-all"
             >
-              Features
+              {link.label}
             </a>
-            <a
-              href="#how-it-works"
-              className="rounded-full px-3 py-1 font-mono text-xs uppercase tracking-wider text-neutral-300 hover:text-white hover:bg-white/[0.12] transition-all"
-            >
-              How it works
-            </a>
-          </div>
+          ))}
+        </div>
 
+        {/* Right CTA */}
+        <div className="flex items-center gap-3">
           <a
             href="#download"
+            onClick={handleNavClick("download")}
             className="flex items-center gap-1.5 rounded-full bg-white px-4 py-1.5 font-mono text-xs font-bold uppercase text-black hover:bg-neutral-100 active:scale-95 transition-all shadow-[0_0_20px_rgba(255,255,255,0.22)]"
           >
             <Download className="size-3.5" />
-            <span>Download App</span>
+            <span className="hidden sm:inline">Download App</span>
+            <span className="sm:hidden">Download</span>
           </a>
         </div>
       </nav>

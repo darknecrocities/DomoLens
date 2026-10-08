@@ -728,8 +728,9 @@ export function LandingView() {
         whileInView={{ opacity: 1, y: 0, clipPath: "inset(0% 0% 0% 0%)" }}
         viewport={{ once: true, amount: 0.15 }}
         transition={{ duration: 0.75, ease: [0.16, 1, 0.3, 1] }}
-        className="relative border-b border-neutral-800 bg-black px-4 py-24 sm:px-6 lg:px-12"
+        className="relative scroll-mt-16 border-b border-neutral-800 bg-black px-4 py-24 sm:px-6 lg:px-12"
       >
+        <div id="showcase" className="sr-only" />
         <div className="mx-auto max-w-6xl">
           <div className="font-mono text-xs uppercase tracking-widest text-neutral-400">
             // Real App In Action
@@ -952,7 +953,7 @@ export function LandingView() {
         whileInView={{ opacity: 1, y: 0, clipPath: "inset(0% 0% 0% 0%)" }}
         viewport={{ once: true, amount: 0.15 }}
         transition={{ duration: 0.75, ease: [0.16, 1, 0.3, 1] }}
-        className="relative overflow-hidden border-b border-neutral-800 bg-black py-24"
+        className="relative scroll-mt-16 overflow-hidden border-b border-neutral-800 bg-black py-24"
       >
         <div className="mx-auto max-w-6xl px-4 sm:px-6 mb-12">
           <div className="font-mono text-xs uppercase tracking-widest text-neutral-400">
@@ -1165,8 +1166,9 @@ export function LandingView() {
         whileInView={{ opacity: 1, y: 0, clipPath: "inset(0% 0% 0% 0%)" }}
         viewport={{ once: true, amount: 0.15 }}
         transition={{ duration: 0.75, ease: [0.16, 1, 0.3, 1] }}
-        className="relative border-b border-neutral-800 bg-black px-4 py-24 sm:px-6 lg:px-12"
+        className="relative scroll-mt-16 border-b border-neutral-800 bg-black px-4 py-24 sm:px-6 lg:px-12"
       >
+        <div id="how-it-works" className="sr-only" />
         <div className="mx-auto max-w-6xl">
           <div className="font-mono text-xs uppercase tracking-widest text-neutral-400">
             // Workflow Walkthrough
@@ -1349,8 +1351,9 @@ export function LandingView() {
         whileInView={{ opacity: 1, y: 0, clipPath: "inset(0% 0% 0% 0%)" }}
         viewport={{ once: true, amount: 0.15 }}
         transition={{ duration: 0.75, ease: [0.16, 1, 0.3, 1] }}
-        className="relative bg-black px-4 py-24 sm:px-6 lg:px-12"
+        className="relative scroll-mt-16 bg-black px-4 py-24 sm:px-6 lg:px-12"
       >
+        <div id="download" className="sr-only" />
         <div className="mx-auto max-w-5xl text-center">
           <div className="font-mono text-xs uppercase tracking-widest text-neutral-400">
             // Direct Downloads

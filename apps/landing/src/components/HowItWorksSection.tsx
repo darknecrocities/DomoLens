@@ -36,8 +36,9 @@ export function HowItWorksSection() {
       whileInView={{ opacity: 1, y: 0, clipPath: "inset(0% 0% 0% 0%)" }}
       viewport={{ once: true, amount: 0.15 }}
       transition={{ duration: 0.75, ease: [0.16, 1, 0.3, 1] }}
-      className="relative border-b border-white/[0.08] bg-black px-4 py-24 sm:px-6 lg:px-12"
+      className="relative scroll-mt-16 border-b border-white/[0.08] bg-black px-4 py-24 sm:px-6 lg:px-12"
     >
+      <div id="workflow" className="sr-only" />
       <div className="mx-auto max-w-6xl">
         <div className="font-mono text-xs uppercase tracking-widest text-neutral-400">
           // Four-Step Workflow

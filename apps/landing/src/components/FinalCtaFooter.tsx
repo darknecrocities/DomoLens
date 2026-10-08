@@ -12,8 +12,9 @@ export function FinalCtaFooter() {
       whileInView={{ opacity: 1, y: 0, clipPath: "inset(0% 0% 0% 0%)" }}
       viewport={{ once: true, amount: 0.15 }}
       transition={{ duration: 0.75, ease: [0.16, 1, 0.3, 1] }}
-      className="relative bg-black border-t border-white/[0.08] overflow-hidden"
+      className="relative scroll-mt-16 bg-black border-t border-white/[0.08] overflow-hidden"
     >
+      <div id="downloads" className="sr-only" />
       {/* Ambient Atmospheric Radial Glow */}
       <div className="pointer-events-none absolute top-1/4 left-1/2 -translate-x-1/2 -translate-y-1/2 size-[600px] rounded-full bg-white/[0.03] blur-[140px] -z-0" />
 

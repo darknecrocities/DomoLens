@@ -58,7 +58,7 @@ export function FeaturesCarousel() {
       whileInView={{ opacity: 1, y: 0, clipPath: "inset(0% 0% 0% 0%)" }}
       viewport={{ once: true, amount: 0.15 }}
       transition={{ duration: 0.75, ease: [0.16, 1, 0.3, 1] }}
-      className="relative overflow-hidden border-b border-white/[0.08] bg-black py-24"
+      className="relative scroll-mt-16 overflow-hidden border-b border-white/[0.08] bg-black py-24"
     >
       <div className="mx-auto max-w-6xl px-4 sm:px-6 mb-12">
         <div className="font-mono text-xs uppercase tracking-widest text-neutral-400">
