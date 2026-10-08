@@ -1,31 +1,45 @@
 import { motion } from "framer-motion";
 import {
-  Apple,
-  Bot,
-  Cpu,
-  FileCode2,
-  Film,
-  Laptop,
-  Smartphone,
-  Sparkles,
-  Terminal,
-  Volume2,
-  Zap,
-} from "lucide-react";
+  AppleLogo,
+  WindowsLogo,
+  LinuxLogo,
+  AndroidLogo,
+  TauriLogo,
+  RustLogo,
+  PythonLogo,
+  FFmpegLogo,
+  OpenAILogo,
+  ClaudeLogo,
+  GeminiLogo,
+  GitHubLogo,
+  ProductHuntLogo,
+  YouTubeLogo,
+  XLogo,
+  ReactLogo,
+  TypeScriptLogo,
+  WhisperLogo,
+} from "./BrandLogos";
 
 export function WorksEverywhere() {
   const brandBeltItems = [
-    { name: "Apple macOS", icon: Apple },
-    { name: "Windows 11", icon: Laptop },
-    { name: "Linux Wayland", icon: Terminal },
-    { name: "Android 12+", icon: Smartphone },
-    { name: "Tauri 2 & Rust", icon: Cpu },
-    { name: "Python 3.13 GPU", icon: FileCode2 },
-    { name: "FFmpeg 7.1", icon: Film },
-    { name: "Whisper AI", icon: Volume2 },
-    { name: "Google Gemini", icon: Sparkles },
-    { name: "Anthropic Claude", icon: Bot },
-    { name: "OpenAI GPT-4o", icon: Zap },
+    { name: "Apple macOS", icon: AppleLogo },
+    { name: "Windows 11", icon: WindowsLogo },
+    { name: "Linux Wayland", icon: LinuxLogo },
+    { name: "Android", icon: AndroidLogo },
+    { name: "Tauri 2", icon: TauriLogo },
+    { name: "Rust", icon: RustLogo },
+    { name: "Python", icon: PythonLogo },
+    { name: "FFmpeg", icon: FFmpegLogo },
+    { name: "OpenAI", icon: OpenAILogo },
+    { name: "Anthropic Claude", icon: ClaudeLogo },
+    { name: "Google Gemini", icon: GeminiLogo },
+    { name: "Whisper AI", icon: WhisperLogo },
+    { name: "Product Hunt", icon: ProductHuntLogo },
+    { name: "GitHub", icon: GitHubLogo },
+    { name: "YouTube", icon: YouTubeLogo },
+    { name: "X", icon: XLogo },
+    { name: "React", icon: ReactLogo },
+    { name: "TypeScript", icon: TypeScriptLogo },
   ];
   const duplicatedBelt = [...brandBeltItems, ...brandBeltItems];
 
@@ -33,25 +47,25 @@ export function WorksEverywhere() {
     {
       name: "macOS",
       desc: "Crystal-clear recording for Mac. Optimized for Apple Silicon (M1–M4) and Intel.",
-      icon: Apple,
+      icon: AppleLogo,
       platformId: "01",
     },
     {
       name: "Windows",
       desc: "Smooth screen recording for Windows 10 and 11 with instant local saving.",
-      icon: Laptop,
+      icon: WindowsLogo,
       platformId: "02",
     },
     {
       name: "Linux",
       desc: "Full screen capture for modern Linux. Ready as an easy AppImage or package.",
-      icon: Terminal,
+      icon: LinuxLogo,
       platformId: "03",
     },
     {
       name: "Android",
       desc: "Record your phone screen with a handy floating shortcut and touch tracking.",
-      icon: Smartphone,
+      icon: AndroidLogo,
       platformId: "04",
     },
   ];
@@ -64,7 +78,7 @@ export function WorksEverywhere() {
       transition={{ duration: 0.75, ease: [0.16, 1, 0.3, 1] }}
       className="relative border-b border-white/[0.08] bg-black py-24"
     >
-      {/* Brand Belt Marquee: Logo and Text Only with Subtle Edge Fade */}
+      {/* Brand Belt Marquee: Real Brand Logos Only with Subtle Edge Fade */}
       <div className="border-y border-white/[0.08] bg-black py-4 mb-16 overflow-hidden [mask-image:linear-gradient(to_right,transparent,black_8%,black_92%,transparent)]">
         <div className="animate-marquee flex items-center gap-12 font-mono text-xs font-bold uppercase tracking-wider text-neutral-300">
           {duplicatedBelt.map((item, idx) => {

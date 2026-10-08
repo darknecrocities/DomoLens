@@ -4,15 +4,12 @@ import {
   Apple,
   ArrowDown,
   ArrowRight,
-  Bot,
   Check,
   CheckCircle2,
   Clock,
   Code2,
-  Cpu,
   Download,
   Eye,
-  FileCode2,
   Film,
   Laptop,
   Layers,
@@ -38,6 +35,26 @@ import {
   Zap,
 } from "lucide-react";
 import { useNav } from "../store/nav";
+import {
+  AppleLogo,
+  WindowsLogo,
+  LinuxLogo,
+  AndroidLogo,
+  TauriLogo,
+  RustLogo,
+  PythonLogo,
+  FFmpegLogo,
+  OpenAILogo,
+  ClaudeLogo,
+  GeminiLogo,
+  GitHubLogo,
+  ProductHuntLogo,
+  YouTubeLogo,
+  XLogo,
+  ReactLogo,
+  TypeScriptLogo,
+  WhisperLogo,
+} from "../components/BrandLogos";
 
 const FLIP_WORDS = [
   "NO MANUAL KEYFRAMES.",
@@ -207,19 +224,26 @@ export function LandingView() {
   ];
   const duplicatedFeatures = [...features, ...features];
 
-  // 2. Clean Branding Belt (Logo + Text only)
+  // 2. Clean Branding Belt (Actual Brand Logos + Expanded Ecosystem)
   const brandBeltItems = [
-    { name: "Apple macOS", icon: Apple },
-    { name: "Windows 11", icon: Laptop },
-    { name: "Linux Wayland", icon: Terminal },
-    { name: "Android 12+", icon: Smartphone },
-    { name: "Tauri 2 & Rust", icon: Cpu },
-    { name: "Python 3.13 GPU", icon: FileCode2 },
-    { name: "FFmpeg 7.1", icon: Film },
-    { name: "Whisper AI", icon: Volume2 },
-    { name: "Google Gemini", icon: Sparkles },
-    { name: "Anthropic Claude", icon: Bot },
-    { name: "OpenAI GPT-4o", icon: Zap },
+    { name: "Apple macOS", icon: AppleLogo },
+    { name: "Windows 11", icon: WindowsLogo },
+    { name: "Linux Wayland", icon: LinuxLogo },
+    { name: "Android", icon: AndroidLogo },
+    { name: "Tauri 2", icon: TauriLogo },
+    { name: "Rust", icon: RustLogo },
+    { name: "Python", icon: PythonLogo },
+    { name: "FFmpeg", icon: FFmpegLogo },
+    { name: "OpenAI", icon: OpenAILogo },
+    { name: "Anthropic Claude", icon: ClaudeLogo },
+    { name: "Google Gemini", icon: GeminiLogo },
+    { name: "Whisper AI", icon: WhisperLogo },
+    { name: "Product Hunt", icon: ProductHuntLogo },
+    { name: "GitHub", icon: GitHubLogo },
+    { name: "YouTube", icon: YouTubeLogo },
+    { name: "X", icon: XLogo },
+    { name: "React", icon: ReactLogo },
+    { name: "TypeScript", icon: TypeScriptLogo },
   ];
   const duplicatedBelt = [...brandBeltItems, ...brandBeltItems];
 
