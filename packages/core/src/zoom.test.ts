@@ -19,7 +19,7 @@ import {
   generateTourShiftSequence,
   getSteadicamBreathing,
 } from "./zoom";
-import type { CameraPhysicsPreset, ClickEvent, InteractionEvent, TimelineClip } from "./project";
+import type { CameraPhysicsPreset, ClickEvent, InteractionEvent, TimelineClip, ZoomBlock } from "./project";
 import { removeClipAndRipple, splitClip, splitZoomBlock } from "./timeline";
 import { BACKGROUND_PRESETS, SHADOW_PRESETS } from "./looks";
 
@@ -1347,5 +1347,33 @@ describe("camera physics easing and interpolation", () => {
       cameraPhysics: "spring",
     });
     expect(springCamEnd.scale).toBeCloseTo(2.0, 2);
+  });
+
+  it("zoomBlocksToKeyframes and calculateCameraAtTime honor custom shiftDurationMs and shiftAnimation", () => {
+    const customBlocks: ZoomBlock[] = [
+      {
+        id: "zoom-custom-1",
+        startTimeMs: 3000,
+        endTimeMs: 6000,
+        targetX: 0.3,
+        targetY: 0.4,
+        scale: 2.0,
+        enabled: true,
+        shiftDurationMs: 800,
+        shiftAnimation: "linear",
+      },
+    ];
+
+    const keyframes = zoomBlocksToKeyframes(customBlocks, 10000);
+    expect(keyframes.length).toBeGreaterThanOrEqual(3);
+    const startKf = keyframes.find((k) => k.id === "kf-start-zoom-custom-1");
+    expect(startKf).toBeDefined();
+    expect(startKf!.timeMs).toBe(3000 - 800); // Exactly 2200ms
+    expect(startKf!.easing).toBe("linear");
+
+    // Camera at midpoint of shift (t = 2600ms, progress = 0.5): linear scale should be 1.5
+    const midShiftCam = calculateCameraAtTime(2600, customBlocks);
+    expect(midShiftCam.isZoomed).toBe(true);
+    expect(midShiftCam.scale).toBeCloseTo(1.5, 2);
   });
 });

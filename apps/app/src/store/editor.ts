@@ -32,6 +32,7 @@ import {
   type VideoEffect,
   type VideoEffectType,
   type ZoomBlock,
+  type ShiftAnimationStyle,
   STUDIO_MOTION_TEMPLATES,
   generateTemplateKeyframes,
   checkTemplateVideoFit,
@@ -185,6 +186,21 @@ export interface EditorState {
 
   // Editing actions with undo support
   updateZoomBlock: (id: string, updates: Partial<ZoomBlock>) => void;
+  applyZoomBlockSettings: (
+    id: string,
+    settings: {
+      scale?: number;
+      shiftDurationMs?: number;
+      shiftAnimation?: ShiftAnimationStyle;
+      targetX?: number;
+      targetY?: number;
+    },
+  ) => void;
+  applyZoomBlockSettingsToAll: (settings: {
+    scale?: number;
+    shiftDurationMs?: number;
+    shiftAnimation?: ShiftAnimationStyle;
+  }) => void;
   toggleZoomBlock: (id: string) => void;
   deleteZoomBlock: (id: string) => void;
   clearZoomBlocks: () => void;
@@ -1251,6 +1267,40 @@ export const useEditor = create<EditorState>((set, get) => ({
         keyframes: updatedKeyframes,
       },
     });
+  },
+
+  applyZoomBlockSettings: (id, settings) => {
+    const state = get();
+    if (!state.project) return;
+    const mappedBlocks = state.project.zoomBlocks.map((b) => (b.id === id ? { ...b, ...settings } : b));
+    const sortedBlocks = enforceNonOverlappingZoomBlocks(mappedBlocks, 250);
+    const updatedKeyframes = zoomBlocksToKeyframes(sortedBlocks, state.durationMs);
+    set({
+      ...pushHistory(state),
+      project: {
+        ...state.project,
+        zoomBlocks: sortedBlocks,
+        keyframes: updatedKeyframes,
+      },
+    });
+    toast.success("Applied zoom settings to selected block!");
+  },
+
+  applyZoomBlockSettingsToAll: (settings) => {
+    const state = get();
+    if (!state.project || state.project.zoomBlocks.length === 0) return;
+    const mappedBlocks = state.project.zoomBlocks.map((b) => ({ ...b, ...settings }));
+    const sortedBlocks = enforceNonOverlappingZoomBlocks(mappedBlocks, 250);
+    const updatedKeyframes = zoomBlocksToKeyframes(sortedBlocks, state.durationMs);
+    set({
+      ...pushHistory(state),
+      project: {
+        ...state.project,
+        zoomBlocks: sortedBlocks,
+        keyframes: updatedKeyframes,
+      },
+    });
+    toast.success(`Applied shift settings to all ${mappedBlocks.length} zoom blocks!`);
   },
 
   toggleZoomBlock: (id) => {

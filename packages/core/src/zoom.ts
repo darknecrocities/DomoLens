@@ -18,8 +18,8 @@ export const DEFAULT_ZOOM_OPTIONS: AutoZoomOptions = {
   defaultScale: 1.8,
   minDurationMs: 1800,
   maxDurationMs: 4500,
-  leadInMs: 350,
-  leadOutMs: 400,
+  leadInMs: 750,
+  leadOutMs: 450,
   clusterWindowMs: 2000,
   clusterDistance: 0.25,
 };
@@ -371,6 +371,8 @@ export function detectZoomBlocksFromClicks(
         targetY: clamped.y,
         scale: options.defaultScale,
         enabled: true,
+        shiftDurationMs: options.leadInMs,
+        shiftAnimation: "smooth",
       });
     }
   }
@@ -709,7 +711,8 @@ export function calculateCameraAtTime(
     const block = activeBlocks[i]!;
     const nextBlock = activeBlocks[i + 1];
 
-    const transitionInStart = Math.max(0, block.startTimeMs - leadInMs);
+    const blockLeadIn = block.shiftDurationMs ?? leadInMs;
+    const transitionInStart = Math.max(0, block.startTimeMs - blockLeadIn);
     const transitionInEnd = block.startTimeMs;
     const transitionOutStart = block.endTimeMs;
     const transitionOutEnd = block.endTimeMs + leadOutMs;
@@ -728,7 +731,12 @@ export function calculateCameraAtTime(
     // 1. Inside lead-in transition: smoothly zoom in directly on block target
     if (!glidedFromPrev && timeMs >= transitionInStart && timeMs < transitionInEnd) {
       const span = transitionInEnd - transitionInStart;
-      const progress = span > 0 ? evaluateCameraEasing((timeMs - transitionInStart) / span, options?.cameraPhysics || "smooth") : 1;
+      const easingPhysics = block.shiftAnimation === "spring"
+        ? "spring"
+        : block.shiftAnimation === "linear"
+          ? "linear"
+          : (options?.cameraPhysics || "smooth");
+      const progress = span > 0 ? evaluateCameraEasing((timeMs - transitionInStart) / span, easingPhysics) : 1;
       const target = clampCameraToBounds(block.targetX, block.targetY, block.scale, "center");
       const currentScale = 1.0 + (block.scale - 1.0) * progress;
       return {
@@ -841,6 +849,8 @@ export interface PlotInteractionsOptions {
   typingZoomOut?: boolean;
   centerTyping?: boolean;
   initialEstablishingMs?: number;
+  shiftAnimation?: import("./project").ShiftAnimationStyle;
+  cameraPhysics?: import("./project").CameraPhysicsPreset;
 }
 
 /**
@@ -1184,6 +1194,8 @@ export function plotInteractionsToKeyframesAndZoomBlocks(
       targetY: clampedFirst.y,
       scale: clusterScale,
       enabled: true,
+      shiftDurationMs: leadInMs,
+      shiftAnimation: options.shiftAnimation || (options.cameraPhysics as import("./project").ShiftAnimationStyle) || "smooth",
     });
 
     // Strictly monotonic keyframe calculations:
@@ -1326,9 +1338,9 @@ export function plotInteractionsToKeyframesAndZoomBlocks(
       }
 
       // If there is a noticeable gap (> 450ms) and meaningful distance (> 0.06), hold camera steady on previous
-      // action before briskly gliding to the next action
+      // action before smoothly gliding to the next action
       if (gap > 450 && targetDist > 0.06) {
-        const panSpan = Math.min(1000, Math.max(450, Math.round(gap * 0.55)));
+        const panSpan = Math.min(1000, Math.max(650, Math.round(gap * 0.70)));
         const panStart = trackTime - panSpan;
         if (panStart > lastTrackTime + 80) {
           keyframes.push({
@@ -1596,8 +1608,8 @@ export function zoomBlocksToKeyframes(
   if (active.length === 0 || videoDurationMs <= 0) return [];
 
   const keyframes: import("./project").KeyframeNode[] = [];
-  const leadIn = options?.leadInMs ?? 1000;
-  const leadOut = options?.leadOutMs ?? 350;
+  const defaultLeadIn = options?.leadInMs ?? 750;
+  const defaultLeadOut = options?.leadOutMs ?? 400;
   const maxGlideGapMs = options?.maxGlideGapMs ?? 1000;
 
   for (let i = 0; i < active.length; i++) {
@@ -1605,7 +1617,14 @@ export function zoomBlocksToKeyframes(
     const prev = active[i - 1];
     const next = active[i + 1];
 
-    const rawStart = Math.max(0, b.startTimeMs - leadIn);
+    const blockShiftDuration = b.shiftDurationMs ?? defaultLeadIn;
+    const blockEasing = b.shiftAnimation === "spring"
+      ? "spring"
+      : b.shiftAnimation === "linear"
+        ? "linear"
+        : "cubic";
+
+    const rawStart = Math.max(0, b.startTimeMs - blockShiftDuration);
     const glidedFromPrev = Boolean(
       options?.continuousGlide &&
         prev &&
@@ -1616,7 +1635,7 @@ export function zoomBlocksToKeyframes(
     const startMs = glidedFromPrev ? prev!.endTimeMs : rawStart;
     const holdStartMs = b.startTimeMs;
     const holdEndMs = Math.min(videoDurationMs, b.endTimeMs);
-    const endMs = Math.min(videoDurationMs, holdEndMs + leadOut);
+    const endMs = Math.min(videoDurationMs, holdEndMs + defaultLeadOut);
 
     // Lead-in keyframe: start zooming from 1.0x (unless previous block glided into this one)
     if (!glidedFromPrev) {
@@ -1626,7 +1645,7 @@ export function zoomBlocksToKeyframes(
         scale: 1.0,
         targetX: 0.5,
         targetY: 0.5,
-        easing: "cubic",
+        easing: blockEasing,
       });
     }
 
@@ -1637,7 +1656,7 @@ export function zoomBlocksToKeyframes(
       scale: b.scale,
       targetX: b.targetX,
       targetY: b.targetY,
-      easing: "spring",
+      easing: blockEasing === "linear" ? "linear" : blockEasing === "spring" ? "spring" : "cubic",
     });
 
     // Hold end
@@ -1648,7 +1667,7 @@ export function zoomBlocksToKeyframes(
         scale: b.scale,
         targetX: b.targetX,
         targetY: b.targetY,
-        easing: "cubic",
+        easing: blockEasing,
       });
     }
 
@@ -1667,7 +1686,7 @@ export function zoomBlocksToKeyframes(
         scale: 1.0,
         targetX: 0.5,
         targetY: 0.5,
-        easing: "cubic",
+        easing: blockEasing,
       });
     }
   }

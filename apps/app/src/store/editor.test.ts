@@ -791,5 +791,80 @@ describe("useEditor store", () => {
     expect(loaded?.zoomBlocks.length).toBeGreaterThan(0);
     expect(loaded?.keyframes?.length ?? 0).toBeGreaterThan(0);
   });
+
+  it("applies shift duration and animation to single zoom block and regenerates keyframes", async () => {
+    await useEditor.getState().loadProject("proj-test");
+    useEditor.setState((s) => ({
+      project: s.project ? {
+        ...s.project,
+        clicks: [{ id: "c1", timestampMs: 2000, x: 0.3, y: 0.4, button: "left" }],
+        interactions: [{ id: "c1", type: "click", timestampMs: 2000, x: 0.3, y: 0.4, button: "left" }],
+      } : null,
+    }));
+    useEditor.getState().plotInteractions({ holdDurationMs: 1200, leadInMs: 750 });
+    const state = useEditor.getState();
+    const firstBlock = state.project?.zoomBlocks[0];
+    expect(firstBlock).toBeDefined();
+
+    // Apply custom shift settings to this block
+    useEditor.getState().applyZoomBlockSettings(firstBlock!.id, {
+      scale: 2.2,
+      shiftDurationMs: 950,
+      shiftAnimation: "cinematic",
+    });
+
+    const updated = useEditor.getState().project?.zoomBlocks.find((b) => b.id === firstBlock!.id);
+    expect(updated?.scale).toBe(2.2);
+    expect(updated?.shiftDurationMs).toBe(950);
+    expect(updated?.shiftAnimation).toBe("cinematic");
+
+    // Keyframes should be regenerated with the updated lead-in
+    const startKf = useEditor.getState().project?.keyframes?.find((k) => k.id === `kf-start-${firstBlock!.id}`);
+    expect(startKf).toBeDefined();
+    expect(startKf!.timeMs).toBe(firstBlock!.startTimeMs - 950);
+  });
+
+  it("applies shift settings to ALL zoom blocks in batch", async () => {
+    await useEditor.getState().loadProject("proj-test");
+    useEditor.setState((s) => ({
+      project: s.project ? {
+        ...s.project,
+        clicks: [{ id: "c1", timestampMs: 2000, x: 0.3, y: 0.4, button: "left" }],
+        interactions: [{ id: "c1", type: "click", timestampMs: 2000, x: 0.3, y: 0.4, button: "left" }],
+      } : null,
+    }));
+    useEditor.getState().plotInteractions({ holdDurationMs: 1200, leadInMs: 750 });
+    const count = useEditor.getState().project?.zoomBlocks.length ?? 0;
+    expect(count).toBeGreaterThan(0);
+
+    useEditor.getState().applyZoomBlockSettingsToAll({
+      scale: 2.0,
+      shiftDurationMs: 850,
+      shiftAnimation: "spring",
+    });
+
+    const blocks = useEditor.getState().project?.zoomBlocks ?? [];
+    for (const b of blocks) {
+      expect(b.scale).toBe(2.0);
+      expect(b.shiftDurationMs).toBe(850);
+      expect(b.shiftAnimation).toBe("spring");
+    }
+  });
+
+  it("supports Windows Terminal and accurately named window frames", async () => {
+    await useEditor.getState().loadProject("proj-test");
+    useEditor.getState().updateLooks({ windowFrame: "windows", mockupUrl: "PowerShell — Admin" });
+
+    expect(useEditor.getState().project?.looks.windowFrame).toBe("windows");
+    expect(useEditor.getState().project?.looks.mockupUrl).toBe("PowerShell — Admin");
+
+    // Chrome
+    useEditor.getState().updateLooks({ windowFrame: "chrome", mockupUrl: "domolens.vercel.app" });
+    expect(useEditor.getState().project?.looks.windowFrame).toBe("chrome");
+
+    // Safari
+    useEditor.getState().updateLooks({ windowFrame: "safari" });
+    expect(useEditor.getState().project?.looks.windowFrame).toBe("safari");
+  });
 });
 
