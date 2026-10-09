@@ -14,18 +14,22 @@ import { platform } from "../platform";
 import { createLiveStreamMotionTracker, scanVideoElementForActivity } from "../lib/video-activity-detector";
 
 let cursorTrajectoryBuffer: import("@domolens/core").CursorTrajectoryPoint[] = [];
-let transcriptSegments: Array<{ text: string; startMs: number }> = [];
+let transcriptSegments: Array<{ text: string; startMs: number; durationMs?: number }> = [];
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 let recognitionInstance: any | null = null;
+let currentInterimText = "";
+let currentInterimStartMs = 0;
+let isIntentionallyStoppingRecognition = false;
 
 
 export type RecordingState = "idle" | "requesting_share" | "countdown" | "recording" | "paused";
 export type RecordingSource = "screen" | "window";
 export type RecordingMode =
-  | "regular"        // Plain screen capture — no auto-zoom, no SFX
-  | "auto-zoom-sfx"  // Auto-zoom on clicks + sound effects (default)
-  | "auto-zoom"      // Auto-zoom only, no SFX
-  | "sfx-transcribe"; // SFX + live speech-to-text transcription synced to keyframes
+  | "regular"                   // Plain screen capture — no auto-zoom, no SFX
+  | "auto-zoom-sfx"             // Auto-zoom on clicks + sound effects
+  | "auto-zoom"                 // Auto-zoom only, no SFX
+  | "sfx-transcribe"            // SFX + live speech-to-text subtitles
+  | "auto-zoom-sfx-transcribe"; // Complete studio: Auto-Zoom + SFX + live subtitles
 
 interface RecorderStore {
   state: RecordingState;
@@ -61,6 +65,7 @@ interface RecorderStore {
   ) => void;
   recordTyping: (x: number, y: number, snippet?: string, existingId?: string) => void;
   recordCursorPoint: (x: number, y: number) => void;
+  recordTranscript: (text: string, startMs?: number, durationMs?: number) => void;
 }
 
 let countdownTimer: ReturnType<typeof setInterval> | null = null;
@@ -78,9 +83,18 @@ let activeRecordingMime = "";
 function getBestSupportedMimeType(): string {
   if (typeof MediaRecorder === "undefined") return "";
   const candidateTypes = [
+    // 1. Hardware-accelerated High Profile H.264 (Native VideoToolbox on macOS Apple Silicon & Intel)
+    "video/mp4;codecs=avc1.640028,mp4a.40.2",
+    "video/mp4;codecs=avc1.4d4028,mp4a.40.2",
     "video/mp4;codecs=avc1,mp4a.40.2",
     "video/mp4",
+    // 2. Hardware H.264 in WebM container (Chrome on macOS)
+    "video/webm;codecs=h264,opus",
+    "video/webm;codecs=h264",
+    // 3. VP9 WebM
     "video/webm;codecs=vp9,opus",
+    "video/webm;codecs=vp9",
+    // 4. Fallback WebM
     "video/webm;codecs=vp8,opus",
     "video/webm",
   ];
@@ -192,6 +206,23 @@ export const useRecorder = create<RecorderStore>((set, get) => ({
     const clampedX = Math.min(1, Math.max(0, x));
     const clampedY = Math.min(1, Math.max(0, y));
     cursorTrajectoryBuffer.push({ timestampMs, x: clampedX, y: clampedY });
+  },
+
+  recordTranscript: (text, startMs, durationMs) => {
+    const trimmed = text.trim();
+    if (!trimmed) return;
+    const nowMs = Math.max(0, Date.now() - recordingStartTimestamp);
+    const actualStart = typeof startMs === "number" ? startMs : nowMs;
+    const words = trimmed.split(/\s+/);
+    const actualDuration =
+      typeof durationMs === "number"
+        ? durationMs
+        : Math.max(1800, Math.min(5000, words.length * 380 + 400));
+    transcriptSegments.push({
+      text: trimmed,
+      startMs: actualStart,
+      durationMs: actualDuration,
+    });
   },
 
   recordClick: (x, y, button = "left") => {
@@ -329,9 +360,18 @@ export const useRecorder = create<RecorderStore>((set, get) => ({
           stream = await navigator.mediaDevices.getDisplayMedia({
             video: {
               displaySurface: targetSurface,
-              frameRate: { ideal: 60, max: 60 },
+              frameRate: { ideal: 60 },
+              width: { ideal: 3840 },
+              height: { ideal: 2160 },
+              resizeMode: "none",
             } as MediaTrackConstraints,
-            audio: get().systemAudioEnabled,
+            audio: get().systemAudioEnabled
+              ? {
+                  echoCancellation: true,
+                  noiseSuppression: true,
+                  autoGainControl: false,
+                }
+              : false,
             preferCurrentTab: false,
             selfBrowserSurface: "exclude",
             systemAudio: get().systemAudioEnabled ? "include" : "exclude",
@@ -341,21 +381,45 @@ export const useRecorder = create<RecorderStore>((set, get) => ({
         } catch {
           // Fallback to relaxed constraints for environments without advanced displaySurface options
           stream = await navigator.mediaDevices.getDisplayMedia({
-            video: true,
+            video: {
+              width: { ideal: 3840 },
+              height: { ideal: 2160 },
+              frameRate: { ideal: 60 },
+            },
             audio: get().systemAudioEnabled,
           });
         }
 
         activeStream = stream;
 
-        // If mic requested, capture and mix cleanly via Web Audio API
+        // Apply native Retina detail content hint and maximum clarity constraints
+        const activeVideoTrack = stream.getVideoTracks()[0];
+        if (activeVideoTrack) {
+          if ("contentHint" in activeVideoTrack) {
+            activeVideoTrack.contentHint = "detail";
+          }
+          try {
+            await activeVideoTrack.applyConstraints({
+              width: { ideal: 3840 },
+              height: { ideal: 2160 },
+              frameRate: { ideal: 60 },
+              resizeMode: "none",
+            } as any);
+          } catch {
+            // Keep native track settings if custom constraint rejected
+          }
+        }
+
+        // If mic requested, capture clean studio voice via Web Audio API with echo cancellation
         if (get().micEnabled && navigator.mediaDevices?.getUserMedia) {
           try {
             const micStream = await navigator.mediaDevices.getUserMedia({
               audio: {
                 echoCancellation: true,
                 noiseSuppression: true,
-                autoGainControl: true,
+                autoGainControl: false, // Critical: disable AGC to prevent mic pumping room reverb & speaker bleed
+                channelCount: 1,
+                sampleRate: 48000,
               },
             });
             micStreamInstance = micStream;
@@ -372,11 +436,19 @@ export const useRecorder = create<RecorderStore>((set, get) => ({
                   audioContextInstance = new AudioCtx();
                   const dest = audioContextInstance.createMediaStreamDestination();
 
-                  const sysSrc = audioContextInstance.createMediaStreamSource(new MediaStream([systemAudioTracks[0]!]));
-                  sysSrc.connect(dest);
-
+                  // Voice mic gets clean 100% gain
                   const micSrc = audioContextInstance.createMediaStreamSource(new MediaStream([micAudioTracks[0]!]));
-                  micSrc.connect(dest);
+                  const micGain = audioContextInstance.createGain();
+                  micGain.gain.value = 1.0;
+                  micSrc.connect(micGain);
+                  micGain.connect(dest);
+
+                  // System audio gets 60% gain so desktop alerts don't drown out or echo the voice
+                  const sysSrc = audioContextInstance.createMediaStreamSource(new MediaStream([systemAudioTracks[0]!]));
+                  const sysGain = audioContextInstance.createGain();
+                  sysGain.gain.value = 0.6;
+                  sysSrc.connect(sysGain);
+                  sysGain.connect(dest);
 
                   const mixedTrack = dest.stream.getAudioTracks()[0];
                   if (mixedTrack) {
@@ -386,9 +458,11 @@ export const useRecorder = create<RecorderStore>((set, get) => ({
                 }
               } catch (audioErr) {
                 console.warn("Audio mixing fallback:", audioErr);
+                systemAudioTracks.forEach((t) => stream.removeTrack(t));
                 micAudioTracks.forEach((track) => stream.addTrack(track));
               }
             } else if (micAudioTracks.length > 0) {
+              systemAudioTracks.forEach((t) => stream.removeTrack(t));
               micAudioTracks.forEach((track) => stream.addTrack(track));
             }
           } catch {
@@ -447,15 +521,33 @@ export const useRecorder = create<RecorderStore>((set, get) => ({
       });
     }, 200);
 
-    // If activeStream exists, begin MediaRecorder
+    // If activeStream exists, begin MediaRecorder with 30Mbps crystal-clear resolution
     if (activeStream) {
       try {
         const mimeType = getBestSupportedMimeType();
         activeRecordingMime = mimeType;
 
-        const recorder = mimeType
-          ? new MediaRecorder(activeStream, { mimeType })
-          : new MediaRecorder(activeStream);
+        let recorder: MediaRecorder;
+        const targetBps = 40_000_000; // 40 Mbps cinema-grade bitrate for Mac Retina clarity
+        try {
+          recorder = new MediaRecorder(activeStream, {
+            mimeType: mimeType || undefined,
+            videoBitsPerSecond: targetBps,
+            audioBitsPerSecond: 256_000,
+          });
+        } catch {
+          try {
+            recorder = new MediaRecorder(activeStream, {
+              mimeType: mimeType || undefined,
+              videoBitsPerSecond: 25_000_000,
+              audioBitsPerSecond: 192_000,
+            });
+          } catch {
+            recorder = mimeType
+              ? new MediaRecorder(activeStream, { mimeType })
+              : new MediaRecorder(activeStream);
+          }
+        }
         mediaRecorderInstance = recorder;
 
         recorder.ondataavailable = (event) => {
@@ -470,101 +562,150 @@ export const useRecorder = create<RecorderStore>((set, get) => ({
       }
     }
 
-    // Start live speech-to-text transcription when in sfx-transcribe mode
+    // Start live speech-to-text transcription whenever mic is enabled or in transcribe modes
     transcriptSegments = [];
-    if (get().recordingMode === "sfx-transcribe") {
+    currentInterimText = "";
+    currentInterimStartMs = 0;
+    isIntentionallyStoppingRecognition = false;
+
+    const shouldTranscribe =
+      get().micEnabled ||
+      get().recordingMode === "sfx-transcribe" ||
+      get().recordingMode === "auto-zoom-sfx-transcribe";
+
+    if (shouldTranscribe) {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const SpeechRecognitionAPI: (new () => any) | undefined =
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
       if (!SpeechRecognitionAPI) {
-        toast.warning("Speech recognition is not supported in this browser. Transcription disabled.");
+        console.warn("SpeechRecognition API not available in current environment.");
       } else {
-        // Request mic permission explicitly for SpeechRecognition (separate from recording mix)
-        const startRecognition = () => {
+        let retryCount = 0;
+        let restartTimer: ReturnType<typeof setTimeout> | null = null;
+
+        const initRecognition = () => {
+          if (isIntentionallyStoppingRecognition || get().state !== "recording") return;
           try {
+            if (recognitionInstance) {
+              try {
+                recognitionInstance.abort();
+              } catch {}
+              recognitionInstance = null;
+            }
+
             const recognition = new SpeechRecognitionAPI();
             recognition.continuous = true;
-            recognition.interimResults = true; // interim so we catch time accurately
-            recognition.lang = "en-US";
+            recognition.interimResults = true;
+            recognition.lang = (typeof navigator !== "undefined" && navigator.language) || "en-US";
             recognition.maxAlternatives = 1;
 
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             recognition.onstart = () => {
-              toast.success("🎤 Live transcription active — speak clearly");
+              retryCount = 0;
+              console.debug("[transcribe] Live microphone speech recognition active");
             };
-            let lastSpokenText = "";
-            let lastSegmentTime = 0;
 
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             recognition.onresult = (event: any) => {
-              if (get().state !== "recording") return;
+              const nowMs = Math.max(0, Date.now() - recordingStartTimestamp);
               for (let i = event.resultIndex; i < event.results.length; i++) {
                 const result = event.results[i];
                 if (!result) continue;
                 const transcript: string = result[0]?.transcript?.trim() ?? "";
-                if (!transcript || transcript === lastSpokenText) continue;
+                if (!transcript) continue;
 
-                const startMs = Math.max(0, Date.now() - recordingStartTimestamp);
                 if (result.isFinal) {
-                  lastSpokenText = transcript;
+                  currentInterimText = "";
                   const words = transcript.split(/\s+/);
-                  for (let w = 0; w < words.length; w += 12) {
-                    const chunk = words.slice(w, w + 12).join(" ");
+                  const phraseStart =
+                    currentInterimStartMs > 0
+                      ? currentInterimStartMs
+                      : Math.max(0, nowMs - words.length * 360);
+                  const chunkSize = 7;
+                  for (let w = 0; w < words.length; w += chunkSize) {
+                    const chunkWords = words.slice(w, w + chunkSize);
+                    const chunk = chunkWords.join(" ");
                     if (chunk) {
-                      transcriptSegments.push({ text: chunk, startMs });
-                      console.debug("[transcribe final]", startMs, chunk);
+                      const segStart =
+                        phraseStart + Math.round((w / words.length) * Math.max(0, nowMs - phraseStart));
+                      const segDur = Math.max(1800, Math.min(4800, chunkWords.length * 380 + 400));
+                      transcriptSegments.push({
+                        text: chunk,
+                        startMs: segStart,
+                        durationMs: segDur,
+                      });
+                      console.debug("[transcribe final]", segStart, chunk);
                     }
                   }
-                } else if (startMs - lastSegmentTime > 2000 && transcript.split(/\s+/).length >= 4) {
-                  // If speaker talks continuously without pause, capture interim batch
-                  lastSegmentTime = startMs;
-                  const words = transcript.split(/\s+/);
-                  const chunk = words.slice(-10).join(" ");
-                  if (chunk && !transcriptSegments.some((s) => s.text === chunk)) {
-                    transcriptSegments.push({ text: chunk, startMs });
-                    console.debug("[transcribe interim]", startMs, chunk);
+                  currentInterimStartMs = 0;
+                } else {
+                  if (!currentInterimStartMs) {
+                    currentInterimStartMs = nowMs;
                   }
+                  currentInterimText = transcript;
                 }
               }
             };
+
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             recognition.onerror = (e: any) => {
-              // Auto-restart on recoverable errors (e.g. no-speech timeout)
-              if (e.error === "no-speech" || e.error === "audio-capture") {
-                if (get().state === "recording" && recognitionInstance) {
-                  try { recognitionInstance.start(); } catch { /* ignore */ }
-                }
-              } else if (e.error === "not-allowed") {
-                toast.error("Microphone permission denied — transcription stopped.");
+              if (e.error === "not-allowed") {
+                toast.warning("Microphone access not permitted for speech recognition.");
+                isIntentionallyStoppingRecognition = true;
+              } else if (e.error === "no-speech") {
+                // Normal silence between phrases
+                console.debug("[transcribe silence]");
               } else {
-                console.warn("[transcribe] recognition error:", e.error);
+                console.debug("[transcribe notification]", e.error);
               }
             };
+
             recognition.onend = () => {
-              // Restart if still recording (continuous recognition can end unexpectedly)
-              if (get().state === "recording" && recognitionInstance) {
-                try { recognitionInstance.start(); } catch { /* ignore */ }
+              // Flush pending interim speech so short or final phrases are immediately captured
+              if (currentInterimText && currentInterimText.trim().length > 0) {
+                const words = currentInterimText.trim().split(/\s+/);
+                const phraseStart =
+                  currentInterimStartMs ||
+                  Math.max(0, Date.now() - recordingStartTimestamp - words.length * 360);
+                const chunk = words.join(" ");
+                if (!transcriptSegments.some((s) => s.text === chunk)) {
+                  transcriptSegments.push({
+                    text: chunk,
+                    startMs: Math.max(0, phraseStart),
+                    durationMs: Math.max(1800, Math.min(4800, words.length * 380 + 400)),
+                  });
+                }
+                currentInterimText = "";
+                currentInterimStartMs = 0;
+              }
+
+              // Restart cleanly if recording is ongoing and stop wasn't requested
+              if (!isIntentionallyStoppingRecognition && get().state === "recording") {
+                if (restartTimer) clearTimeout(restartTimer);
+                restartTimer = setTimeout(() => {
+                  if (!isIntentionallyStoppingRecognition && get().state === "recording") {
+                    initRecognition();
+                  }
+                }, 150);
               }
             };
+
             recognition.start();
             recognitionInstance = recognition;
           } catch (recErr) {
             console.warn("SpeechRecognition start error:", recErr);
-            toast.warning("Could not start transcription: " + String(recErr));
+            if (
+              !isIntentionallyStoppingRecognition &&
+              get().state === "recording" &&
+              retryCount < 5
+            ) {
+              retryCount++;
+              setTimeout(initRecognition, 500 * retryCount);
+            }
           }
         };
 
-        // Ensure mic permission is granted before starting recognition
-        if (navigator.mediaDevices?.getUserMedia) {
-          navigator.mediaDevices.getUserMedia({ audio: true })
-            .then(() => startRecognition())
-            .catch(() => {
-              toast.error("Microphone access denied — transcription requires mic permission.");
-            });
-        } else {
-          startRecognition();
-        }
+        initRecognition();
       }
     }
 
@@ -890,6 +1031,35 @@ export const useRecorder = create<RecorderStore>((set, get) => ({
       recorderCleanupFn = null;
     }
 
+    // Stop live speech-to-text recognition cleanly and flush any buffered speech immediately
+    isIntentionallyStoppingRecognition = true;
+    if (recognitionInstance) {
+      try {
+        recognitionInstance.stop();
+      } catch {}
+      recognitionInstance = null;
+    }
+
+    if (currentInterimText && currentInterimText.trim().length > 0) {
+      const words = currentInterimText.trim().split(/\s+/);
+      const phraseStart =
+        currentInterimStartMs || Math.max(0, get().elapsedMs - words.length * 360);
+      const chunkSize = 7;
+      for (let w = 0; w < words.length; w += chunkSize) {
+        const chunkWords = words.slice(w, w + chunkSize);
+        const chunk = chunkWords.join(" ");
+        if (chunk && !transcriptSegments.some((s) => s.text === chunk)) {
+          transcriptSegments.push({
+            text: chunk,
+            startMs: Math.max(0, phraseStart + Math.round((w / words.length) * Math.max(0, get().elapsedMs - phraseStart))),
+            durationMs: Math.max(1800, Math.min(4800, chunkWords.length * 380 + 400)),
+          });
+        }
+      }
+      currentInterimText = "";
+      currentInterimStartMs = 0;
+    }
+
     if (mediaRecorderInstance && mediaRecorderInstance.state !== "inactive") {
       try {
         await new Promise<void>((resolve) => {
@@ -1081,6 +1251,7 @@ export const useRecorder = create<RecorderStore>((set, get) => ({
               enableRevealDip: false,
               cursorTrajectory: finalTrajectory,
               typingZoomOut: false,
+              initialEstablishingMs: 1400,
             },
           )
         : { keyframes: [], zoomBlocks: [] };
@@ -1108,19 +1279,30 @@ export const useRecorder = create<RecorderStore>((set, get) => ({
         bgColor: "rgba(15, 17, 23, 0.88)",
       }));
 
-    // Merge speech-to-text transcript segments (from sfx-transcribe mode)
+    // Merge real dynamic speech-to-text transcript segments from microphone
     if (transcriptSegments.length > 0) {
-      transcriptSegments.forEach((seg, idx) => {
+      const sortedSegments = [...transcriptSegments].sort((a, b) => a.startMs - b.startMs);
+      let lastEndMs = 0;
+      sortedSegments.forEach((seg, idx) => {
+        const text = seg.text.trim();
+        if (!text) return;
+        const startMs = Math.max(lastEndMs + 40, seg.startMs);
+        const durationMs =
+          seg.durationMs ||
+          Math.max(1800, Math.min(4800, text.split(/\s+/).length * 380 + 400));
+        lastEndMs = startMs + durationMs;
+
         textOverlays.push({
           id: `transcript-${idx + 1}`,
-          text: seg.text,
-          startTimeMs: seg.startMs,
-          durationMs: 3500,
+          text,
+          startTimeMs: startMs,
+          durationMs,
           x: 0.5,
           y: 0.88,
           fontSize: 18,
           color: "#ffffff",
-          bgColor: "rgba(0, 0, 0, 0.72)",
+          bgColor: "rgba(0, 0, 0, 0.75)",
+          cardStyle: "glass",
           motionPreset: "blur-reveal",
         } as import("@domolens/core").TextOverlay);
       });
@@ -1190,12 +1372,25 @@ export const useRecorder = create<RecorderStore>((set, get) => ({
           volume: 1,
         },
       ],
-      looks: DEFAULT_LOOKS,
+      looks: {
+        ...DEFAULT_LOOKS,
+        windowFrame: "terminal" as const,
+        fit: "contain" as const,
+        padding: 32,
+        borderRadius: 16,
+        shadow: "lift" as const,
+      },
       audioSettings: {
         ...DEFAULT_AUDIO_SETTINGS,
         // SFX only active when mode includes SFX (not regular or auto-zoom-only)
-        clickSoundEnabled: mode === "auto-zoom-sfx" || mode === "sfx-transcribe",
-        typingSoundEnabled: mode === "auto-zoom-sfx" || mode === "sfx-transcribe",
+        clickSoundEnabled:
+          mode === "auto-zoom-sfx" ||
+          mode === "sfx-transcribe" ||
+          mode === "auto-zoom-sfx-transcribe",
+        typingSoundEnabled:
+          mode === "auto-zoom-sfx" ||
+          mode === "sfx-transcribe" ||
+          mode === "auto-zoom-sfx-transcribe",
         musicDuckingEnabled: true,
       },
       aiData: {
@@ -1237,6 +1432,15 @@ export const useRecorder = create<RecorderStore>((set, get) => ({
       recorderCleanupFn();
       recorderCleanupFn = null;
     }
+    isIntentionallyStoppingRecognition = true;
+    if (recognitionInstance) {
+      try {
+        recognitionInstance.stop();
+      } catch {}
+      recognitionInstance = null;
+    }
+    currentInterimText = "";
+    currentInterimStartMs = 0;
     if (audioContextInstance) {
       try {
         void audioContextInstance.close();

@@ -318,9 +318,30 @@ export const useEditor = create<EditorState>((set, get) => ({
       if (!parsed.keyframes) parsed.keyframes = [];
       if (!parsed.clicks) parsed.clicks = [];
       if (!parsed.interactions) parsed.interactions = [];
-      if (!parsed.cursorTrajectory) parsed.cursorTrajectory = [];
       if (!parsed.textOverlays) parsed.textOverlays = [];
-      if (!parsed.audioTracks) parsed.audioTracks = [];
+      // Clean up any stale legacy static dummy captions from older recordings so subtitles are 100% dynamic!
+      if (parsed.textOverlays.length > 0 && parsed.summary.source === "recording") {
+        const staticPatterns = [
+          "Click to open application showcase navigation",
+          "Navigate and inspect settings panel options",
+          "Click and focus target element",
+          "Typing and entering values into form",
+          "Right click to inspect context options",
+        ];
+        parsed.textOverlays = parsed.textOverlays.filter((o) => {
+          return !staticPatterns.some((pattern) => o.text.includes(pattern));
+        });
+      }
+
+      if (!parsed.looks) parsed.looks = { ...DEFAULT_LOOKS };
+      // Self-heal: If recording had windowFrame stripped to "none", restore MacBook terminal frame
+      if (parsed.summary.source === "recording" && (parsed.looks.windowFrame === "none" || !parsed.looks.windowFrame)) {
+        parsed.looks.windowFrame = "terminal";
+        if (parsed.looks.padding === 0) parsed.looks.padding = 32;
+        if (parsed.looks.borderRadius === 0) parsed.looks.borderRadius = 16;
+        if (parsed.looks.shadow === "none") parsed.looks.shadow = "lift";
+        parsed.looks.fit = "contain";
+      }
 
       const duration = parsed.summary.durationMs || 10000;
 
@@ -485,7 +506,17 @@ export const useEditor = create<EditorState>((set, get) => ({
       textOverlays,
       audioTracks,
       clips,
-      looks: DEFAULT_LOOKS,
+      looks:
+        summary.source === "recording"
+          ? {
+              ...DEFAULT_LOOKS,
+              windowFrame: "terminal" as const,
+              fit: "contain" as const,
+              padding: 32,
+              borderRadius: 16,
+              shadow: "lift" as const,
+            }
+          : DEFAULT_LOOKS,
       audioSettings: { ...DEFAULT_AUDIO_SETTINGS },
     };
 

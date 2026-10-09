@@ -2,6 +2,8 @@ import type {
   ClickEvent,
   CursorTrajectoryPoint,
   InteractionEvent,
+  KeyframeNode,
+  ProjectLooks,
   TextMotionPreset,
   TextOverlay,
 } from "./project";
@@ -690,5 +692,82 @@ export function evaluateTextOverlayMotion(
     translateX: 0,
     translateY: 0,
     blur: 0,
+  };
+}
+
+export interface Evaluated3DTilt {
+  rotateX: number;
+  rotateY: number;
+  rotateZ: number;
+  glareX: number;
+  glareY: number;
+  perspective: number;
+}
+
+/**
+ * Evaluates the 3D perspective orientation, kinetic motion animation,
+ * and specular glass light glare coordinates of the video frame at timestamp tMs.
+ */
+export function evaluate3DTiltAtTime(
+  tMs: number,
+  looks: ProjectLooks,
+  interactions: InteractionEvent[] = [],
+  _keyframes: KeyframeNode[] = [],
+): Evaluated3DTilt {
+  // If tiltX is explicitly defined, use it; otherwise fallback to legacy tiltAngle
+  const baseX = looks.tiltX ?? looks.tiltAngle ?? 0;
+  const baseY = looks.tiltY ?? (looks.tiltAngle ? -(looks.tiltAngle * 0.45) : 0);
+  const baseZ = looks.tiltZ ?? 0;
+  const perspective = looks.tiltPerspective ?? 1200;
+
+  let deltaX = 0;
+  let deltaY = 0;
+  let deltaZ = 0;
+
+  const mode = looks.tiltAnimation ?? "none";
+  const intensity = looks.tiltAnimationIntensity ?? 0.6;
+
+  if (mode === "hover") {
+    // Subtle, continuous harmonic floating oscillation (period: 4.2s)
+    const phase = (tMs / 4200) * Math.PI * 2;
+    deltaX = Math.sin(phase) * (1.2 * intensity);
+    deltaY = Math.cos(phase * 0.7) * (1.8 * intensity);
+    deltaZ = Math.sin(phase * 0.5) * (0.6 * intensity);
+  } else if (mode === "reactive") {
+    // Dynamic kinetic lean towards recent click or typing interaction on screen
+    const active = interactions.find(
+      (i) => Math.abs(tMs - i.timestampMs) < 1200,
+    );
+    if (active) {
+      const progress = Math.max(0, 1 - Math.abs(tMs - active.timestampMs) / 1200);
+      const ease = Math.sin(progress * Math.PI); // smooth bell-curve
+      deltaX = (active.y - 0.5) * (-8 * intensity) * ease;
+      deltaY = (active.x - 0.5) * (12 * intensity) * ease;
+    }
+  } else if (mode === "sweep") {
+    // Cinematic intro sweep / reveal transition during first 1.6s
+    if (tMs < 1600) {
+      const p = Math.min(1, Math.max(0, tMs / 1600));
+      const ease = 1 - Math.pow(1 - p, 3); // cubic ease-out
+      deltaX = (1 - ease) * (8 * intensity);
+      deltaY = (1 - ease) * (-14 * intensity);
+    }
+  }
+
+  const finalX = Math.max(-45, Math.min(45, baseX + deltaX));
+  const finalY = Math.max(-45, Math.min(45, baseY + deltaY));
+  const finalZ = Math.max(-30, Math.min(30, baseZ + deltaZ));
+
+  // Dynamic light glare location moving across the upper frame
+  const glareX = Math.max(5, Math.min(95, 50 - finalY * 1.5));
+  const glareY = Math.max(5, Math.min(95, 30 + finalX * 1.5));
+
+  return {
+    rotateX: finalX,
+    rotateY: finalY,
+    rotateZ: finalZ,
+    glareX,
+    glareY,
+    perspective,
   };
 }

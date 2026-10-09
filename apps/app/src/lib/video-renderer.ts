@@ -1,6 +1,7 @@
 import {
   calculateActiveEffectsState,
   calculateCameraAtTime,
+  evaluate3DTiltAtTime,
   evaluateTextOverlayMotion,
   getCursorPreset,
   smoothCursorTrajectory,
@@ -44,6 +45,7 @@ export interface RenderResult {
 export function getOutputDimensions(
   resolution: ExportResolution,
   aspectRatio = "16:9",
+  customAspect?: number,
 ): { width: number; height: number } {
   let baseWidth = 1920;
   let baseHeight = 1080;
@@ -59,6 +61,11 @@ export function getOutputDimensions(
     baseHeight = 540;
   }
 
+  if (aspectRatio === "auto" && customAspect && customAspect > 0) {
+    let w = Math.round(baseHeight * customAspect);
+    if (w % 2 !== 0) w += 1;
+    return { width: w, height: baseHeight };
+  }
   if (aspectRatio === "9:16") {
     return { width: baseHeight, height: baseWidth };
   }
@@ -1030,8 +1037,11 @@ export async function renderProjectVideo(options: RenderOptions): Promise<Render
   const targetFormat: ExportFormat = format || (resolution === "gif" ? "gif" : "mp4");
   const looks = project.looks;
   const durationMs = Math.max(1000, project.summary.durationMs || 10000);
-
-  const { width, height } = getOutputDimensions(resolution, looks.aspectRatio);
+  const nativeAspect =
+    project.summary.width && project.summary.height && project.summary.height > 0
+      ? project.summary.width / project.summary.height
+      : undefined;
+  const { width, height } = getOutputDimensions(resolution, looks.aspectRatio, nativeAspect);
 
   onProgress?.(3, "Initializing render canvas...");
 
@@ -1356,8 +1366,23 @@ export async function renderProjectVideo(options: RenderOptions): Promise<Render
         { x: camera.x, y: camera.y },
       );
 
-      // 4. Clip inner video window
+      // 4. Clip inner video window & apply 3D tilt perspective
       ctx.save();
+      const tilt3D = evaluate3DTiltAtTime(tMs, looks, project.interactions, project.keyframes);
+      if (tilt3D.rotateX !== 0 || tilt3D.rotateY !== 0 || tilt3D.rotateZ !== 0) {
+        ctx.translate(winX + winW / 2, winY + winH / 2);
+        ctx.rotate((tilt3D.rotateZ * Math.PI) / 180);
+        ctx.transform(
+          1,
+          Math.tan(((tilt3D.rotateX * Math.PI) / 180) * 0.12),
+          Math.tan(((tilt3D.rotateY * Math.PI) / 180) * 0.12),
+          1,
+          0,
+          0,
+        );
+        ctx.translate(-(winX + winW / 2), -(winY + winH / 2));
+      }
+
       if (typeof ctx.roundRect === "function") {
         ctx.beginPath();
         ctx.roundRect(winX, winY, winW, winH, radiusPx);
@@ -1388,17 +1413,35 @@ export async function renderProjectVideo(options: RenderOptions): Promise<Render
         const vH = video.videoHeight || winH;
         const vAspect = vW / vH;
         const winAspect = winW / winH;
-        let sx = 0, sy = 0, sw = vW, sh = vH;
-        if (vAspect > winAspect) {
-          // Source video is wider than viewport window: crop horizontal edges
-          sw = vH * winAspect;
-          sx = (vW - sw) / 2;
+        if (looks.fit === "contain" || looks.aspectRatio === "auto") {
+          let dw = winW;
+          let dh = winH;
+          if (vAspect > winAspect) {
+            dh = winW / vAspect;
+          } else {
+            dw = winH * vAspect;
+          }
+          ctx.drawImage(video, 0, 0, vW, vH, -dw / 2, -dh / 2, dw, dh);
         } else {
-          // Source video is taller than viewport window: crop vertical edges
-          sh = vW / winAspect;
-          sy = (vH - sh) / 2;
+          let sx = 0, sy = 0, sw = vW, sh = vH;
+          if (vAspect > winAspect) {
+            sw = vH * winAspect;
+            sx = (vW - sw) / 2;
+          } else {
+            sh = vW / winAspect;
+            sy = (vH - sh) / 2;
+          }
+          ctx.drawImage(video, sx, sy, sw, sh, -winW / 2, -winH / 2, winW, winH);
         }
-        ctx.drawImage(video, sx, sy, sw, sh, -winW / 2, -winH / 2, winW, winH);
+        if (looks.tiltGlare) {
+          const gx = ((tilt3D.glareX - 50) / 100) * winW;
+          const gy = ((tilt3D.glareY - 50) / 100) * winH;
+          const glareGrad = ctx.createRadialGradient(gx, gy, 0, gx, gy, winW * 0.65);
+          glareGrad.addColorStop(0, "rgba(255, 255, 255, 0.16)");
+          glareGrad.addColorStop(1, "rgba(255, 255, 255, 0)");
+          ctx.fillStyle = glareGrad;
+          ctx.fillRect(-winW / 2, -winH / 2, winW, winH);
+        }
         ctx.filter = "none";
       } else {
         // High quality fallback presentation canvas
@@ -1648,7 +1691,18 @@ export async function renderProjectVideo(options: RenderOptions): Promise<Render
           ctx.font = `500 ${10 * baseScale}px monospace`;
           ctx.fillStyle = "rgba(255, 255, 255, 0.75)";
           ctx.textAlign = "center";
-          ctx.fillText(looks.mockupUrl || "app.domolens.dev", omniX + omniW / 2, omniY + 11 * baseScale);
+        }
+
+        // Terminal Title
+        if (looks.windowFrame === "terminal") {
+          const terminalTitle =
+            looks.mockupUrl && looks.mockupUrl !== "app.domolens.dev"
+              ? looks.mockupUrl
+              : "terminal — zsh — 80x24";
+          ctx.font = `500 ${10 * baseScale}px monospace`;
+          ctx.fillStyle = "rgba(255, 255, 255, 0.70)";
+          ctx.textAlign = "center";
+          ctx.fillText(terminalTitle, winX + winW / 2, winY + headerH / 2 + 3.5 * baseScale);
         }
 
         ctx.restore();

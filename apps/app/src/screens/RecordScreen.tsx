@@ -55,17 +55,25 @@ export function RecordScreen() {
     },
   ];
 
-  const modes: Array<{ id: RecordingMode; label: string; desc: string; badge?: string }> = [
+  const modes: Array<{ id: RecordingMode; label: string; desc: string; badge?: string; featured?: boolean }> = [
     {
-      id: "regular",
-      label: "Regular Recording",
-      desc: "Plain screen capture — no auto-zoom or sound effects. Full screen output only.",
+      id: "auto-zoom-sfx-transcribe",
+      label: "Auto-Zoom + SFX + Transcribe",
+      desc: "Complete studio suite: automatic click zoom tracking, satisfying SFX, and live speech-to-text subtitles synced to your microphone.",
+      badge: "All-in-One",
+      featured: true,
     },
     {
       id: "auto-zoom-sfx",
       label: "Auto-Zoom + SFX",
       desc: "Automatically zooms into your clicks and adds satisfying sound effects. Best for product demos.",
-      badge: "Recommended",
+      badge: "Popular",
+    },
+    {
+      id: "sfx-transcribe",
+      label: "SFX + Transcribe",
+      desc: "Adds SFX and live speech-to-text subtitles synced to your video via your microphone.",
+      badge: "AI",
     },
     {
       id: "auto-zoom",
@@ -73,10 +81,9 @@ export function RecordScreen() {
       desc: "Smart zoom-tracking on every click without any sound effects. Clean and minimal.",
     },
     {
-      id: "sfx-transcribe",
-      label: "SFX + Transcribe",
-      desc: "Adds SFX and live speech-to-text subtitles synced to your video via your microphone.",
-      badge: "AI",
+      id: "regular",
+      label: "Regular Recording",
+      desc: "Plain screen capture — no auto-zoom or sound effects. Full screen output only.",
     },
   ];
 
@@ -254,6 +261,8 @@ export function RecordScreen() {
                       type="button"
                       onClick={() => setRecordingMode(m.id)}
                       className={`relative flex flex-col items-start rounded-2xl border p-4 text-left transition-all ${
+                        m.featured ? "sm:col-span-2" : ""
+                      } ${
                         selected
                           ? "border-white bg-white/10 shadow-sm"
                           : "border-ink-700 bg-ink-800 hover:border-ink-600 hover:bg-ink-700/60"
@@ -261,7 +270,11 @@ export function RecordScreen() {
                     >
                       {m.badge && (
                         <span className={`absolute right-3 top-3 rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-widest ${
-                          m.badge === "AI" ? "bg-violet-500/20 text-violet-300" : "bg-white/10 text-fg-muted"
+                          m.badge === "All-in-One"
+                            ? "bg-amber-400/20 text-amber-300 border border-amber-400/30"
+                            : m.badge === "AI"
+                            ? "bg-violet-500/20 text-violet-300"
+                            : "bg-white/10 text-fg-muted"
                         }`}>
                           {m.badge}
                         </span>

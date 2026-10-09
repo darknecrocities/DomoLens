@@ -47,11 +47,8 @@ export function clampCameraToBounds(
   _mode: "strict" | "center" = "strict",
 ): { x: number; y: number } {
   if (scale <= 1) return { x: 0.5, y: 0.5 };
-  // In strict mode, exactly 0.5/scale bounds prevent any void.
-  // In center/edge mode, allow camera to frame closer to extreme borders (0.44/scale).
-  const factor = _mode === "center" ? 0.44 : 0.5;
-  const halfW = factor / scale;
-  const halfH = factor / scale;
+  const halfW = 0.5 / scale;
+  const halfH = 0.5 / scale;
 
   const minX = halfW;
   const maxX = 1 - halfW;
@@ -541,20 +538,21 @@ export function calculateCameraAtTime(
     const firstKf = sortedKf[0]!;
     const lastKf = sortedKf[sortedKf.length - 1]!;
 
+    if (timeMs <= 0) {
+      return {
+        x: 0.5,
+        y: 0.5,
+        scale: 1.0,
+        isZoomed: false,
+        cursorX: defaultCursor.x,
+        cursorY: defaultCursor.y,
+      };
+    }
+
     if (timeMs <= firstKf.timeMs) {
       // If first keyframe has a scale > 1.05 and is not at time 0,
       // playback before firstKf should be baseline 1.0x full-screen!
-      if (firstKf.timeMs > 0 && firstKf.scale > 1.05) {
-        return {
-          x: 0.5,
-          y: 0.5,
-          scale: 1.0,
-          isZoomed: false,
-          cursorX: defaultCursor.x,
-          cursorY: defaultCursor.y,
-        };
-      }
-      if (firstKf.scale <= 1.05) {
+      if (firstKf.scale <= 1.05 || firstKf.timeMs > 0) {
         return {
           x: 0.5,
           y: 0.5,
@@ -842,6 +840,7 @@ export interface PlotInteractionsOptions {
   enableRevealDip?: boolean;
   typingZoomOut?: boolean;
   centerTyping?: boolean;
+  initialEstablishingMs?: number;
 }
 
 /**
@@ -852,7 +851,12 @@ export interface PlotInteractionsOptions {
  * For top inputs (y <= 0.45), slightly offsetting down (y ~ 0.38) keeps the input in the upper third
  * and frames the dropdown / autocomplete results right in the center of the recording.
  */
-export function calculateTypingTarget(evt: { x: number; y: number }): { x: number; y: number } {
+export function calculateTypingTarget(evt: { x: number; y: number }, forceCenter = false): { x: number; y: number } {
+  if (forceCenter) {
+    const targetX = evt.x >= 0.15 && evt.x <= 0.85 ? 0.50 : evt.x;
+    const targetY = evt.y <= 0.45 ? Math.min(0.44, Math.max(0.36, evt.y + 0.10)) : evt.y;
+    return { x: targetX, y: targetY };
+  }
   // Focus directly on exactly where the user is typing so the camera shifts to their input position
   return { x: evt.x, y: evt.y };
 }
@@ -1102,7 +1106,10 @@ export function plotInteractionsToKeyframesAndZoomBlocks(
     const clusterScale = isTypingCluster ? 1.0 : (options.scale ?? intent.scale);
     const clusterHoldMs = options.holdDurationMs ?? (isTypingCluster ? 1400 : highlightEvt ? 1600 : hasTyping ? 1400 : 1200);
 
-    const rawStart = Math.max(0, firstEvt.timestampMs - leadInMs);
+    const minIntroHold = options.initialEstablishingMs ?? 0;
+    const rawStart = i === 0 && minIntroHold > 0
+      ? Math.max(minIntroHold, firstEvt.timestampMs - leadInMs)
+      : Math.max(0, firstEvt.timestampMs - leadInMs);
     let startMs = rawStart;
 
     if (lastBlockEndTime > 0) {
@@ -1155,8 +1162,8 @@ export function plotInteractionsToKeyframesAndZoomBlocks(
 
     const typingEvt = cluster.find((e) => "type" in e && e.type === "typing");
     const focalEvt = typingEvt || highlightEvt || firstEvt;
-    const typingTarget = (hasTyping && options.centerTyping === true)
-      ? calculateTypingTarget(focalEvt)
+    const typingTarget = hasTyping
+      ? calculateTypingTarget(focalEvt, options.centerTyping === true)
       : null;
     const clampedFirst = isTypingCluster
       ? { x: 0.5, y: 0.5 }
@@ -1186,6 +1193,17 @@ export function plotInteractionsToKeyframesAndZoomBlocks(
 
     // Keyframe 1: Start zoom lead-in (only if previous cluster did not already glide into this cluster)
     if (!previousGlidedIntoThis) {
+      if (i === 0 && startMs > 0 && !keyframes.some((k) => k.timeMs === 0)) {
+        keyframes.push({
+          id: `kf-intro-full`,
+          timeMs: 0,
+          scale: 1.0,
+          targetX: 0.5,
+          targetY: 0.5,
+          easing: "cubic",
+        });
+      }
+
       keyframes.push({
         id: `kf-start-${firstEvt.id}`,
         timeMs: startMs,
@@ -1283,8 +1301,8 @@ export function plotInteractionsToKeyframesAndZoomBlocks(
     for (let j = 1; j < cluster.length; j++) {
       const midEvt = cluster[j]!;
       const isMidTyping = midEvt.type === "typing" && options.typingZoomOut === true;
-      const isTypingMid = midEvt.type === "typing" && options.centerTyping === true;
-      const midTypingTarget = isTypingMid ? calculateTypingTarget(midEvt) : null;
+      const isTypingMid = midEvt.type === "typing";
+      const midTypingTarget = isTypingMid ? calculateTypingTarget(midEvt, options.centerTyping === true) : null;
       const clampedMid = isMidTyping
         ? { x: 0.5, y: 0.5 }
         : midTypingTarget
@@ -1434,8 +1452,8 @@ export function plotInteractionsToKeyframesAndZoomBlocks(
           )
         : calculateIntentZoom(nextFirst, { typingZoomOut: options.typingZoomOut });
       const nextScale = nextIsTyping ? 1.0 : (options.scale ?? nextIntent.scale);
-      const nextTypingTarget = (nextHasTyping && options.centerTyping === true)
-        ? calculateTypingTarget(nextFirst)
+      const nextTypingTarget = nextHasTyping
+        ? calculateTypingTarget(nextFirst, options.centerTyping === true)
         : null;
       const clampedNext = nextIsTyping
         ? { x: 0.5, y: 0.5 }
