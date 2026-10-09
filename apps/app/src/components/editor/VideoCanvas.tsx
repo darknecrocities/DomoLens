@@ -444,6 +444,17 @@ export function VideoCanvas({ project, currentTimeMs: propTimeMs }: VideoCanvasP
     }
   }, [effectsState.playbackRate]);
 
+  // Synchronize video voice/audio with clip settings (unmute video so recorded voice actually plays!)
+  const primaryClip = project.clips?.[0];
+  const isClipMuted = primaryClip?.muted ?? false;
+  const clipVolume = primaryClip?.volume ?? 1;
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video) return;
+    video.muted = isClipMuted;
+    video.volume = Math.max(0, Math.min(1, clipVolume));
+  }, [isClipMuted, clipVolume]);
+
   // When playback starts, immediately seed the zoom layer transform via DOM so
   // there is no single-frame blank between React removing the inline style and
   // the first rAF frame writing the correct value.
@@ -871,7 +882,6 @@ export function VideoCanvas({ project, currentTimeMs: propTimeMs }: VideoCanvasP
               src={resolvedMediaSrc}
               poster={thumbnailSrc || undefined}
               playsInline
-              muted
               preload="auto"
               style={{ filter: effectsState.filterStyle || undefined }}
               className="size-full object-cover pointer-events-none"

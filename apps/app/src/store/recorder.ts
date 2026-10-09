@@ -493,23 +493,37 @@ export const useRecorder = create<RecorderStore>((set, get) => ({
             recognition.onstart = () => {
               toast.success("🎤 Live transcription active — speak clearly");
             };
+            let lastSpokenText = "";
+            let lastSegmentTime = 0;
+
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             recognition.onresult = (event: any) => {
               if (get().state !== "recording") return;
               for (let i = event.resultIndex; i < event.results.length; i++) {
                 const result = event.results[i];
-                if (result && result.isFinal) {
-                  const fullText: string = result[0]?.transcript?.trim() ?? "";
-                  if (!fullText) continue;
-                  const startMs = Math.max(0, Date.now() - recordingStartTimestamp);
-                  // Chunk into ≤15 word segments (max per subtitle card)
-                  const words = fullText.split(/\s+/);
-                  for (let w = 0; w < words.length; w += 15) {
-                    const chunk = words.slice(w, w + 15).join(" ");
+                if (!result) continue;
+                const transcript: string = result[0]?.transcript?.trim() ?? "";
+                if (!transcript || transcript === lastSpokenText) continue;
+
+                const startMs = Math.max(0, Date.now() - recordingStartTimestamp);
+                if (result.isFinal) {
+                  lastSpokenText = transcript;
+                  const words = transcript.split(/\s+/);
+                  for (let w = 0; w < words.length; w += 12) {
+                    const chunk = words.slice(w, w + 12).join(" ");
                     if (chunk) {
                       transcriptSegments.push({ text: chunk, startMs });
-                      console.debug("[transcribe]", startMs, chunk);
+                      console.debug("[transcribe final]", startMs, chunk);
                     }
+                  }
+                } else if (startMs - lastSegmentTime > 2000 && transcript.split(/\s+/).length >= 4) {
+                  // If speaker talks continuously without pause, capture interim batch
+                  lastSegmentTime = startMs;
+                  const words = transcript.split(/\s+/);
+                  const chunk = words.slice(-10).join(" ");
+                  if (chunk && !transcriptSegments.some((s) => s.text === chunk)) {
+                    transcriptSegments.push({ text: chunk, startMs });
+                    console.debug("[transcribe interim]", startMs, chunk);
                   }
                 }
               }
@@ -878,7 +892,13 @@ export const useRecorder = create<RecorderStore>((set, get) => ({
 
     if (mediaRecorderInstance && mediaRecorderInstance.state !== "inactive") {
       try {
-        mediaRecorderInstance.stop();
+        await new Promise<void>((resolve) => {
+          if (!mediaRecorderInstance) return resolve();
+          mediaRecorderInstance.onstop = () => resolve();
+          mediaRecorderInstance.stop();
+          // Timeout fallback in case onstop doesn't fire
+          setTimeout(resolve, 300);
+        });
       } catch {
         // ignore
       }

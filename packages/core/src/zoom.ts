@@ -47,8 +47,11 @@ export function clampCameraToBounds(
   _mode: "strict" | "center" = "strict",
 ): { x: number; y: number } {
   if (scale <= 1) return { x: 0.5, y: 0.5 };
-  const halfW = 0.5 / scale;
-  const halfH = 0.5 / scale;
+  // In strict mode, exactly 0.5/scale bounds prevent any void.
+  // In center/edge mode, allow camera to frame closer to extreme borders (0.44/scale).
+  const factor = _mode === "center" ? 0.44 : 0.5;
+  const halfW = factor / scale;
+  const halfH = factor / scale;
 
   const minX = halfW;
   const maxX = 1 - halfW;
