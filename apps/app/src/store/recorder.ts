@@ -14,15 +14,24 @@ import { platform } from "../platform";
 import { createLiveStreamMotionTracker, scanVideoElementForActivity } from "../lib/video-activity-detector";
 
 let cursorTrajectoryBuffer: import("@domolens/core").CursorTrajectoryPoint[] = [];
+let transcriptSegments: Array<{ text: string; startMs: number }> = [];
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+let recognitionInstance: any | null = null;
 
 
 export type RecordingState = "idle" | "requesting_share" | "countdown" | "recording" | "paused";
 export type RecordingSource = "screen" | "window";
+export type RecordingMode =
+  | "regular"        // Plain screen capture — no auto-zoom, no SFX
+  | "auto-zoom-sfx"  // Auto-zoom on clicks + sound effects (default)
+  | "auto-zoom"      // Auto-zoom only, no SFX
+  | "sfx-transcribe"; // SFX + live speech-to-text transcription synced to keyframes
 
 interface RecorderStore {
   state: RecordingState;
   countdown: number;
   source: RecordingSource;
+  recordingMode: RecordingMode;
   micEnabled: boolean;
   systemAudioEnabled: boolean;
   elapsedMs: number;
@@ -32,6 +41,7 @@ interface RecorderStore {
 
   // Actions
   setSource: (source: RecordingSource) => void;
+  setRecordingMode: (mode: RecordingMode) => void;
   toggleMic: () => void;
   toggleSystemAudio: () => void;
   startCountdown: () => Promise<void>;
@@ -153,6 +163,7 @@ export const useRecorder = create<RecorderStore>((set, get) => ({
   state: "idle",
   countdown: 3,
   source: "screen",
+  recordingMode: "auto-zoom-sfx" as RecordingMode,
   micEnabled: true,
   systemAudioEnabled: true,
   elapsedMs: 0,
@@ -161,6 +172,7 @@ export const useRecorder = create<RecorderStore>((set, get) => ({
   cursorTrajectory: [],
 
   setSource: (source) => set({ source }),
+  setRecordingMode: (recordingMode) => set({ recordingMode }),
   toggleMic: () =>
     set((s) => {
       const nextMic = !s.micEnabled;
@@ -458,6 +470,48 @@ export const useRecorder = create<RecorderStore>((set, get) => ({
       }
     }
 
+    // Start live speech-to-text transcription when in sfx-transcribe mode
+    transcriptSegments = [];
+    if (get().recordingMode === "sfx-transcribe") {
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const SpeechRecognitionAPI: (new () => any) | undefined =
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+        if (SpeechRecognitionAPI) {
+          const recognition = new SpeechRecognitionAPI();
+          recognition.continuous = true;
+          recognition.interimResults = false;
+          recognition.lang = "en-US";
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          recognition.onresult = (event: any) => {
+            if (get().state !== "recording") return;
+            for (let i = event.resultIndex; i < event.results.length; i++) {
+              const result = event.results[i];
+              if (result && result.isFinal) {
+                const fullText: string = result[0]?.transcript?.trim() ?? "";
+                if (!fullText) continue;
+                const startMs = Math.max(0, Date.now() - recordingStartTimestamp);
+                // Chunk into ≤15 word segments
+                const words = fullText.split(/\s+/);
+                for (let w = 0; w < words.length; w += 15) {
+                  const chunk = words.slice(w, w + 15).join(" ");
+                  if (chunk) {
+                    transcriptSegments.push({ text: chunk, startMs });
+                  }
+                }
+              }
+            }
+          };
+          recognition.onerror = () => { /* silent — recognition may restart */ };
+          recognition.start();
+          recognitionInstance = recognition;
+        }
+      } catch (recErr) {
+        console.warn("SpeechRecognition start error:", recErr);
+      }
+    }
+
     // Set up global listeners to record clicks, typing, and moving mouse trajectory
     let lastX = 0.5;
     let lastY = 0.5;
@@ -715,6 +769,11 @@ export const useRecorder = create<RecorderStore>((set, get) => ({
         stopMotionTracker();
         stopMotionTracker = null;
       }
+      // Stop speech recognition if active
+      if (recognitionInstance) {
+        try { recognitionInstance.stop(); } catch { /* ignore */ }
+        recognitionInstance = null;
+      }
     };
 
     // Store cleanup for stop / cancel
@@ -932,10 +991,14 @@ export const useRecorder = create<RecorderStore>((set, get) => ({
     }
     mergedForPlotting.sort((a, b) => a.timestampMs - b.timestampMs);
     finalInteractions = mergedForPlotting;
+
     // STRICT INVARIANT:
     // If no user clicks or interactions occurred during recording (excluding stop/finish action),
     // strictly DO NOT apply zoom in! The video remains in full screen (1.0x) only!
-    const hasUserInteractions = finalClicks.length > 0 || finalInteractions.length > 0;
+    // Also skip zoom plotting for "regular" mode — no auto-zoom at all.
+    const mode = get().recordingMode;
+    const shouldPlotZoom = mode !== "regular";
+    const hasUserInteractions = (finalClicks.length > 0 || finalInteractions.length > 0) && shouldPlotZoom;
     const { keyframes, zoomBlocks } =
       hasUserInteractions
         ? plotInteractionsToKeyframesAndZoomBlocks(
@@ -982,6 +1045,25 @@ export const useRecorder = create<RecorderStore>((set, get) => ({
         color: "#ffffff",
         bgColor: "rgba(15, 17, 23, 0.88)",
       }));
+
+    // Merge speech-to-text transcript segments (from sfx-transcribe mode)
+    if (transcriptSegments.length > 0) {
+      transcriptSegments.forEach((seg, idx) => {
+        textOverlays.push({
+          id: `transcript-${idx + 1}`,
+          text: seg.text,
+          startTimeMs: seg.startMs,
+          durationMs: 3500,
+          x: 0.5,
+          y: 0.88,
+          fontSize: 18,
+          color: "#ffffff",
+          bgColor: "rgba(0, 0, 0, 0.72)",
+          motionPreset: "blur-reveal",
+        } as import("@domolens/core").TextOverlay);
+      });
+      transcriptSegments = [];
+    }
 
     // Auto-plot chapters for the AI director / video outline
     const chapters = zoomBlocks.map((b, idx) => {
@@ -1049,8 +1131,9 @@ export const useRecorder = create<RecorderStore>((set, get) => ({
       looks: DEFAULT_LOOKS,
       audioSettings: {
         ...DEFAULT_AUDIO_SETTINGS,
-        clickSoundEnabled: true,
-        typingSoundEnabled: true,
+        // SFX only active when mode includes SFX (not regular or auto-zoom-only)
+        clickSoundEnabled: mode === "auto-zoom-sfx" || mode === "sfx-transcribe",
+        typingSoundEnabled: mode === "auto-zoom-sfx" || mode === "sfx-transcribe",
         musicDuckingEnabled: true,
       },
       aiData: {

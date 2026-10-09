@@ -16,7 +16,7 @@ import { formatDuration } from "@domolens/core";
 import { copy } from "../copy/en";
 import { Button } from "../components/ui/Button";
 import { useNav } from "../store/nav";
-import { useRecorder, type RecordingSource } from "../store/recorder";
+import { useRecorder, type RecordingSource, type RecordingMode } from "../store/recorder";
 
 export function RecordScreen() {
   const { back } = useNav();
@@ -24,11 +24,13 @@ export function RecordScreen() {
     state,
     countdown,
     source,
+    recordingMode,
     micEnabled,
     systemAudioEnabled,
     elapsedMs,
     clicks,
     setSource,
+    setRecordingMode,
     toggleMic,
     toggleSystemAudio,
     startCountdown,
@@ -50,6 +52,31 @@ export function RecordScreen() {
       label: copy.record.sourceWindow,
       desc: copy.record.sourceWindowDesc,
       icon: AppWindow,
+    },
+  ];
+
+  const modes: Array<{ id: RecordingMode; label: string; desc: string; badge?: string }> = [
+    {
+      id: "regular",
+      label: "Regular Recording",
+      desc: "Plain screen capture — no auto-zoom or sound effects. Full screen output only.",
+    },
+    {
+      id: "auto-zoom-sfx",
+      label: "Auto-Zoom + SFX",
+      desc: "Automatically zooms into your clicks and adds satisfying sound effects. Best for product demos.",
+      badge: "Recommended",
+    },
+    {
+      id: "auto-zoom",
+      label: "Auto-Zoom Only",
+      desc: "Smart zoom-tracking on every click without any sound effects. Clean and minimal.",
+    },
+    {
+      id: "sfx-transcribe",
+      label: "SFX + Transcribe",
+      desc: "Adds SFX and live speech-to-text subtitles synced to your video via your microphone.",
+      badge: "AI",
     },
   ];
 
@@ -213,6 +240,38 @@ export function RecordScreen() {
                 {copy.record.title}
               </h1>
               <div className="w-16" />
+            </div>
+
+            {/* Recording Mode Selector */}
+            <div className="mb-6">
+              <label className="mb-3 block text-sm font-semibold text-fg">Recording Mode</label>
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                {modes.map((m) => {
+                  const selected = recordingMode === m.id;
+                  return (
+                    <button
+                      key={m.id}
+                      type="button"
+                      onClick={() => setRecordingMode(m.id)}
+                      className={`relative flex flex-col items-start rounded-2xl border p-4 text-left transition-all ${
+                        selected
+                          ? "border-white bg-white/10 shadow-sm"
+                          : "border-ink-700 bg-ink-800 hover:border-ink-600 hover:bg-ink-700/60"
+                      }`}
+                    >
+                      {m.badge && (
+                        <span className={`absolute right-3 top-3 rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-widest ${
+                          m.badge === "AI" ? "bg-violet-500/20 text-violet-300" : "bg-white/10 text-fg-muted"
+                        }`}>
+                          {m.badge}
+                        </span>
+                      )}
+                      <span className="text-base font-semibold text-fg">{m.label}</span>
+                      <span className="mt-1 text-xs text-fg-muted leading-relaxed">{m.desc}</span>
+                    </button>
+                  );
+                })}
+              </div>
             </div>
 
             {/* Source Selection Cards */}

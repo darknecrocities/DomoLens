@@ -419,6 +419,10 @@ export function VideoCanvas({ project, currentTimeMs: propTimeMs }: VideoCanvasP
   const computeCameraRef = useRef(computeCamera);
   computeCameraRef.current = computeCamera;
   const zoomLayerRef = useRef<HTMLDivElement>(null);
+  const cursorOverlayRef = useRef<HTMLDivElement>(null);
+  // Refs for aspect ratios accessible inside rAF closure without stale closure issues
+  const videoAspectRef = useRef<number | null>(null);
+  const viewAspectRef = useRef<number | null>(null);
 
   const camera = useMemo(() => computeCamera(currentTimeMs), [computeCamera, currentTimeMs]);
 
@@ -486,7 +490,20 @@ export function VideoCanvas({ project, currentTimeMs: propTimeMs }: VideoCanvasP
       const layer = zoomLayerRef.current;
       if (layer) {
         const cam = computeCameraRef.current(frameMs);
-        layer.style.transform = `scale(${cam.scale}) translate3d(${(0.5 - cam.x) * 100}%, ${(0.5 - cam.y) * 100}%, 0)`;
+        // Apply viewport aspect-ratio correction to prevent camera shaking when
+        // video aspect ≠ viewport aspect (the React render path uses camView, so rAF must too)
+        const vAspect = videoAspectRef.current;
+        const vpAspect = viewAspectRef.current;
+        const mapped = mapVideoPointToViewport(cam.x, cam.y, vAspect, vpAspect);
+        layer.style.transform = `scale(${cam.scale}) translate3d(${(0.5 - mapped.x) * 100}%, ${(0.5 - mapped.y) * 100}%, 0)`;
+
+        // Drive cursor overlay at 60fps via direct DOM — avoids React 12Hz throttle lag
+        const cursorEl = cursorOverlayRef.current;
+        if (cursorEl) {
+          const cMapped = mapVideoPointToViewport(cam.cursorX, cam.cursorY, vAspect, vpAspect);
+          cursorEl.style.left = `${cMapped.x * 100}%`;
+          cursorEl.style.top = `${cMapped.y * 100}%`;
+        }
       }
 
       // Throttle global store updates (timeline playhead, sounds) to ~12Hz
@@ -704,6 +721,9 @@ export function VideoCanvas({ project, currentTimeMs: propTimeMs }: VideoCanvasP
   };
   const videoAspectNum = parseAspect(naturalAspectRatio) ?? (summary.width && summary.height ? summary.width / summary.height : null);
   const viewAspectNum = parseAspect(viewportAspectRatio);
+  // Keep refs up-to-date so rAF loop always has fresh aspect ratios (no stale closure)
+  videoAspectRef.current = videoAspectNum;
+  viewAspectRef.current = viewAspectNum;
   const mapPt = (x: number, y: number) => mapVideoPointToViewport(x, y, videoAspectNum, viewAspectNum);
   const camView = mapPt(camera.x, camera.y);
   const cursorView = mapPt(camera.cursorX, camera.cursorY);
@@ -913,6 +933,7 @@ export function VideoCanvas({ project, currentTimeMs: propTimeMs }: VideoCanvasP
 
             return (
               <div
+                ref={cursorOverlayRef}
                 className="pointer-events-none absolute will-change-transform z-30"
                 style={{
                   left: `${cursorView.x * 100}%`,
