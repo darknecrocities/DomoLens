@@ -317,13 +317,11 @@ describe("E2E Motion Video Templates Suite", () => {
         expect(template.name).toBe(originalHeadline);
       });
 
-      it("F2-4: supports badge text customization override", () => {
-        const template = STUDIO_MOTION_TEMPLATES.find((t) => t.id === "viral-short-tiktok")!;
-        const customBadge = "VIRAL DROP";
-
-        const effectiveBadge = customBadge || template.badge;
-        expect(effectiveBadge).toBe("VIRAL DROP");
-        expect(template.badge).toBe("MUST WATCH");
+      it("F2-4: asserts complete eradication of pill badges on template definitions", () => {
+        for (const template of STUDIO_MOTION_TEMPLATES) {
+          expect((template as any).badge).toBeUndefined();
+          expect((template as any).badgeStyle).toBeUndefined();
+        }
       });
 
       it("F2-5: verifies badge entrance pulse parameters maintain smooth looping intervals", () => {
@@ -553,7 +551,8 @@ describe("E2E Motion Video Templates Suite", () => {
         expect(tplOverlay).toBeDefined();
         expect(tplOverlay?.startTimeMs).toBe(200);
         expect(tplOverlay?.durationMs).toBe(3600);
-        expect(tplOverlay?.badge).toBe("v2.4 UPDATE");
+        expect(tplOverlay?.text).toBe("Shipped: Instant Auto-Zoom");
+        expect((tplOverlay as any)?.badge).toBeUndefined();
       });
 
       it("F5-4: switching from 16:9 to vertical 9:16 retains zoom blocks without coordinate corruption", () => {
@@ -711,25 +710,27 @@ describe("E2E Motion Video Templates Suite", () => {
         expect(categories.has("showcase")).toBe(true);
       });
 
-      it("F8-3: each template defines full metadata, taglines, badges, and accent colors", () => {
+      it("F8-3: each template defines full metadata, taglines, visual accents, and accent colors", () => {
         for (const tpl of STUDIO_MOTION_TEMPLATES) {
           expect(tpl.name.trim().length).toBeGreaterThan(0);
           expect(tpl.tagline.trim().length).toBeGreaterThan(0);
           expect(tpl.description.trim().length).toBeGreaterThan(0);
-          expect(tpl.badge.trim().length).toBeGreaterThan(0);
+          expect((tpl as any).badge).toBeUndefined();
+          expect((tpl as any).badgeStyle).toBeUndefined();
+          expect(tpl.visualAccent).toBeDefined();
           expect(tpl.accentColor.startsWith("#")).toBe(true);
         }
       });
 
-      it("F8-4: each template provides comprehensive customizable field definitions", () => {
+      it("F8-4: each template provides comprehensive customizable field definitions (zero badge fields)", () => {
         for (const tpl of STUDIO_MOTION_TEMPLATES) {
-          expect(tpl.customizableFields.length).toBeGreaterThanOrEqual(3);
+          expect(tpl.customizableFields.length).toBeGreaterThanOrEqual(2);
           const headlineField = tpl.customizableFields.find((f) => f.id === "headline");
           const badgeField = tpl.customizableFields.find((f) => f.id === "badge");
           const accentField = tpl.customizableFields.find((f) => f.id === "accent");
 
           expect(headlineField).toBeDefined();
-          expect(badgeField).toBeDefined();
+          expect(badgeField).toBeUndefined();
           expect(accentField).toBeDefined();
         }
       });
@@ -761,7 +762,7 @@ describe("E2E Motion Video Templates Suite", () => {
           expect(tpl.motionSignature).toBeDefined();
           expect(tpl.motionSignature?.type).toBeTruthy();
           expect(tpl.motionSignature?.label).toBeTruthy();
-          expect(tpl.motionSignature?.badge).toBeTruthy();
+          expect((tpl.motionSignature as any)?.badge).toBeUndefined();
           expect(tpl.motionSignature?.description).toBeTruthy();
           signatureTypes.add(tpl.motionSignature!.type);
         }
@@ -771,19 +772,18 @@ describe("E2E Motion Video Templates Suite", () => {
       it("F8-8: verifies specific signature motion styles for prominent templates", () => {
         const saas = STUDIO_MOTION_TEMPLATES.find((t) => t.id === "saas-launch-hero")!;
         expect(saas.motionSignature?.type).toBe("3d-gyro-float");
-        expect(saas.motionSignature?.badge).toBe("3D GYRO FLOAT");
+        expect(saas.visualAccent).toBe("specular-sweep");
 
         const keynote = STUDIO_MOTION_TEMPLATES.find((t) => t.id === "apple-keynote-polish")!;
         expect(keynote.motionSignature?.type).toBe("cinematic-push");
-        expect(keynote.motionSignature?.badge).toBe("CINEMATIC PUSH");
+        expect(keynote.visualAccent).toBe("glass-sheen");
 
         const tiktok = STUDIO_MOTION_TEMPLATES.find((t) => t.id === "viral-short-tiktok")!;
         expect(tiktok.motionSignature?.type).toBe("kinetic-phone");
-        expect(tiktok.motionSignature?.badge).toBe("KINETIC SHORT");
 
         const cli = STUDIO_MOTION_TEMPLATES.find((t) => t.id === "developer-cli")!;
         expect(cli.motionSignature?.type).toBe("cli-scanlines");
-        expect(cli.motionSignature?.badge).toBe("CRT SCANLINE");
+        expect(cli.visualAccent).toBe("crt-scanlines");
       });
     });
 
@@ -954,10 +954,10 @@ describe("E2E Motion Video Templates Suite", () => {
       const overlays = active.textOverlays || [];
       const overlay = overlays.find((o) => o.id.startsWith("text-tpl-"));
       expect(overlay?.text).toBe("Introducing DomoLens 2.0");
-      expect(overlay?.badge).toBe("NEW RELEASE");
+      expect((overlay as any)?.badge).toBeUndefined();
     });
 
-    it("T2-B2: partial custom fields (headline only, omitting badge/accent) gracefully merge defaults", () => {
+    it("T2-B2: partial custom fields (headline only, omitting accent) gracefully merge defaults", () => {
       const project = createMockProject();
       useEditor.setState({ project });
 
@@ -969,7 +969,7 @@ describe("E2E Motion Video Templates Suite", () => {
       const overlays = active.textOverlays || [];
       const overlay = overlays.find((o) => o.id.startsWith("text-tpl-"));
       expect(overlay?.text).toBe("Custom Only Title");
-      expect(overlay?.badge).toBe("NEW RELEASE"); // Default preserved
+      expect((overlay as any)?.badge).toBeUndefined();
       expect(active.looks.brandAccentColor).toBe("#6366f1"); // Default preserved
     });
 
@@ -1305,16 +1305,16 @@ describe("E2E Motion Video Templates Suite", () => {
       useEditor.setState({ isTemplateModalOpen: true });
       expect(useEditor.getState().isTemplateModalOpen).toBe(true);
 
-      // 3. Selects "SaaS Launch Hero", previews live with custom headline and badge
+      // 3. Selects "SaaS Launch Hero", previews live with custom headline and kicker
       const template = STUDIO_MOTION_TEMPLATES.find((t) => t.id === "saas-launch-hero")!;
       const customHeadline = "Introducing DomoLens 3.0";
-      const customBadge = "LIVE ON PRODUCT HUNT";
+      const customKicker = "LIVE ON PRODUCT HUNT";
       const customAccent = "#4f46e5";
 
       // 4. Commits template
       useEditor.getState().applyTemplate(template.id, {
         headline: customHeadline,
-        badge: customBadge,
+        kicker: customKicker,
         accent: customAccent,
       });
 
@@ -1343,7 +1343,8 @@ describe("E2E Motion Video Templates Suite", () => {
       const overlays = activeProject.textOverlays || [];
       const headlineOverlay = overlays.find((o) => o.text === customHeadline);
       expect(headlineOverlay).toBeDefined();
-      expect(headlineOverlay?.badge).toBe(customBadge);
+      expect(headlineOverlay?.kicker).toBe(customKicker);
+      expect((headlineOverlay as any)?.badge).toBeUndefined();
     });
 
     it("T4-RW2: Viral TikTok / Reels Short Workflow", () => {
@@ -1415,10 +1416,10 @@ describe("E2E Motion Video Templates Suite", () => {
       const template = STUDIO_MOTION_TEMPLATES.find((t) => t.id === "developer-cli")!;
       expect(template.looks.windowFrame).toBe("terminal");
 
-      // 3. Customizes headline and command badge
+      // 3. Customizes headline and command kicker
       useEditor.getState().applyTemplate(template.id, {
         headline: "$ npx create-domo-app@latest",
-        badge: "v3.0 • NODE 22",
+        kicker: "v3.0 • NODE 22",
         accent: "#22c55e",
       });
 
@@ -1433,7 +1434,8 @@ describe("E2E Motion Video Templates Suite", () => {
       const overlays = active.textOverlays || [];
       const cliOverlay = overlays.find((o) => o.text === "$ npx create-domo-app@latest");
       expect(cliOverlay).toBeDefined();
-      expect(cliOverlay?.badge).toBe("v3.0 • NODE 22");
+      expect(cliOverlay?.kicker).toBe("v3.0 • NODE 22");
+      expect((cliOverlay as any)?.badge).toBeUndefined();
     });
 
     it("T4-RW4: Keynote Spotlight Presentation Workflow", () => {

@@ -1,4 +1,10 @@
-import type { ClickEvent, CursorTrajectoryPoint, InteractionEvent } from "./project";
+import type {
+  ClickEvent,
+  CursorTrajectoryPoint,
+  InteractionEvent,
+  TextMotionPreset,
+  TextOverlay,
+} from "./project";
 
 export interface OpticalMotionFrame {
   timestampMs: number;
@@ -394,4 +400,295 @@ export function detectActivityEventsFromFrames(
   }
 
   return { interactions, clicks, cursorTrajectory: trajectory };
+}
+
+/* ========================================================================== */
+/* Kinetic Text Motion Evaluator Engine & Analytical Easing Primitives         */
+/* ========================================================================== */
+
+export interface EvaluatedTextMotion {
+  opacity: number;
+  scale: number;
+  translateX: number;
+  translateY: number;
+  blur: number;
+}
+
+/**
+ * Damped harmonic spring curve with ~11.7% overshoot.
+ * Closed-form analytical equation: f(t) = 1 - exp(-6t) * cos(2.5 * PI * t)
+ * Properties:
+ * - f(0) = 0
+ * - Peak overshoot: t ≈ 0.35, f(t) ≈ 1.117
+ * - Settle: f(1) = 1.0
+ */
+export function springDamped(t: number): number {
+  if (t <= 0) return 0;
+  if (t >= 1) return 1;
+  return 1 - Math.exp(-6 * t) * Math.cos(2.5 * Math.PI * t);
+}
+
+/**
+ * Standard cubic ease-out curve: f(t) = 1 - (1 - t)^3.
+ * Properties: f(0) = 0, f(0.5) = 0.875, f(1) = 1.
+ */
+export function cubicEaseOut(t: number): number {
+  if (t <= 0) return 0;
+  if (t >= 1) return 1;
+  const inv = 1 - t;
+  return 1 - inv * inv * inv;
+}
+
+/**
+ * Aggressive quartic ease-out curve: f(t) = 1 - (1 - t)^4.
+ * High initial velocity for snappy whip-pan motions.
+ */
+export function quarticEaseOut(t: number): number {
+  if (t <= 0) return 0;
+  if (t >= 1) return 1;
+  const inv = 1 - t;
+  return 1 - inv * inv * inv * inv;
+}
+
+/**
+ * Hermite smoothstep curve: f(t) = t^2 * (3 - 2t).
+ * Zero first-derivatives at both t = 0 and t = 1.
+ */
+export function smoothstep(t: number): number {
+  if (t <= 0) return 0;
+  if (t >= 1) return 1;
+  return t * t * (3 - 2 * t);
+}
+
+/**
+ * Quadratic blur ramp function: blur = maxBlur * (1 - p)^2.
+ */
+export function gaussianBlurRamp(progress: number, maxBlur = 18): number {
+  const p = Math.max(0, Math.min(1, progress));
+  return maxBlur * (1 - p) * (1 - p);
+}
+
+/**
+ * Resolves the active motion preset for a text overlay, checking direct preset first,
+ * then falling back to typography animation settings or defaulting to "smooth-fade".
+ */
+export function resolveOverlayMotionPreset(overlay: TextOverlay): TextMotionPreset {
+  if (overlay.motionPreset) {
+    return overlay.motionPreset;
+  }
+  const anim = overlay.typography?.animation;
+  if (anim === "elastic-pop" || anim === "whip-slide" || anim === "blur-reveal") {
+    return anim;
+  }
+  if (anim === "fade-up") {
+    return "fluid-slide";
+  }
+  return "smooth-fade";
+}
+
+/**
+ * Mathematical text overlay motion evaluator engine.
+ * Computes instantaneous (opacity, scale, translateX, translateY, blur) at any millisecond timestamp.
+ * Guarantees mathematical parity between canvas preview and offline video export.
+ */
+export function evaluateTextOverlayMotion(
+  overlay: TextOverlay,
+  timeMs: number,
+): EvaluatedTextMotion {
+  const start = overlay.startTimeMs;
+  const dur = overlay.durationMs;
+  const end = start + dur;
+
+  // 1. Boundary & invalid input safety
+  if (!Number.isFinite(timeMs) || !Number.isFinite(start) || !Number.isFinite(dur) || dur <= 0) {
+    return { opacity: 0, scale: 1, translateX: 0, translateY: 0, blur: 0 };
+  }
+
+  const preset = resolveOverlayMotionPreset(overlay);
+
+  // 2. Preset "none": hard step bounds
+  if (preset === "none") {
+    if (timeMs >= start && timeMs <= end) {
+      return { opacity: 1, scale: 1, translateX: 0, translateY: 0, blur: 0 };
+    }
+    return { opacity: 0, scale: 1, translateX: 0, translateY: 0, blur: 0 };
+  }
+
+  // Baseline durations per preset
+  const baseInMsMap: Record<TextMotionPreset, number> = {
+    none: 0,
+    "elastic-pop": 450,
+    "fluid-slide": 400,
+    "whip-slide": 350,
+    "blur-reveal": 450,
+    "smooth-fade": 350,
+  };
+
+  const baseOutMsMap: Record<TextMotionPreset, number> = {
+    none: 0,
+    "elastic-pop": 280,
+    "fluid-slide": 300,
+    "whip-slide": 260,
+    "blur-reveal": 320,
+    "smooth-fade": 300,
+  };
+
+  const reqIn = overlay.entranceDurationMs ?? baseInMsMap[preset];
+  const reqOut = overlay.exitDurationMs ?? baseOutMsMap[preset];
+
+  // Anti-collision proportional clamping for short overlay durations
+  const din = Math.min(reqIn, dur * 0.45);
+  const dout = Math.min(reqOut, dur * 0.35);
+
+  // 3. Pre-start phase (t < start)
+  if (timeMs < start) {
+    switch (preset) {
+      case "elastic-pop":
+        return { opacity: 0, scale: 0.5, translateX: 0, translateY: 16, blur: 0 };
+      case "fluid-slide":
+        return { opacity: 0, scale: 1, translateX: 0, translateY: 32, blur: 0 };
+      case "whip-slide":
+        return { opacity: 0, scale: 1, translateX: -80, translateY: 0, blur: 10 };
+      case "blur-reveal":
+        return { opacity: 0, scale: 0.92, translateX: 0, translateY: 0, blur: 18 };
+      case "smooth-fade":
+      default:
+        return { opacity: 0, scale: 1, translateX: 0, translateY: 0, blur: 0 };
+    }
+  }
+
+  // 4. Entrance phase (start <= t < start + din)
+  if (din > 0 && timeMs < start + din) {
+    const p = Math.max(0, Math.min(1, (timeMs - start) / din));
+
+    switch (preset) {
+      case "elastic-pop": {
+        const s = springDamped(p);
+        return {
+          opacity: Math.min(1, p / 0.25),
+          scale: 0.5 + 0.5 * s,
+          translateX: 0,
+          translateY: 16 * Math.pow(1 - p, 3),
+          blur: 0,
+        };
+      }
+      case "fluid-slide": {
+        const e = cubicEaseOut(p);
+        return {
+          opacity: e,
+          scale: 1,
+          translateX: 0,
+          translateY: 32 * (1 - e),
+          blur: 0,
+        };
+      }
+      case "whip-slide": {
+        const w = quarticEaseOut(p);
+        return {
+          opacity: Math.min(1, p / 0.20),
+          scale: 1,
+          translateX: -80 * (1 - w),
+          translateY: 0,
+          blur: 10 * (1 - w),
+        };
+      }
+      case "blur-reveal": {
+        const s = smoothstep(p);
+        return {
+          opacity: s,
+          scale: 0.92 + 0.08 * s,
+          translateX: 0,
+          translateY: 0,
+          blur: gaussianBlurRamp(p, 18),
+        };
+      }
+      case "smooth-fade":
+      default: {
+        const s = smoothstep(p);
+        return {
+          opacity: s,
+          scale: 1,
+          translateX: 0,
+          translateY: 0,
+          blur: 0,
+        };
+      }
+    }
+  }
+
+  // 5. Sustain / Hold phase (start + din <= t <= end - dout)
+  if (timeMs <= end - dout) {
+    return {
+      opacity: 1,
+      scale: 1,
+      translateX: 0,
+      translateY: 0,
+      blur: 0,
+    };
+  }
+
+  // 6. Exit phase (end - dout < t <= end)
+  if (dout > 0 && timeMs <= end) {
+    const exitStart = end - dout;
+    const q = Math.max(0, Math.min(1, (timeMs - exitStart) / dout));
+
+    switch (preset) {
+      case "elastic-pop": {
+        return {
+          opacity: Math.max(0, 1 - q),
+          scale: 1 - 0.2 * q,
+          translateX: 0,
+          translateY: 8 * q,
+          blur: 0,
+        };
+      }
+      case "fluid-slide": {
+        return {
+          opacity: Math.max(0, 1 - q),
+          scale: 1,
+          translateX: 0,
+          translateY: -20 * q * q,
+          blur: 0,
+        };
+      }
+      case "whip-slide": {
+        return {
+          opacity: Math.max(0, 1 - q),
+          scale: 1,
+          translateX: 80 * Math.pow(q, 3),
+          translateY: 0,
+          blur: 10 * q * q,
+        };
+      }
+      case "blur-reveal": {
+        return {
+          opacity: Math.max(0, 1 - q),
+          scale: 1 + 0.05 * q,
+          translateX: 0,
+          translateY: 0,
+          blur: 14 * q * q,
+        };
+      }
+      case "smooth-fade":
+      default: {
+        const s = smoothstep(q);
+        return {
+          opacity: Math.max(0, 1 - s),
+          scale: 1,
+          translateX: 0,
+          translateY: 0,
+          blur: 0,
+        };
+      }
+    }
+  }
+
+  // 7. Post-end phase (t > end)
+  return {
+    opacity: 0,
+    scale: 1,
+    translateX: 0,
+    translateY: 0,
+    blur: 0,
+  };
 }

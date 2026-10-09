@@ -56,7 +56,7 @@ describe("Motion Templates Live Application & Synchronization Integration Tests"
 
     useEditor.getState().applyTemplate("saas-launch-hero", {
       headline: "Custom SaaS Headline",
-      badge: "EXCLUSIVE",
+      kicker: "EXCLUSIVE",
       accent: "#a855f7",
     });
 
@@ -67,12 +67,12 @@ describe("Motion Templates Live Application & Synchronization Integration Tests"
     expect(state.project?.looks.cameraPhysics).toBe(tpl.looks.cameraPhysics);
     expect(state.project?.audioSettings?.typingSoundPreset).toBe(tpl.audioSettings.typingSoundPreset);
 
-    // Text overlays should contain the customized headline and badge
+    // Text overlays should contain the customized headline and kicker
     const templateOverlays = state.project?.textOverlays?.filter((o) => o.id.startsWith("text-tpl-"));
     expect(templateOverlays).toBeDefined();
     expect(templateOverlays!.length).toBeGreaterThan(0);
     expect(templateOverlays![0]?.text).toBe("Custom SaaS Headline");
-    expect(templateOverlays![0]?.badge).toBe("EXCLUSIVE");
+    expect(templateOverlays![0]?.kicker).toBe("EXCLUSIVE");
 
     // Pre-existing non-template overlays should be preserved
     expect(state.project?.textOverlays?.some((o) => o.id === "initial-text-1")).toBe(true);
@@ -83,7 +83,7 @@ describe("Motion Templates Live Application & Synchronization Integration Tests"
 
     useEditor.getState().applyTemplate("developer-cli", {
       headline: "Terminal Showcase",
-      badge: "V1.0",
+      kicker: "V1.0",
       accent: "#22c55e",
     });
 
@@ -102,7 +102,7 @@ describe("Motion Templates Live Application & Synchronization Integration Tests"
   it("correctly sets non-16:9 vertical (9:16) aspect ratio for social reel templates", () => {
     useEditor.getState().applyTemplate("viral-short-tiktok", {
       headline: "Watch This Trick",
-      badge: "VIRAL",
+      kicker: "VIRAL",
     });
 
     const state = useEditor.getState();
@@ -113,7 +113,7 @@ describe("Motion Templates Live Application & Synchronization Integration Tests"
   it("correctly sets 1:1 square aspect ratio for Product Hunt teaser templates", () => {
     useEditor.getState().applyTemplate("product-hunt-teaser", {
       headline: "Live on Product Hunt",
-      badge: "LAUNCH",
+      kicker: "LAUNCH",
     });
 
     const state = useEditor.getState();

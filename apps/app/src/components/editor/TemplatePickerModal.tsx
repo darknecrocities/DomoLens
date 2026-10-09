@@ -192,12 +192,14 @@ export function TemplatePickerModal({ open, onClose }: TemplatePickerModalProps)
 
                   <div className="mt-3 flex items-center justify-between pt-2.5 border-t border-neutral-800/80">
                     <div className="flex items-center gap-2 text-[11px] text-neutral-300">
-                      <span className="rounded bg-neutral-800 px-2 py-0.5 text-[10px] font-semibold text-neutral-300 border border-neutral-700/50">
-                        {tpl.badge}
-                      </span>
-                      {tpl.motionSignature && (
-                        <span className="rounded bg-indigo-500/15 px-1.5 py-0.5 text-[9px] font-mono font-bold text-indigo-300 border border-indigo-500/30">
-                          {tpl.motionSignature.badge}
+                      {tpl.transitionTiming?.transitionStyle && (
+                        <span className="rounded bg-indigo-500/15 px-2 py-0.5 text-[9px] font-mono font-bold text-indigo-300 border border-indigo-500/30 uppercase">
+                          {tpl.transitionTiming.transitionStyle}
+                        </span>
+                      )}
+                      {tpl.visualAccent && (
+                        <span className="rounded bg-neutral-800 px-2 py-0.5 text-[10px] font-mono text-neutral-300 border border-neutral-700/50">
+                          {tpl.visualAccent}
                         </span>
                       )}
                       <span className="text-neutral-500">•</span>
@@ -248,9 +250,11 @@ export function TemplatePickerModal({ open, onClose }: TemplatePickerModalProps)
                         {selectedTemplate.motionSignature.label}
                       </span>
                     </div>
-                    <span className="shrink-0 rounded bg-indigo-500/25 text-indigo-300 px-2 py-0.5 text-[9px] font-mono font-bold border border-indigo-500/40">
-                      {selectedTemplate.motionSignature.badge}
-                    </span>
+                    {selectedTemplate.transitionTiming?.transitionStyle && (
+                      <span className="shrink-0 rounded bg-indigo-500/25 text-indigo-300 px-2 py-0.5 text-[9px] font-mono font-bold border border-indigo-500/40 uppercase">
+                        {selectedTemplate.transitionTiming.transitionStyle}
+                      </span>
+                    )}
                   </div>
                 )}
 

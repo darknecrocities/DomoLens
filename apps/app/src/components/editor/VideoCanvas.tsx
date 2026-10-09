@@ -1,17 +1,346 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Film, FolderOpen, Sparkles, Video, Wand2 } from "lucide-react";
+import {
+  Film,
+  FolderOpen,
+  Sparkles,
+  Video,
+  Wand2,
+  Star,
+  Zap,
+  Flame,
+  Shield,
+  Crown,
+  Check,
+  Heart,
+  User,
+} from "lucide-react";
 import {
   calculateActiveEffectsState,
   calculateCameraAtTime,
+  evaluateTextOverlayMotion,
+  getCursorPreset,
   screenToVideoCoordinates,
   smoothCursorTrajectory,
+  TEXT_CARD_STYLE_DEFINITIONS,
+  type CursorAvatar,
+  type CursorStyle,
   type ProjectData,
+  type TextCardStyle,
 } from "@domolens/core";
 import { sfx } from "../../lib/sound-effects";
 import { platform } from "../../platform";
 import { useEditor } from "../../store/editor";
 import { useNav } from "../../store/nav";
 import { useProjects } from "../../store/projects";
+
+export function CanvasCursorSvg({ cursorStyle }: { cursorStyle: CursorStyle }) {
+  switch (cursorStyle) {
+    case "hidden":
+      return null;
+    case "default":
+      return (
+        <svg viewBox="0 0 24 24" className="size-6 drop-shadow-md">
+          <path
+            d="M0 0 L0 17 L4.5 13 L8.5 21.5 L11.5 20 L7.5 12 L13.5 12 Z"
+            fill="#ffffff"
+            stroke="#000000"
+            strokeWidth="1.5"
+            strokeLinejoin="round"
+          />
+        </svg>
+      );
+    case "mac":
+      return (
+        <svg viewBox="0 0 24 24" className="size-6 drop-shadow-md">
+          <path
+            d="M1 1 L1 18.5 Q3.5 16 5.5 14.5 L9.2 22.8 Q10.7 22.1 12.2 21.4 L8.6 13.4 L14.8 13.4 Q7.5 7 1 1 Z"
+            fill="#ffffff"
+            stroke="#171717"
+            strokeWidth="1.2"
+            strokeLinejoin="round"
+          />
+        </svg>
+      );
+    case "macos-classic":
+      return (
+        <svg viewBox="0 0 24 24" className="size-6 drop-shadow-sm">
+          <path d="M0 0 L0 16 L4 12 L7 19 L9 18 L6 11 L11 11 Z" fill="#000000" />
+          <path d="M1 1 L1 14.5 L4 11.5 L7 18 L8 17.5 L5.2 10.5 L9.5 10.5 Z" fill="#ffffff" />
+        </svg>
+      );
+    case "dot":
+      return (
+        <svg viewBox="0 0 12 12" className="size-3 drop-shadow-sm">
+          <circle cx="6" cy="6" r="4.5" fill="#ffffff" stroke="rgba(0, 0, 0, 0.4)" strokeWidth="1" />
+        </svg>
+      );
+    case "sleek-dot":
+      return (
+        <svg viewBox="0 0 20 20" className="size-5 drop-shadow-md">
+          <circle cx="10" cy="10" r="8" fill="rgba(99, 102, 241, 0.2)" stroke="rgba(99, 102, 241, 0.5)" strokeWidth="1.5" />
+          <circle cx="10" cy="10" r="3.5" fill="#ffffff" stroke="#6366f1" strokeWidth="1.5" />
+        </svg>
+      );
+    case "laser-dot":
+      return (
+        <svg viewBox="0 0 16 16" className="size-4 filter drop-shadow-[0_0_8px_rgba(239,68,68,0.9)]">
+          <circle cx="8" cy="8" r="7" fill="rgba(239, 68, 68, 0.35)" />
+          <circle cx="8" cy="8" r="4.5" fill="#ef4444" />
+          <circle cx="8" cy="8" r="2" fill="#ffffff" />
+        </svg>
+      );
+    case "ring":
+      return (
+        <svg viewBox="0 0 24 24" className="size-6 drop-shadow-md">
+          <circle cx="12" cy="12" r="9.5" fill="rgba(255, 255, 255, 0.12)" stroke="#ffffff" strokeWidth="2" />
+          <circle cx="12" cy="12" r="1.5" fill="#ffffff" />
+        </svg>
+      );
+    case "minimal-crosshair":
+      return (
+        <svg viewBox="0 0 24 24" className="size-6 drop-shadow-md">
+          <path d="M12 2 L12 8 M12 16 L12 22 M2 12 L8 12 M16 12 L22 12" stroke="#ffffff" strokeWidth="1.5" strokeLinecap="round" />
+          <circle cx="12" cy="12" r="1" fill="#ffffff" />
+        </svg>
+      );
+    case "focus-reticle":
+      return (
+        <svg viewBox="0 0 24 24" className="size-6 drop-shadow-md">
+          <path d="M4 8 L4 4 L8 4 M16 4 L20 4 L20 8 M4 16 L4 20 L8 20 M16 20 L20 20 L20 16" stroke="#38bdf8" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" fill="none" />
+          <circle cx="12" cy="12" r="2" fill="#38bdf8" />
+        </svg>
+      );
+    case "sonar-pulse":
+      return (
+        <svg viewBox="0 0 24 24" className="size-6 drop-shadow-md">
+          <circle cx="12" cy="12" r="9.5" stroke="rgba(16, 185, 129, 0.6)" strokeWidth="1" strokeDasharray="3 2" fill="rgba(16, 185, 129, 0.1)" />
+          <circle cx="12" cy="12" r="4.5" stroke="#10b981" strokeWidth="1.2" fill="rgba(16, 185, 129, 0.2)" />
+          <path d="M12 0 L12 3 M12 21 L12 24 M0 12 L3 12 M21 12 L24 12" stroke="#34d399" strokeWidth="1.2" strokeLinecap="round" />
+          <circle cx="12" cy="12" r="2" fill="#34d399" />
+        </svg>
+      );
+    case "obsidian-glow":
+      return (
+        <svg viewBox="0 0 24 24" className="size-6 filter drop-shadow-[0_0_8px_rgba(168,85,247,0.85)]">
+          <path
+            d="M0 0 L0 18 L5 13.5 L9 22 L12 20.5 L8 12.5 L14.5 12.5 Z"
+            fill="#09090b"
+            stroke="#c084fc"
+            strokeWidth="1.5"
+            strokeLinejoin="round"
+          />
+        </svg>
+      );
+    case "neon-laser":
+      return (
+        <svg viewBox="0 0 24 24" className="size-6 filter drop-shadow-[0_0_8px_rgba(6,182,212,0.8)]">
+          <path d="M2 2 L8 22 L12 14 Z" fill="#06b6d4" />
+          <path d="M2 2 L12 14 L20 12 Z" fill="#ec4899" />
+          <path d="M2 2 L8 22 L12 14 L20 12 Z M2 2 L12 14" stroke="#ffffff" strokeWidth="1" strokeLinejoin="round" fill="none" />
+        </svg>
+      );
+    case "spotlight-glow":
+      return (
+        <svg viewBox="0 0 32 32" className="size-8">
+          <defs>
+            <radialGradient id="canvasSpotlightGlowGrad" cx="50%" cy="50%" r="50%">
+              <stop offset="0%" stopColor="#ffffff" stopOpacity="0.45" />
+              <stop offset="50%" stopColor="#f59e0b" stopOpacity="0.2" />
+              <stop offset="100%" stopColor="#f59e0b" stopOpacity="0" />
+            </radialGradient>
+          </defs>
+          <circle cx="16" cy="16" r="14" fill="url(#canvasSpotlightGlowGrad)" />
+          <circle cx="16" cy="16" r="3.5" fill="#ffffff" stroke="#f59e0b" strokeWidth="1.5" />
+        </svg>
+      );
+    case "aurora-trail":
+      return (
+        <svg viewBox="0 0 24 24" className="size-6 filter drop-shadow-[0_0_8px_rgba(45,212,191,0.7)]">
+          <defs>
+            <linearGradient id="canvasAuroraGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+              <stop offset="0%" stopColor="#2dd4bf" />
+              <stop offset="100%" stopColor="#a855f7" />
+            </linearGradient>
+          </defs>
+          <path d="M10 16 Q14 18 19 21" stroke="#a855f7" strokeWidth="1.5" strokeLinecap="round" opacity="0.7" fill="none" />
+          <path d="M13 13 Q17 14 22 16" stroke="#2dd4bf" strokeWidth="1.5" strokeLinecap="round" opacity="0.6" fill="none" />
+          <path d="M2 2 L5 18 L10 13 L17 11 Z" fill="url(#canvasAuroraGrad)" stroke="#ffffff" strokeWidth="1.2" strokeLinejoin="round" />
+        </svg>
+      );
+    case "gradient-beam":
+      return (
+        <svg viewBox="0 0 24 24" className="size-6 drop-shadow-md">
+          <defs>
+            <linearGradient id="canvasGradientBeamGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+              <stop offset="0%" stopColor="#ff7a1a" />
+              <stop offset="50%" stopColor="#ec4899" />
+              <stop offset="100%" stopColor="#6366f1" />
+            </linearGradient>
+          </defs>
+          <path
+            d="M2 2 L2 19 L6.8 14.5 L11 22.5 L13.8 21 L9.8 13.2 L16.5 13.2 Z"
+            fill="url(#canvasGradientBeamGrad)"
+            stroke="#ffffff"
+            strokeWidth="1.5"
+            strokeLinejoin="round"
+          />
+        </svg>
+      );
+    case "precision-pen":
+      return (
+        <svg viewBox="0 0 24 24" className="size-6 drop-shadow-md">
+          <path d="M2 2 L9 5 L16 13 L13 16 L5 9 Z" fill="#e2e8f0" stroke="#0f172a" strokeWidth="1.2" strokeLinejoin="round" />
+          <path d="M13 16 L16 13 L20 17 L17 20 Z" fill="#eab308" stroke="#0f172a" strokeWidth="1.2" strokeLinejoin="round" />
+          <line x1="2" y1="2" x2="8" y2="8" stroke="#0f172a" strokeWidth="1.2" />
+          <circle cx="8" cy="8" r="1.5" fill="#0f172a" />
+        </svg>
+      );
+    case "highlighter":
+      return (
+        <svg viewBox="0 0 24 24" className="size-6 filter drop-shadow-[0_0_6px_rgba(250,204,21,0.5)]">
+          <path d="M2 2 L6 1 L9 6 L4 8 Z" fill="#fde047" stroke="#ca8a04" strokeWidth="1" strokeLinejoin="round" />
+          <path d="M4 8 L9 6 L12 10 L7 12 Z" fill="#334155" stroke="#0f172a" strokeWidth="1" strokeLinejoin="round" />
+          <path d="M7 12 L12 10 L19 19 L14 21 Z" fill="#facc15" stroke="#0f172a" strokeWidth="1" strokeLinejoin="round" />
+        </svg>
+      );
+    case "tactile-pointer":
+      return (
+        <svg viewBox="0 0 24 24" className="size-6 drop-shadow-md">
+          <path
+            d="M7 2 C8.2 2 9 2.8 9 4 L9 11 C9.5 10.5 10.5 10.2 11.2 10.2 C12.2 10.2 12.8 11 13 12 C13.5 11.2 14.5 11.2 15.2 11.8 C16 12.5 16 13.5 16 14.5 C16 17.5 14 21 11 22 L5 22 C3.5 21 2 18.5 2 16 L2 13 C2 11.5 3.5 11 4.5 12.5 L5.5 14 L5.5 4 C5.5 2.8 6 2 7 2 Z"
+            fill="#ffffff"
+            stroke="#1e2024"
+            strokeWidth="1.5"
+            strokeLinejoin="round"
+          />
+          <path d="M9 8 L13 8" stroke="#cbd5e1" strokeWidth="1" strokeLinecap="round" />
+        </svg>
+      );
+    case "cyber-arrow":
+      return (
+        <svg viewBox="0 0 24 24" className="size-6 filter drop-shadow-[0_0_6px_rgba(16,185,129,0.7)]">
+          <path d="M2 2 L20 11 L13 13 L11 20 Z" fill="#1e293b" stroke="#34d399" strokeWidth="1.2" strokeLinejoin="round" />
+          <path d="M6 5 L14 10 L10 11 L9 14 Z" fill="#10b981" />
+        </svg>
+      );
+    case "terminal-caret":
+      return (
+        <svg viewBox="0 0 24 24" className="size-6 filter drop-shadow-[0_0_6px_rgba(34,197,94,0.7)]">
+          <path d="M2 5 L8 10 L2 15" stroke="#22c55e" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" fill="none" />
+          <rect x="11" y="6" width="7" height="10" rx="1" fill="#4ade80" />
+        </svg>
+      );
+    case "retro-pixel":
+      return (
+        <svg viewBox="0 0 24 24" className="size-6 drop-shadow-md">
+          <path
+            d="M0 0 L0 18 L4 18 L4 14 L7 14 L7 18 L10 18 L10 12 L13 12 L13 8 L9 8 L9 4 L4 4 L4 0 Z"
+            fill="#ffffff"
+            stroke="#000000"
+            strokeWidth="1.5"
+            strokeLinejoin="miter"
+          />
+        </svg>
+      );
+    case "glass-orb":
+      return (
+        <svg viewBox="0 0 24 24" className="size-6 drop-shadow-md">
+          <circle cx="12" cy="12" r="9.5" fill="rgba(15, 23, 42, 0.6)" stroke="rgba(255, 255, 255, 0.55)" strokeWidth="1.5" />
+          <ellipse cx="9" cy="8.5" rx="3" ry="1.8" transform="rotate(-30 9 8.5)" fill="rgba(255, 255, 255, 0.85)" />
+          <circle cx="12" cy="12" r="1.5" fill="#38bdf8" />
+        </svg>
+      );
+    case "smooth-chubby":
+      return (
+        <svg viewBox="0 0 24 24" className="size-6 drop-shadow-md">
+          <path
+            d="M4 4 C4 3 5.5 3 6 4 L17 14 C18 15 17.5 16.5 16 16.5 L11.5 16.5 L8.5 21.5 C7.8 22.5 6.5 22 6 21 L4 5 Z"
+            fill="#ffffff"
+            stroke="#0f172a"
+            strokeWidth="1.8"
+            strokeLinejoin="round"
+            strokeLinecap="round"
+          />
+        </svg>
+      );
+    default:
+      return (
+        <svg viewBox="0 0 24 24" className="size-6 drop-shadow-md">
+          <path
+            d="M1 1 L1 18.5 Q3.5 16 5.5 14.5 L9.2 22.8 Q10.7 22.1 12.2 21.4 L8.6 13.4 L14.8 13.4 Q7.5 7 1 1 Z"
+            fill="#ffffff"
+            stroke="#171717"
+            strokeWidth="1.2"
+            strokeLinejoin="round"
+          />
+        </svg>
+      );
+  }
+}
+
+export function CursorAvatarBadge({
+  avatar,
+  hx,
+  hy,
+}: {
+  avatar?: CursorAvatar;
+  hx: number;
+  hy: number;
+}) {
+  if (!avatar?.enabled) return null;
+  const bx = hx > 8 ? hx + 12 : hx + 16;
+  const by = hy > 8 ? hy + 12 : hy + 16;
+  const color = avatar.color || "#6366f1";
+
+  return (
+    <div
+      className="absolute pointer-events-none flex items-center select-none"
+      style={{
+        left: `${bx}px`,
+        top: `${by}px`,
+      }}
+    >
+      <div
+        className={`flex items-center rounded-full shadow-md ${
+          avatar.badgeLabel
+            ? "border border-white/20 bg-slate-900/90 pl-0 pr-2 py-0.5 gap-1.5 backdrop-blur-sm"
+            : ""
+        }`}
+      >
+        <div
+          className="flex size-5 shrink-0 items-center justify-center rounded-full border border-white text-[9px] font-bold text-white shadow-sm overflow-hidden"
+          style={{ backgroundColor: color }}
+        >
+          {avatar.type === "initials" && (avatar.value || "DL").slice(0, 3).toUpperCase()}
+          {avatar.type === "text" && (avatar.value || "Host")}
+          {avatar.type === "icon" && (
+            avatar.value === "star" ? <Star className="size-2.5" /> :
+            avatar.value === "zap" ? <Zap className="size-2.5" /> :
+            avatar.value === "flame" ? <Flame className="size-2.5" /> :
+            avatar.value === "shield" ? <Shield className="size-2.5" /> :
+            avatar.value === "crown" ? <Crown className="size-2.5" /> :
+            avatar.value === "check" ? <Check className="size-2.5" /> :
+            avatar.value === "heart" ? <Heart className="size-2.5" /> :
+            avatar.value === "user" ? <User className="size-2.5" /> :
+            <Sparkles className="size-2.5" />
+          )}
+          {avatar.type === "image" && (
+            avatar.value ? (
+              <img src={avatar.value} alt="Avatar" className="size-full object-cover" />
+            ) : (
+              <User className="size-2.5" />
+            )
+          )}
+        </div>
+        {avatar.badgeLabel && (
+          <span className="text-[9px] font-semibold text-slate-100 whitespace-nowrap tracking-wide leading-none">
+            {avatar.badgeLabel}
+          </span>
+        )}
+      </div>
+    </div>
+  );
+}
 
 interface VideoCanvasProps {
   project: ProjectData;
@@ -545,42 +874,33 @@ export function VideoCanvas({ project, currentTimeMs: propTimeMs }: VideoCanvasP
           )}
 
           {/* Tracked Mouse Cursor Pointer Overlay (Clean, no harsh pressing/ping effects) */}
-          {looks.showCursor && looks.cursorStyle !== "hidden" && (
-            <div
-              className="pointer-events-none absolute will-change-transform z-30"
-              style={{
-                left: `${camera.cursorX * 100}%`,
-                top: `${camera.cursorY * 100}%`,
-                transform: `translate3d(-50%, -50%, 0) scale(${looks.cursorSize || 1.4})`,
-              }}
-            >
-              {looks.cursorStyle === "dot" ? (
-                <div className="size-3.5 rounded-full bg-white shadow-sm ring-1 ring-black/40" />
-              ) : looks.cursorStyle === "ring" ? (
-                <div className="size-6 rounded-full border-2 border-white bg-white/10 shadow-sm" />
-              ) : looks.cursorStyle === "default" ? (
-                <svg
-                  className="size-5.5 fill-white stroke-black stroke-[1.5] drop-shadow-md"
-                  viewBox="0 0 24 24"
-                >
-                  <path d="M4 2l12 12-5.5 1 4.5 7-3 1.5-4.5-7L4 20V2z" />
-                </svg>
-              ) : (
-                /* Mac / OpenScreen Studio Pointer */
-                <svg
-                  className="size-6 fill-white stroke-neutral-900 stroke-[1.2] drop-shadow-md"
-                  viewBox="0 0 24 24"
-                >
-                  <path d="M5.5 3.21a.5.5 0 0 1 .86-.29l12.43 12.06a.5.5 0 0 1-.36.85l-5.63.14-2.48 5.75a.5.5 0 0 1-.92-.04l-2.02-4.68-4.22 3.86a.5.5 0 0 1-.84-.37V3.21z" />
-                </svg>
-              )}
+          {looks.showCursor && looks.cursorStyle !== "hidden" && (() => {
+            const preset = getCursorPreset(looks.cursorStyle) || getCursorPreset("mac")!;
+            const [hx, hy] = preset.hotspot;
+            const cursorScale = looks.cursorSize || 1.4;
 
-              {/* Dynamic Cursor Glow Effect */}
-              {effectsState.glow && (
-                <div className="absolute -inset-3 rounded-full border border-white/60 bg-white/20 animate-pulse pointer-events-none shadow-[0_0_16px_rgba(255,255,255,0.5)]" />
-              )}
-            </div>
-          )}
+            return (
+              <div
+                className="pointer-events-none absolute will-change-transform z-30"
+                style={{
+                  left: `${camera.cursorX * 100}%`,
+                  top: `${camera.cursorY * 100}%`,
+                  transform: `translate3d(-${hx * cursorScale}px, -${hy * cursorScale}px, 0) scale(${cursorScale})`,
+                  transformOrigin: "0 0",
+                }}
+              >
+                <CanvasCursorSvg cursorStyle={looks.cursorStyle} />
+
+                {/* Presenter Avatar Badge pinned to cursor */}
+                <CursorAvatarBadge avatar={looks.cursorAvatar} hx={hx} hy={hy} />
+
+                {/* Dynamic Cursor Glow Effect */}
+                {effectsState.glow && (
+                  <div className="absolute -inset-3 rounded-full border border-white/60 bg-white/20 animate-pulse pointer-events-none shadow-[0_0_16px_rgba(255,255,255,0.5)]" />
+                )}
+              </div>
+            );
+          })()}
 
           {/* Tactile Click Ripples Plotted Live on Screen */}
           {(looks.showClickRipples !== false) && clicks && clicks.map((click) => {
@@ -685,43 +1005,84 @@ export function VideoCanvas({ project, currentTimeMs: propTimeMs }: VideoCanvasP
           </div>
         )}
 
-        {/* Dynamic Text Overlays on Video */}
+        {/* Dynamic Kinetic Text Cards on Video */}
         {project.textOverlays?.map((textOverlay) => {
-          const isActive =
-            currentTimeMs >= textOverlay.startTimeMs &&
-            currentTimeMs <= textOverlay.startTimeMs + textOverlay.durationMs;
-          if (!isActive) return null;
+          const motion = evaluateTextOverlayMotion(textOverlay, currentTimeMs);
+          if (motion.opacity <= 0.001) return null;
+
+          const cardStyleKey: TextCardStyle = textOverlay.cardStyle || "glass";
+          const cardDef = TEXT_CARD_STYLE_DEFINITIONS[cardStyleKey] || TEXT_CARD_STYLE_DEFINITIONS.glass;
+          const kickerText = textOverlay.kicker || textOverlay.badge;
+          const isTerminal = cardStyleKey === "terminal";
+          const isMinimal = cardStyleKey === "minimal";
+
+          const cardBg = textOverlay.bgColor || cardDef.defaultBgColor;
+          const textColor = textOverlay.color || cardDef.defaultColor;
+          const fontFamily = textOverlay.typography?.fontFamily || cardDef.fontFamily || "inherit";
 
           return (
             <div
               key={textOverlay.id}
-              className="absolute -translate-x-1/2 -translate-y-1/2 pointer-events-none z-20 text-center transition-all select-none flex flex-col items-center gap-1"
+              data-testid={`text-overlay-${textOverlay.id}`}
+              data-card-style={cardStyleKey}
+              data-motion-preset={textOverlay.motionPreset || "smooth-fade"}
+              className="absolute pointer-events-none z-20 text-center select-none flex flex-col items-center"
               style={{
-                left: `${textOverlay.x * 100}%`,
-                top: `${textOverlay.y * 100}%`,
+                left: `${(textOverlay.x ?? 0.5) * 100}%`,
+                top: `${(textOverlay.y ?? 0.85) * 100}%`,
+                transform: `translate3d(calc(-50% + ${motion.translateX}px), calc(-50% + ${motion.translateY}px), 0) scale(${motion.scale})`,
+                opacity: motion.opacity,
+                filter: motion.blur > 0.08 ? `blur(${motion.blur}px)` : undefined,
+                transformOrigin: "center center",
+                willChange: "transform, opacity, filter",
+                transition: isPlaying ? "none" : "transform 0.08s ease-out, opacity 0.08s ease-out",
               }}
             >
-              {textOverlay.badge && (
-                <span
-                  className="rounded-full px-2.5 py-0.5 text-[10px] font-black uppercase tracking-wider text-white shadow-md"
-                  style={{
-                    backgroundColor: looks.brandAccentColor || "#6366f1",
-                  }}
-                >
-                  {textOverlay.badge}
-                </span>
-              )}
-              <span
-                className="inline-block rounded-xl px-4 py-1.5 font-bold shadow-lg backdrop-blur-sm"
+              <div
+                className="flex flex-col items-center"
                 style={{
-                  fontSize: `${textOverlay.fontSize}px`,
-                  color: textOverlay.color,
-                  backgroundColor: textOverlay.bgColor || "rgba(15, 17, 23, 0.85)",
-                  border: "1px solid rgba(255, 255, 255, 0.15)",
+                  background: cardBg,
+                  border: cardDef.borderStyle,
+                  boxShadow: cardDef.boxShadow,
+                  backdropFilter: cardDef.backdropBlurPx > 0 ? `blur(${cardDef.backdropBlurPx}px)` : undefined,
+                  WebkitBackdropFilter: cardDef.backdropBlurPx > 0 ? `blur(${cardDef.backdropBlurPx}px)` : undefined,
+                  padding: isMinimal ? "4px 8px" : "10px 18px",
+                  borderRadius: isTerminal ? "8px" : "14px",
+                  fontFamily,
+                  maxWidth: "85vw",
                 }}
               >
-                {textOverlay.text}
-              </span>
+                {/* Unboxed Kinetic Kicker (Zero Pill Badges) */}
+                {kickerText && (
+                  <div
+                    data-testid={`text-kicker-${textOverlay.id}`}
+                    className="text-[11px] font-bold tracking-wider leading-none select-none mb-1.5 opacity-90"
+                    style={{
+                      color: looks.brandAccentColor || (isTerminal ? "#4ade80" : "#a5b4fc"),
+                      letterSpacing: textOverlay.typography?.letterSpacing || "0.08em",
+                      textTransform: textOverlay.typography?.kickerTransform || "uppercase",
+                      fontFamily,
+                    }}
+                  >
+                    {kickerText}
+                  </div>
+                )}
+
+                {/* Headline Typography */}
+                <div
+                  data-testid={`text-headline-${textOverlay.id}`}
+                  className="font-bold leading-tight select-none tracking-tight whitespace-pre-wrap"
+                  style={{
+                    fontSize: `${textOverlay.fontSize || 22}px`,
+                    color: textColor,
+                    fontWeight: textOverlay.typography?.fontWeight || "700",
+                    letterSpacing: textOverlay.typography?.letterSpacing || "-0.015em",
+                    textShadow: isMinimal ? "0 2px 12px rgba(0, 0, 0, 0.75)" : undefined,
+                  }}
+                >
+                  {textOverlay.text}
+                </div>
+              </div>
             </div>
           );
         })}
