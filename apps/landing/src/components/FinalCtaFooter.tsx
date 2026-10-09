@@ -172,6 +172,15 @@ export function FinalCtaFooter() {
                   <motion.a
                     whileHover={{ scale: 1.02 }}
                     whileTap={{ scale: 0.98 }}
+                    href="https://github.com/darknecrocities/DomoLens/releases/latest/download/DomoLens-Windows.msi"
+                    className="inline-flex items-center gap-2 rounded-xl border border-white/[0.08] bg-white/[0.05] px-5 py-2.5 font-mono text-xs font-bold text-neutral-200 uppercase hover:bg-white/[0.1] hover:text-white transition-colors"
+                  >
+                    <Download className="size-4" />
+                    <span>Download Windows (.MSI)</span>
+                  </motion.a>
+                  <motion.a
+                    whileHover={{ scale: 1.02 }}
+                    whileTap={{ scale: 0.98 }}
                     href="https://github.com/darknecrocities/DomoLens/releases/latest"
                     target="_blank"
                     rel="noreferrer"
@@ -180,6 +189,12 @@ export function FinalCtaFooter() {
                     <span>GitHub Release</span>
                     <ExternalLink className="size-3 text-neutral-400" />
                   </motion.a>
+                </div>
+                <div className="mt-4 rounded-xl border border-white/[0.06] bg-black/60 p-3.5 text-xs text-neutral-400">
+                  <p className="font-semibold text-neutral-300">Windows Installation & AI Note:</p>
+                  <p className="mt-1 leading-relaxed">
+                    If Windows Defender SmartScreen appears ("Windows protected your PC"), click <span className="text-neutral-200 font-medium">"More info"</span> and then <span className="text-neutral-200 font-medium">"Run anyway"</span>. For local Ollama AI assistance, run <code className="rounded bg-white/[0.08] px-1.5 py-0.5 text-neutral-200 font-mono text-[11px]">npm run ollama:start:win</code> or install via <code className="rounded bg-white/[0.08] px-1.5 py-0.5 text-neutral-200 font-mono text-[11px]">winget install Ollama.Ollama</code>.
+                  </p>
                 </div>
               </motion.div>
             )}

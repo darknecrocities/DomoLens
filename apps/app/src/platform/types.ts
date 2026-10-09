@@ -29,6 +29,10 @@ export interface Platform {
   isTouch: boolean;
   /** True on macOS desktop (used to leave room for the window buttons). */
   isMac: boolean;
+  /** True on Windows desktop. */
+  isWindows: boolean;
+  /** True on Linux desktop. */
+  isLinux: boolean;
 
   listProjects(): Promise<ProjectSummary[]>;
   importVideo(file: IncomingFile): Promise<ProjectSummary>;

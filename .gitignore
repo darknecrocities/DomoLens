@@ -79,3 +79,6 @@ tauri-updater.key*
 
 # Teamwork agent scratchpad
 .agents/
+
+# Marketing assets scratchpad
+marketing-video/

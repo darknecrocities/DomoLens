@@ -60,7 +60,7 @@ export function ExportModal({ open, project, onClose }: ExportModalProps) {
       const newFilename = getFilenameForExport(resolution, format, newSafeName);
       if (destinationPath) {
         const separator = destinationPath.includes("\\") ? "\\" : "/";
-        const parts = destinationPath.split(separator);
+        const parts = destinationPath.split(/[/\\]/);
         parts[parts.length - 1] = newFilename;
         setDestinationPath(parts.join(separator));
       }

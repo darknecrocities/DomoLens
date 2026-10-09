@@ -11,10 +11,12 @@ function detect(): Platform {
   const isMobile = /Android|iPhone|iPad|iPod/i.test(ua);
   const isTouch = isMobile || (hasWindow && !!window.matchMedia?.("(pointer: coarse)").matches);
   const isMac = /Macintosh|Mac OS X/i.test(ua) && !isTouch;
+  const isWindows = /Windows|Win32|Win64/i.test(ua);
+  const isLinux = /Linux/i.test(ua) && !isMobile && !isMac && !isWindows;
 
   return hasWindow && isTauri()
-    ? createTauriPlatform({ isMobile, isTouch, isMac })
-    : createWebPlatform({ isTouch, isMac });
+    ? createTauriPlatform({ isMobile, isTouch, isMac, isWindows, isLinux })
+    : createWebPlatform({ isTouch, isMac, isWindows, isLinux });
 }
 
 /** The one platform object for this run of the app. */

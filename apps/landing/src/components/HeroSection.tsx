@@ -49,9 +49,16 @@ export function HeroSection() {
 
   const downloadLabels: Record<string, string> = {
     mac: "Download for macOS (Universal)",
-    windows: "Download for Windows (64-bit)",
+    windows: "Download for Windows (64-bit .exe)",
     linux: "Download for Linux (.AppImage)",
-    android: "Android (Coming Soon)",
+    android: "Android (Companion)",
+  };
+
+  const downloadLinks: Record<string, string> = {
+    mac: "https://github.com/darknecrocities/DomoLens/releases/latest/download/DomoLens-Universal.dmg",
+    windows: "https://github.com/darknecrocities/DomoLens/releases/latest/download/DomoLens-Windows-Setup.exe",
+    linux: "https://github.com/darknecrocities/DomoLens/releases/latest/download/DomoLens-Linux.AppImage",
+    android: "#download",
   };
 
   // Cursor 3D Physics Calculation
@@ -235,22 +242,43 @@ export function HeroSection() {
           </div>
 
           {/* Action Buttons */}
-          <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
-            <a
-              href="#download"
-              className="inline-flex min-h-[46px] items-center gap-2 rounded-lg bg-white px-7 py-3 font-mono text-xs font-bold uppercase text-black hover:bg-neutral-200 transition-colors shadow-2xl"
-            >
-              <Download className="size-4" />
-              <span>{downloadLabels[device]}</span>
-            </a>
+          <div className="mt-8 flex flex-col items-center justify-center gap-3">
+            <div className="flex flex-wrap items-center justify-center gap-3">
+              <a
+                href={downloadLinks[device]}
+                className="inline-flex min-h-[46px] items-center gap-2 rounded-lg bg-white px-7 py-3 font-mono text-xs font-bold uppercase text-black hover:bg-neutral-200 transition-colors shadow-2xl"
+              >
+                <Download className="size-4" />
+                <span>{downloadLabels[device]}</span>
+              </a>
 
-            <a
-              href="#features"
-              className="inline-flex min-h-[46px] items-center gap-2 rounded-lg border border-neutral-700 bg-black/60 backdrop-blur-md px-6 py-3 font-mono text-xs font-semibold uppercase text-white hover:border-neutral-500 hover:bg-neutral-900 transition-colors shadow-xl"
-            >
-              <span>Explore Features</span>
-              <ArrowDown className="size-4 text-neutral-400" />
-            </a>
+              <a
+                href="#download"
+                className="inline-flex min-h-[46px] items-center gap-2 rounded-lg border border-neutral-700 bg-black/60 backdrop-blur-md px-6 py-3 font-mono text-xs font-semibold uppercase text-white hover:border-neutral-500 hover:bg-neutral-900 transition-colors shadow-xl"
+              >
+                <span>All 3 Platforms (macOS • Win • Linux)</span>
+                <ArrowDown className="size-4 text-neutral-400" />
+              </a>
+            </div>
+
+            {/* Quick OS Switcher Pills */}
+            <div className="flex items-center gap-2 font-mono text-[11px] text-neutral-400 mt-1">
+              <span className="text-neutral-500">Switch platform:</span>
+              {(["mac", "windows", "linux"] as const).map((os) => (
+                <button
+                  key={os}
+                  type="button"
+                  onClick={() => setDevice(os)}
+                  className={`px-2 py-0.5 rounded transition-colors uppercase ${
+                    device === os
+                      ? "bg-white/20 text-white font-bold"
+                      : "text-neutral-400 hover:text-white hover:bg-white/10"
+                  }`}
+                >
+                  {os === "mac" ? "macOS" : os === "windows" ? "Windows" : "Linux"}
+                </button>
+              ))}
+            </div>
           </div>
 
           {/* Scroll Down Prompt Indicator */}

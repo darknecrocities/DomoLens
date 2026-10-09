@@ -22,6 +22,7 @@ import {
   Terminal,
 } from "lucide-react";
 import { useEditor } from "../../store/editor";
+import { platform } from "../../platform";
 import { LlmMessageContent } from "./LlmMessageContent";
 import { CAPABLE_OLLAMA_MODELS } from "../../lib/ollama";
 
@@ -246,7 +247,7 @@ export function LlmSidebar() {
                 <div className="flex items-center justify-between text-[11px]">
                   <span className="font-medium text-white">1. Download Ollama</span>
                   <a
-                    href="https://ollama.com/download"
+                    href={platform.isWindows ? "https://ollama.com/download/windows" : "https://ollama.com/download"}
                     target="_blank"
                     rel="noreferrer"
                     className="flex items-center gap-1 text-[10px] text-neutral-300 hover:text-white hover:underline"
@@ -256,7 +257,13 @@ export function LlmSidebar() {
                   </a>
                 </div>
                 <p className="text-[10px] text-fg-faint">
-                  On macOS, you can also install via Homebrew: <code className="text-neutral-300">brew install ollama</code>
+                  {platform.isWindows ? (
+                    <>Windows (PowerShell / winget): <code className="text-neutral-300">winget install Ollama.Ollama</code></>
+                  ) : platform.isLinux ? (
+                    <>Linux: <code className="text-neutral-300">curl -fsSL https://ollama.com/install.sh | sh</code></>
+                  ) : (
+                    <>On macOS via Homebrew: <code className="text-neutral-300">brew install ollama</code></>
+                  )}
                 </p>
               </div>
 
@@ -267,8 +274,12 @@ export function LlmSidebar() {
                   2. Start Ollama Server
                 </span>
                 <div className="flex items-center justify-between rounded bg-black/60 px-2 py-1 font-mono text-[10px] text-neutral-300">
-                  <span>ollama serve</span>
-                  <span className="text-[9px] text-fg-faint">or npm run ollama:start</span>
+                  <span>
+                    {platform.isWindows ? "$env:OLLAMA_ORIGINS=\"*\"; ollama serve" : "OLLAMA_ORIGINS=* ollama serve"}
+                  </span>
+                  <span className="text-[9px] text-fg-faint">
+                    {platform.isWindows ? "or npm run ollama:start:win" : "or npm run ollama:start"}
+                  </span>
                 </div>
               </div>
 

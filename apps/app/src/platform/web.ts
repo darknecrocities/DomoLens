@@ -134,7 +134,12 @@ function seedDemo() {
 
 const VIDEO_ACCEPT = SUPPORTED_VIDEO_EXTENSIONS.map((ext) => `.${ext}`).join(",");
 
-export function createWebPlatform(opts: { isTouch: boolean; isMac: boolean }): Platform {
+export function createWebPlatform(opts: {
+  isTouch: boolean;
+  isMac: boolean;
+  isWindows?: boolean;
+  isLinux?: boolean;
+}): Platform {
   if (typeof window !== "undefined" && new URLSearchParams(window.location.search).has("demo")) {
     seedDemo();
   }
@@ -143,7 +148,9 @@ export function createWebPlatform(opts: { isTouch: boolean; isMac: boolean }): P
     kind: "web",
     isApp: false,
     isTouch: opts.isTouch,
-    isMac: false,
+    isMac: opts.isMac,
+    isWindows: opts.isWindows ?? false,
+    isLinux: opts.isLinux ?? false,
 
     async listProjects() {
       return [...projects.values()].sort((a, b) => b.updatedAt - a.updatedAt);
@@ -341,7 +348,7 @@ export function createWebPlatform(opts: { isTouch: boolean; isMac: boolean }): P
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = destinationPath.split("/").pop() || "export.mp4";
+      a.download = destinationPath.split(/[/\\]/).pop() || "export.mp4";
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
