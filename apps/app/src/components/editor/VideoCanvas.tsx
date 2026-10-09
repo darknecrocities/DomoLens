@@ -774,9 +774,16 @@ export function VideoCanvas({ project, currentTimeMs: propTimeMs }: VideoCanvasP
         <div className="absolute inset-0 overflow-hidden pointer-events-none opacity-40 blur-3xl scale-110 select-none">
           {resolvedMediaSrc ? (
             <video
+              ref={(el) => {
+                if (el) {
+                  el.muted = true;
+                  el.volume = 0;
+                }
+              }}
               src={resolvedMediaSrc}
               muted
               playsInline
+              aria-hidden="true"
               className="size-full object-cover"
             />
           ) : (
