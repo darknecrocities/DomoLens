@@ -47,8 +47,11 @@ export function clampCameraToBounds(
   _mode: "strict" | "center" = "strict",
 ): { x: number; y: number } {
   if (scale <= 1) return { x: 0.5, y: 0.5 };
-  const halfW = 0.5 / scale;
-  const halfH = 0.5 / scale;
+  // In strict mode, exactly 0.5/scale bounds prevent any void.
+  // In center/edge mode, allow camera to frame closer to extreme borders (0.44/scale).
+  const factor = _mode === "center" ? 0.44 : 0.5;
+  const halfW = factor / scale;
+  const halfH = factor / scale;
 
   const minX = halfW;
   const maxX = 1 - halfW;
@@ -644,7 +647,9 @@ export function calculateCameraAtTime(
             finalY = baseTargetY;
           } else {
             // Steady hold: stay anchored rock-solid on target
-            if (effectiveTrajectory && effectiveTrajectory.length > 0) {
+            // If this keyframe is from a typing interaction, keep camera firmly on the typing target regardless of where the cursor wanders
+            const isTypingKf = k1.sound === "typing" || k2.sound === "typing" || k1.id.includes("type") || k2.id.includes("type");
+            if (!isTypingKf && effectiveTrajectory && effectiveTrajectory.length > 0) {
               const tracked = calculateDeadzoneCamera(
                 { x: baseTargetX, y: baseTargetY },
                 cursor,
@@ -848,9 +853,8 @@ export interface PlotInteractionsOptions {
  * and frames the dropdown / autocomplete results right in the center of the recording.
  */
 export function calculateTypingTarget(evt: { x: number; y: number }): { x: number; y: number } {
-  const targetX = evt.x >= 0.15 && evt.x <= 0.85 ? 0.50 : evt.x;
-  const targetY = evt.y <= 0.45 ? Math.min(0.44, Math.max(0.36, evt.y + 0.10)) : evt.y;
-  return { x: targetX, y: targetY };
+  // Focus directly on exactly where the user is typing so the camera shifts to their input position
+  return { x: evt.x, y: evt.y };
 }
 
 /**
@@ -1855,6 +1859,14 @@ export function generateTourShiftSequence(
  * space when the video is rendered with "cover" fitting (center-cropped) into a
  * viewport of a different aspect ratio. Keeps the cursor, ripples and camera
  * locked onto the actual pixels shown on screen and in export.
+ *
+ * Math: with object-fit:cover the video is uniformly scaled until it fills the
+ * viewport in both dimensions. If videoAspect > viewAspect the video is scaled
+ * to fill height and the excess width is cropped symmetrically. A point at
+ * video x=0.3 appears in viewport at:
+ *   x_vp = 0.5 + (x - 0.5) * (viewAspect / videoAspect)   [compressed toward center]
+ * The inverse (expanding) transform was wrong — it pushed the focal point
+ * AWAY from center, causing zoom to land off-target and producing camera shake.
  */
 export function mapVideoPointToViewport(
   x: number,
@@ -1866,10 +1878,12 @@ export function mapVideoPointToViewport(
     return { x, y };
   }
   if (videoAspect > viewAspect) {
-    return { x: 0.5 + (x - 0.5) * (videoAspect / viewAspect), y };
+    // Video wider than viewport → sides cropped → compress x toward center
+    return { x: 0.5 + (x - 0.5) * (viewAspect / videoAspect), y };
   }
   if (videoAspect < viewAspect) {
-    return { x, y: 0.5 + (y - 0.5) * (viewAspect / videoAspect) };
+    // Video taller than viewport → top/bottom cropped → compress y toward center
+    return { x, y: 0.5 + (y - 0.5) * (videoAspect / viewAspect) };
   }
   return { x, y };
 }

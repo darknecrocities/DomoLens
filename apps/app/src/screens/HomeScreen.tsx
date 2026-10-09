@@ -81,11 +81,7 @@ export function HomeScreen() {
             <div className="flex items-center gap-2.5">
               <span className="size-2 rounded-full bg-white animate-pulse" />
               <span className="font-mono text-xs font-bold uppercase tracking-widest text-white">
-                DomoLens OpenScreen HUD
-              </span>
-              <span className="hidden sm:inline-block font-mono text-xs text-neutral-500">•</span>
-              <span className="hidden sm:inline-block font-mono text-xs text-neutral-400">
-                Floating Quick Action Bar
+                DomoLens — Your Smart Showcase Zoom Tracker
               </span>
             </div>
 

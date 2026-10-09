@@ -419,6 +419,10 @@ export function VideoCanvas({ project, currentTimeMs: propTimeMs }: VideoCanvasP
   const computeCameraRef = useRef(computeCamera);
   computeCameraRef.current = computeCamera;
   const zoomLayerRef = useRef<HTMLDivElement>(null);
+  const cursorOverlayRef = useRef<HTMLDivElement>(null);
+  // Refs for aspect ratios accessible inside rAF closure without stale closure issues
+  const videoAspectRef = useRef<number | null>(null);
+  const viewAspectRef = useRef<number | null>(null);
 
   const camera = useMemo(() => computeCamera(currentTimeMs), [computeCamera, currentTimeMs]);
 
@@ -439,6 +443,30 @@ export function VideoCanvas({ project, currentTimeMs: propTimeMs }: VideoCanvasP
       video.playbackRate = effectsState.playbackRate;
     }
   }, [effectsState.playbackRate]);
+
+  // Synchronize video voice/audio with clip settings (unmute video so recorded voice actually plays!)
+  const primaryClip = project.clips?.[0];
+  const isClipMuted = primaryClip?.muted ?? false;
+  const clipVolume = primaryClip?.volume ?? 1;
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video) return;
+    video.muted = isClipMuted;
+    video.volume = Math.max(0, Math.min(1, clipVolume));
+  }, [isClipMuted, clipVolume]);
+
+  // When playback starts, immediately seed the zoom layer transform via DOM so
+  // there is no single-frame blank between React removing the inline style and
+  // the first rAF frame writing the correct value.
+  useEffect(() => {
+    if (!isPlaying) return;
+    const layer = zoomLayerRef.current;
+    if (!layer) return;
+    const cam = computeCameraRef.current(currentTimeMs);
+    const mapped = mapVideoPointToViewport(cam.x, cam.y, videoAspectRef.current, viewAspectRef.current);
+    layer.style.transform = `scale(${cam.scale}) translate3d(${(0.5 - mapped.x) * 100}%, ${(0.5 - mapped.y) * 100}%, 0)`;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isPlaying]);
 
   // Master hardware-locked video clock synchronization:
   // When video is playing, video presentation frames drive currentTimeMs with ZERO latency!
@@ -486,7 +514,20 @@ export function VideoCanvas({ project, currentTimeMs: propTimeMs }: VideoCanvasP
       const layer = zoomLayerRef.current;
       if (layer) {
         const cam = computeCameraRef.current(frameMs);
-        layer.style.transform = `scale(${cam.scale}) translate3d(${(0.5 - cam.x) * 100}%, ${(0.5 - cam.y) * 100}%, 0)`;
+        // Apply viewport aspect-ratio correction to prevent camera shaking when
+        // video aspect ≠ viewport aspect (the React render path uses camView, so rAF must too)
+        const vAspect = videoAspectRef.current;
+        const vpAspect = viewAspectRef.current;
+        const mapped = mapVideoPointToViewport(cam.x, cam.y, vAspect, vpAspect);
+        layer.style.transform = `scale(${cam.scale}) translate3d(${(0.5 - mapped.x) * 100}%, ${(0.5 - mapped.y) * 100}%, 0)`;
+
+        // Drive cursor overlay at 60fps via direct DOM — avoids React 12Hz throttle lag
+        const cursorEl = cursorOverlayRef.current;
+        if (cursorEl) {
+          const cMapped = mapVideoPointToViewport(cam.cursorX, cam.cursorY, vAspect, vpAspect);
+          cursorEl.style.left = `${cMapped.x * 100}%`;
+          cursorEl.style.top = `${cMapped.y * 100}%`;
+        }
       }
 
       // Throttle global store updates (timeline playhead, sounds) to ~12Hz
@@ -704,6 +745,9 @@ export function VideoCanvas({ project, currentTimeMs: propTimeMs }: VideoCanvasP
   };
   const videoAspectNum = parseAspect(naturalAspectRatio) ?? (summary.width && summary.height ? summary.width / summary.height : null);
   const viewAspectNum = parseAspect(viewportAspectRatio);
+  // Keep refs up-to-date so rAF loop always has fresh aspect ratios (no stale closure)
+  videoAspectRef.current = videoAspectNum;
+  viewAspectRef.current = viewAspectNum;
   const mapPt = (x: number, y: number) => mapVideoPointToViewport(x, y, videoAspectNum, viewAspectNum);
   const camView = mapPt(camera.x, camera.y);
   const cursorView = mapPt(camera.cursorX, camera.cursorY);
@@ -823,7 +867,12 @@ export function VideoCanvas({ project, currentTimeMs: propTimeMs }: VideoCanvasP
           ref={zoomLayerRef}
           className="relative size-full origin-center will-change-transform"
           style={{
-            transform: `scale(${camera.scale}) translate3d(${(0.5 - camView.x) * 100}%, ${(0.5 - camView.y) * 100}%, 0)`,
+            // When playing, rAF is the SOLE owner of this transform (60fps via direct DOM write).
+            // Setting undefined here prevents React re-renders (throttled to ~12fps via setCurrentTime)
+            // from overwriting the rAF value with a stale frame → eliminates camera shake/flicker.
+            transform: isPlaying
+              ? undefined
+              : `scale(${camera.scale}) translate3d(${(0.5 - camView.x) * 100}%, ${(0.5 - camView.y) * 100}%, 0)`,
             transition: isPlaying ? "none" : "transform 0.1s ease-out",
           }}
         >
@@ -833,7 +882,6 @@ export function VideoCanvas({ project, currentTimeMs: propTimeMs }: VideoCanvasP
               src={resolvedMediaSrc}
               poster={thumbnailSrc || undefined}
               playsInline
-              muted
               preload="auto"
               style={{ filter: effectsState.filterStyle || undefined }}
               className="size-full object-cover pointer-events-none"
@@ -913,6 +961,7 @@ export function VideoCanvas({ project, currentTimeMs: propTimeMs }: VideoCanvasP
 
             return (
               <div
+                ref={cursorOverlayRef}
                 className="pointer-events-none absolute will-change-transform z-30"
                 style={{
                   left: `${cursorView.x * 100}%`,

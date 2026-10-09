@@ -1,74 +1,18 @@
 import { motion } from "framer-motion";
 import {
   AppWindow,
-  Film,
   Globe,
-  LayoutDashboard,
   Monitor,
-  Play,
   Sparkles,
-  Terminal,
   UploadCloud,
   Zap,
 } from "lucide-react";
 import { useNav } from "../../store/nav";
 import { useProjects } from "../../store/projects";
 
-interface ShowcaseTemplate {
-  id: string;
-  title: string;
-  subtitle: string;
-  description: string;
-  duration: string;
-  zoomsCount: string;
-  soundType: string;
-  icon: typeof LayoutDashboard;
-  gradient: string;
-}
-
-const SHOWCASE_TEMPLATES: ShowcaseTemplate[] = [
-  {
-    id: "demo-saas",
-    title: "SaaS Product Walkthrough",
-    subtitle: "Web App & Metrics Showcase",
-    description: "Tight button click focus, smooth cursor tracking, context zoom-out, and tactile click bops.",
-    duration: "14s",
-    zoomsCount: "3 Zooms",
-    soundType: "Click Bops",
-    icon: LayoutDashboard,
-    gradient: "from-white/[0.08] via-white/[0.03] to-transparent",
-  },
-  {
-    id: "demo-code",
-    title: "Developer Code Tour",
-    subtitle: "VS Code & Terminal Workflow",
-    description: "Macro function focus, mechanical typing sound bursts, and smooth pans across editor files.",
-    duration: "12s",
-    zoomsCount: "4 Zooms",
-    soundType: "Typing Bursts",
-    icon: Terminal,
-    gradient: "from-white/[0.08] via-white/[0.03] to-transparent",
-  },
-  {
-    id: "demo-mobile",
-    title: "App Workflow Showcase",
-    subtitle: "Interactive Product Showcase",
-    description: "Cross-screen crane pullbacks, context reveals, and responsive cursor deadzone tracking.",
-    duration: "10s",
-    zoomsCount: "3 Zooms",
-    soundType: "Spatial Crane",
-    icon: Film,
-    gradient: "from-white/[0.08] via-white/[0.03] to-transparent",
-  },
-];
-
 export function EmptyProjects() {
   const { go } = useNav();
   const { pickAndImport } = useProjects();
-
-  const handleOpenDemo = (demoId: string) => {
-    go({ name: "editor", id: demoId });
-  };
 
   return (
     <div className="flex flex-col gap-10">
@@ -123,74 +67,7 @@ export function EmptyProjects() {
         </div>
       </motion.div>
 
-      {/* Interactive Sample Showcases Section */}
-      <section className="flex flex-col gap-4">
-        <div className="flex items-center justify-between">
-          <div>
-            <h3 className="text-base font-semibold tracking-tight text-white">
-              Try Interactive Product Demos
-            </h3>
-            <p className="text-xs text-fg-muted">
-              Click any showcase below to inspect real auto-zooms, cursor trajectories, and sound cues in the editor.
-            </p>
-          </div>
-          <span className="rounded-full border border-white/10 bg-white/5 px-2.5 py-1 text-[11px] font-medium text-neutral-400">
-            1-Click Interactive Tour
-          </span>
-        </div>
 
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-          {SHOWCASE_TEMPLATES.map((tpl, idx) => {
-            const Icon = tpl.icon;
-            return (
-              <motion.div
-                key={tpl.id}
-                initial={{ opacity: 0, y: 15 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.35, delay: idx * 0.08 }}
-                onClick={() => handleOpenDemo(tpl.id)}
-                className={`group relative flex flex-col justify-between overflow-hidden rounded-2xl border border-white/10 bg-gradient-to-b ${tpl.gradient} bg-ink-900/60 p-5 shadow-lg hover:border-white/25 hover:shadow-2xl transition-all cursor-pointer`}
-              >
-                <div>
-                  <div className="flex items-center justify-between mb-3">
-                    <div className="flex size-10 items-center justify-center rounded-xl bg-white/10 text-white group-hover:scale-105 group-hover:bg-white group-hover:text-black transition-all">
-                      <Icon className="size-5" />
-                    </div>
-                    <div className="flex items-center gap-1.5">
-                      <span className="rounded-md border border-white/10 bg-black/40 px-2 py-0.5 font-mono text-[10px] font-medium text-neutral-300">
-                        {tpl.duration}
-                      </span>
-                      <span className="rounded-md border border-white/10 bg-black/40 px-2 py-0.5 font-mono text-[10px] font-medium text-neutral-300">
-                        {tpl.zoomsCount}
-                      </span>
-                    </div>
-                  </div>
-
-                  <h4 className="text-sm font-bold text-white group-hover:text-neutral-200 transition-colors">
-                    {tpl.title}
-                  </h4>
-                  <p className="text-[11px] font-medium text-neutral-400 mt-0.5">
-                    {tpl.subtitle}
-                  </p>
-                  <p className="text-xs text-fg-muted mt-2 leading-relaxed">
-                    {tpl.description}
-                  </p>
-                </div>
-
-                <div className="mt-5 flex items-center justify-between border-t border-white/[0.08] pt-3.5">
-                  <span className="font-mono text-[11px] text-neutral-400">
-                    {tpl.soundType}
-                  </span>
-                  <div className="flex items-center gap-1 text-xs font-semibold text-white group-hover:translate-x-0.5 transition-transform">
-                    <Play className="size-3 fill-white" />
-                    Open in Editor
-                  </div>
-                </div>
-              </motion.div>
-            );
-          })}
-        </div>
-      </section>
 
       {/* Direct Capture Hub Cards */}
       <section className="flex flex-col gap-4">
