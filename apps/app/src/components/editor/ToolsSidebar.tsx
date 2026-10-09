@@ -40,6 +40,7 @@ import {
 import { useEditor, type ToolTab } from "../../store/editor";
 import { useTutorial } from "../../store/tutorial";
 import { TiltController } from "./TiltController";
+import { ResizeHandle } from "./ResizeHandle";
 
 function AddKeyframeButton({ zoomScale }: { zoomScale: number }) {
   const currentTimeMs = useEditor((s) => s.currentTimeMs);
@@ -92,12 +93,34 @@ export function ToolsSidebar() {
   const selectKeyframe = useEditor((s) => s.selectKeyframe);
   const selectEffect = useEditor((s) => s.selectEffect);
   const selectText = useEditor((s) => s.selectText);
+  const selectBlock = useEditor((s) => s.selectBlock);
   const setExportModalOpen = useEditor((s) => s.setExportModalOpen);
+  const toolsSidebarWidth = useEditor((s) => s.toolsSidebarWidth);
+  const resetLayoutDimensions = useEditor((s) => s.resetLayoutDimensions);
 
   const [holdDurationSec, setHoldDurationSec] = useState(1.0);
   const [shiftDurationSec, setShiftDurationSec] = useState(0.75);
   const [zoomScale, setZoomScale] = useState(1.85);
   const [selectedBgCategory, setSelectedBgCategory] = useState<string>("all");
+
+  const [bottomPanelHeight, setBottomPanelHeight] = useState<number>(() => {
+    if (typeof window === "undefined" || !window.localStorage) return 180;
+    try {
+      const stored = window.localStorage.getItem("domolens:tools-bottom-height");
+      const parsed = stored ? parseInt(stored, 10) : 180;
+      return isNaN(parsed) ? 180 : Math.max(110, Math.min(380, parsed));
+    } catch {
+      return 180;
+    }
+  });
+
+  const handleBottomPanelResize = (delta: number) => {
+    setBottomPanelHeight((prev) => {
+      const next = Math.max(110, Math.min(380, Math.round(prev - delta)));
+      try { window.localStorage.setItem("domolens:tools-bottom-height", String(next)); } catch {}
+      return next;
+    });
+  };
 
   if (!isRightSidebarOpen) {
     return (
@@ -134,7 +157,14 @@ export function ToolsSidebar() {
   const selectedText = project?.textOverlays?.find((t) => t.id === selectedTextId);
 
   return (
-    <aside data-tutorial-target="tools-panel" className="flex h-full max-h-full min-h-0 w-full md:w-72 lg:w-80 shrink-0 flex-col border-l border-ink-800 bg-ink-950/95 backdrop-blur-md z-10 select-none">
+    <aside
+      data-tutorial-target="tools-panel"
+      style={{
+        width: typeof window !== "undefined" && window.innerWidth >= 768 ? `${toolsSidebarWidth}px` : "100%",
+        maxWidth: typeof window !== "undefined" && window.innerWidth >= 768 ? `${toolsSidebarWidth}px` : "100%",
+      }}
+      className="flex h-full max-h-full min-h-0 shrink-0 flex-col border-l border-ink-800 bg-ink-950/95 backdrop-blur-md z-10 select-none overflow-hidden"
+    >
       {/* Sidebar Header & Tab Navigation */}
       <div className="flex h-12 items-center justify-between border-b border-ink-800 px-3">
         <span className="text-xs sm:text-sm font-semibold text-fg">Tools & Effects</span>
@@ -2305,6 +2335,182 @@ export function ToolsSidebar() {
                 Render & Export Video
               </button>
             </div>
+          </div>
+        )}
+      </div>
+
+      {/* Resizable Horizontal Line Border between Tool Tabs and Bottom Inspector */}
+      <ResizeHandle
+        orientation="horizontal"
+        ariaLabel="Resize bottom properties inspector panel"
+        title="Drag vertically to adjust bottom inspector panel height • Double-click to reset"
+        onResize={handleBottomPanelResize}
+        onReset={() => {
+          setBottomPanelHeight(180);
+          try { window.localStorage.removeItem("domolens:tools-bottom-height"); } catch {}
+        }}
+      />
+
+      {/* Resizable Bottom Inspector Dock */}
+      <div
+        style={{ height: `${bottomPanelHeight}px` }}
+        className="shrink-0 border-t border-ink-800 bg-ink-900/80 p-2.5 text-xs overflow-y-auto flex flex-col justify-between select-none"
+      >
+        {selectedBlock ? (
+          <div className="space-y-2">
+            <div className="flex items-center justify-between pb-1 border-b border-ink-800">
+              <span className="font-semibold text-white text-[11px] flex items-center gap-1.5">
+                <Sparkles className="size-3 text-white" />
+                Selected Zoom Block
+              </span>
+              <button
+                type="button"
+                onClick={() => selectBlock(null)}
+                className="text-[10px] text-neutral-400 hover:text-white"
+                title="Deselect block"
+              >
+                Close
+              </button>
+            </div>
+            <div className="flex justify-between text-[10px] text-neutral-400">
+              <span>Scale: <b className="text-white font-mono">{selectedBlock.scale.toFixed(2)}x</b></span>
+              <span>Speed: <b className="text-white font-mono">{selectedBlock.shiftDurationMs ?? 750}ms</b></span>
+            </div>
+            <div className="flex gap-1.5 pt-1">
+              <button
+                type="button"
+                onClick={() => deleteZoomBlock(selectedBlock.id)}
+                className="flex-1 rounded bg-danger/10 text-danger hover:bg-danger/20 py-1 text-[10px] font-semibold transition-colors text-center"
+              >
+                Delete Block
+              </button>
+            </div>
+          </div>
+        ) : selectedKeyframe ? (
+          <div className="space-y-2">
+            <div className="flex items-center justify-between pb-1 border-b border-ink-800">
+              <span className="font-semibold text-white text-[11px] flex items-center gap-1.5">
+                <Diamond className="size-3 text-white" />
+                Selected Keyframe
+              </span>
+              <button
+                type="button"
+                onClick={() => selectKeyframe(null)}
+                className="text-[10px] text-neutral-400 hover:text-white"
+              >
+                Close
+              </button>
+            </div>
+            <div className="flex justify-between text-[10px] text-neutral-400">
+              <span>Time: <b className="text-white font-mono">{formatDuration(selectedKeyframe.timeMs)}</b></span>
+              <span>Scale: <b className="text-white font-mono">{selectedKeyframe.scale.toFixed(2)}x</b></span>
+            </div>
+            <button
+              type="button"
+              onClick={() => deleteKeyframe(selectedKeyframe.id)}
+              className="w-full rounded bg-danger/10 text-danger hover:bg-danger/20 py-1 text-[10px] font-semibold transition-colors text-center"
+            >
+              Delete Keyframe
+            </button>
+          </div>
+        ) : selectedEffect ? (
+          <div className="space-y-2">
+            <div className="flex items-center justify-between pb-1 border-b border-ink-800">
+              <span className="font-semibold text-white text-[11px] flex items-center gap-1.5">
+                <Wand2 className="size-3 text-white" />
+                Selected Effect: {selectedEffect.type}
+              </span>
+              <button
+                type="button"
+                onClick={() => selectEffect(null)}
+                className="text-[10px] text-neutral-400 hover:text-white"
+              >
+                Close
+              </button>
+            </div>
+            <div className="flex justify-between text-[10px] text-neutral-400">
+              <span>Intensity: <b className="text-white font-mono">{Math.round(selectedEffect.intensity * 100)}%</b></span>
+              <span>Duration: <b className="text-white font-mono">{formatDuration(selectedEffect.durationMs)}</b></span>
+            </div>
+            <button
+              type="button"
+              onClick={() => deleteEffect(selectedEffect.id)}
+              className="w-full rounded bg-danger/10 text-danger hover:bg-danger/20 py-1 text-[10px] font-semibold transition-colors text-center"
+            >
+              Delete Effect
+            </button>
+          </div>
+        ) : selectedText ? (
+          <div className="space-y-2">
+            <div className="flex items-center justify-between pb-1 border-b border-ink-800">
+              <span className="font-semibold text-white text-[11px] flex items-center gap-1.5">
+                <Type className="size-3 text-white" />
+                Selected Text Caption
+              </span>
+              <button
+                type="button"
+                onClick={() => selectText(null)}
+                className="text-[10px] text-neutral-400 hover:text-white"
+              >
+                Close
+              </button>
+            </div>
+            <input
+              type="text"
+              value={selectedText.text}
+              onChange={(e) => updateTextOverlay(selectedText.id, { text: e.target.value })}
+              className="w-full rounded border border-ink-700 bg-ink-950 px-2 py-1 text-[11px] text-white outline-none focus:border-white"
+              placeholder="Caption text..."
+            />
+            <button
+              type="button"
+              onClick={() => deleteTextOverlay(selectedText.id)}
+              className="w-full rounded bg-danger/10 text-danger hover:bg-danger/20 py-1 text-[10px] font-semibold transition-colors text-center"
+            >
+              Delete Caption
+            </button>
+          </div>
+        ) : (
+          <div className="space-y-2 flex flex-col justify-between h-full">
+            <div>
+              <div className="flex items-center justify-between pb-1 border-b border-ink-800">
+                <span className="font-semibold text-white text-[11px] flex items-center gap-1.5">
+                  <Sliders className="size-3 text-neutral-400" />
+                  Studio Layout & Quick Inspector
+                </span>
+                <span className="text-[10px] font-mono text-neutral-400">
+                  {formatDuration(project?.summary.durationMs ?? 0)}
+                </span>
+              </div>
+              <div className="grid grid-cols-3 gap-1.5 py-1.5 text-center">
+                <div className="rounded bg-ink-950/80 p-1 border border-ink-800">
+                  <span className="block text-[9px] text-neutral-400">Zooms</span>
+                  <span className="font-mono text-white font-bold text-[11px]">
+                    {project?.zoomBlocks?.length ?? 0}
+                  </span>
+                </div>
+                <div className="rounded bg-ink-950/80 p-1 border border-ink-800">
+                  <span className="block text-[9px] text-neutral-400">Keyframes</span>
+                  <span className="font-mono text-white font-bold text-[11px]">
+                    {project?.keyframes?.length ?? 0}
+                  </span>
+                </div>
+                <div className="rounded bg-ink-950/80 p-1 border border-ink-800">
+                  <span className="block text-[9px] text-neutral-400">Effects</span>
+                  <span className="font-mono text-white font-bold text-[11px]">
+                    {project?.effects?.length ?? 0}
+                  </span>
+                </div>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={resetLayoutDimensions}
+              className="w-full rounded border border-ink-700 bg-ink-950/60 hover:bg-ink-800 py-1 text-[10px] font-medium text-neutral-300 hover:text-white transition-colors text-center"
+              title="Reset sidebar widths and timeline height to defaults"
+            >
+              Reset Studio Layout Borders
+            </button>
           </div>
         )}
       </div>

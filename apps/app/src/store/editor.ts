@@ -113,9 +113,18 @@ export interface EditorState {
   timelineZoom: number; // 1 to 5
   activeTimelineTool: TimelineToolMode;
 
-  // Sidebars
+  // Sidebars & Studio Layout
   isLeftSidebarOpen: boolean; // LLM
   isRightSidebarOpen: boolean; // Tools
+  toolsSidebarWidth: number;
+  llmSidebarWidth: number;
+  timelineHeight: number;
+  timelineTrackHeaderWidth: number;
+  setToolsSidebarWidth: (width: number) => void;
+  setLlmSidebarWidth: (width: number) => void;
+  setTimelineHeight: (height: number) => void;
+  setTimelineTrackHeaderWidth: (width: number) => void;
+  resetLayoutDimensions: () => void;
 
   // LLM Assistant & Ollama
   llmMessages: LlmMessage[];
@@ -288,6 +297,34 @@ const INITIAL_LLM_MESSAGES: LlmMessage[] = [
   },
 ];
 
+export const DEFAULT_TOOLS_SIDEBAR_WIDTH = 320;
+export const MIN_TOOLS_SIDEBAR_WIDTH = 240;
+export const MAX_TOOLS_SIDEBAR_WIDTH = 560;
+
+export const DEFAULT_LLM_SIDEBAR_WIDTH = 320;
+export const MIN_LLM_SIDEBAR_WIDTH = 240;
+export const MAX_LLM_SIDEBAR_WIDTH = 560;
+
+export const DEFAULT_TIMELINE_HEIGHT = 240;
+export const MIN_TIMELINE_HEIGHT = 130;
+export const MAX_TIMELINE_HEIGHT = 580;
+
+export const DEFAULT_TRACK_HEADER_WIDTH = 124;
+export const MIN_TRACK_HEADER_WIDTH = 84;
+export const MAX_TRACK_HEADER_WIDTH = 240;
+
+function getStoredLayoutValue(key: string, fallback: number, min: number, max: number): number {
+  if (typeof window === "undefined" || !window.localStorage) return fallback;
+  try {
+    const raw = window.localStorage.getItem(key);
+    if (!raw) return fallback;
+    const val = parseFloat(raw);
+    return isNaN(val) ? fallback : Math.max(min, Math.min(max, val));
+  } catch {
+    return fallback;
+  }
+}
+
 export const useEditor = create<EditorState>((set, get) => ({
   project: null,
   currentTimeMs: 0,
@@ -309,6 +346,30 @@ export const useEditor = create<EditorState>((set, get) => ({
 
   isLeftSidebarOpen: false,
   isRightSidebarOpen: true,
+  toolsSidebarWidth: getStoredLayoutValue(
+    "domolens:tools-sidebar-width",
+    DEFAULT_TOOLS_SIDEBAR_WIDTH,
+    MIN_TOOLS_SIDEBAR_WIDTH,
+    MAX_TOOLS_SIDEBAR_WIDTH,
+  ),
+  llmSidebarWidth: getStoredLayoutValue(
+    "domolens:llm-sidebar-width",
+    DEFAULT_LLM_SIDEBAR_WIDTH,
+    MIN_LLM_SIDEBAR_WIDTH,
+    MAX_LLM_SIDEBAR_WIDTH,
+  ),
+  timelineHeight: getStoredLayoutValue(
+    "domolens:timeline-height",
+    DEFAULT_TIMELINE_HEIGHT,
+    MIN_TIMELINE_HEIGHT,
+    MAX_TIMELINE_HEIGHT,
+  ),
+  timelineTrackHeaderWidth: getStoredLayoutValue(
+    "domolens:track-header-width",
+    DEFAULT_TRACK_HEADER_WIDTH,
+    MIN_TRACK_HEADER_WIDTH,
+    MAX_TRACK_HEADER_WIDTH,
+  ),
 
   llmMessages: INITIAL_LLM_MESSAGES,
   isLlmThinking: false,
@@ -634,6 +695,40 @@ export const useEditor = create<EditorState>((set, get) => ({
   setActiveToolTab: (tab) => set({ activeToolTab: tab }),
   toggleLeftSidebar: () => set((s) => ({ isLeftSidebarOpen: !s.isLeftSidebarOpen })),
   toggleRightSidebar: () => set((s) => ({ isRightSidebarOpen: !s.isRightSidebarOpen })),
+  setToolsSidebarWidth: (width: number) => {
+    const clamped = Math.max(MIN_TOOLS_SIDEBAR_WIDTH, Math.min(MAX_TOOLS_SIDEBAR_WIDTH, Math.round(width)));
+    try { window.localStorage.setItem("domolens:tools-sidebar-width", String(clamped)); } catch {}
+    set({ toolsSidebarWidth: clamped });
+  },
+  setLlmSidebarWidth: (width: number) => {
+    const clamped = Math.max(MIN_LLM_SIDEBAR_WIDTH, Math.min(MAX_LLM_SIDEBAR_WIDTH, Math.round(width)));
+    try { window.localStorage.setItem("domolens:llm-sidebar-width", String(clamped)); } catch {}
+    set({ llmSidebarWidth: clamped });
+  },
+  setTimelineHeight: (height: number) => {
+    const clamped = Math.max(MIN_TIMELINE_HEIGHT, Math.min(MAX_TIMELINE_HEIGHT, Math.round(height)));
+    try { window.localStorage.setItem("domolens:timeline-height", String(clamped)); } catch {}
+    set({ timelineHeight: clamped });
+  },
+  setTimelineTrackHeaderWidth: (width: number) => {
+    const clamped = Math.max(MIN_TRACK_HEADER_WIDTH, Math.min(MAX_TRACK_HEADER_WIDTH, Math.round(width)));
+    try { window.localStorage.setItem("domolens:track-header-width", String(clamped)); } catch {}
+    set({ timelineTrackHeaderWidth: clamped });
+  },
+  resetLayoutDimensions: () => {
+    try {
+      window.localStorage.removeItem("domolens:tools-sidebar-width");
+      window.localStorage.removeItem("domolens:llm-sidebar-width");
+      window.localStorage.removeItem("domolens:timeline-height");
+      window.localStorage.removeItem("domolens:track-header-width");
+    } catch {}
+    set({
+      toolsSidebarWidth: DEFAULT_TOOLS_SIDEBAR_WIDTH,
+      llmSidebarWidth: DEFAULT_LLM_SIDEBAR_WIDTH,
+      timelineHeight: DEFAULT_TIMELINE_HEIGHT,
+      timelineTrackHeaderWidth: DEFAULT_TRACK_HEADER_WIDTH,
+    });
+  },
   setTimelineZoom: (zoom) => set({ timelineZoom: Math.max(0.5, Math.min(5, zoom)) }),
   setActiveTimelineTool: (tool: TimelineToolMode) => {
     const valid: TimelineToolMode[] = ["select", "split", "pan"];
