@@ -1873,3 +1873,24 @@ export function mapVideoPointToViewport(
   }
   return { x, y };
 }
+
+/**
+ * Returns the recorded cursor trajectory, or, when none was captured (imported
+ * clips), a fallback path that glides the cursor between the recorded clicks so
+ * the overlay cursor still moves instead of sitting frozen at the center.
+ */
+export function ensureCursorTrajectory(
+  trajectory: import("./project").CursorTrajectoryPoint[] | undefined,
+  clicks: Array<{ timestampMs: number; x: number; y: number }> | undefined,
+): import("./project").CursorTrajectoryPoint[] {
+  if (trajectory && trajectory.length > 0) return trajectory;
+  if (!clicks || clicks.length === 0) return trajectory ?? [];
+  const sorted = [...clicks].sort((a, b) => a.timestampMs - b.timestampMs);
+  const pts: import("./project").CursorTrajectoryPoint[] = [];
+  const first = sorted[0]!;
+  if (first.timestampMs > 0) pts.push({ timestampMs: 0, x: 0.5, y: 0.5 });
+  for (const c of sorted) {
+    pts.push({ timestampMs: c.timestampMs, x: c.x, y: c.y });
+  }
+  return pts;
+}

@@ -22,6 +22,7 @@ import {
   screenToVideoCoordinates,
   smoothCursorTrajectory,
   mapVideoPointToViewport,
+  ensureCursorTrajectory,
   TEXT_CARD_STYLE_DEFINITIONS,
   type CursorAvatar,
   type CursorStyle,
@@ -384,7 +385,7 @@ export function VideoCanvas({ project, currentTimeMs: propTimeMs }: VideoCanvasP
   // OpenScreen smooth trajectory computation
   const smoothedTrajectory = useMemo(() => {
     return smoothCursorTrajectory(
-      project.cursorTrajectory || [],
+      ensureCursorTrajectory(project.cursorTrajectory, clicks),
       looks.cursorSmoothing || "smooth",
       clicks,
     );

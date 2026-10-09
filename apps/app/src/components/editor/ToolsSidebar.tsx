@@ -1999,7 +1999,7 @@ export function ToolsSidebar() {
                     <button
                       key={cur.id}
                       type="button"
-                      onClick={() => updateLooks({ cursorStyle: cur.id })}
+                      onClick={() => updateLooks({ cursorStyle: cur.id, showCursor: cur.id !== "hidden" })}
                       className={`rounded-lg border p-2 text-left text-xs transition-all ${
                         isActive
                           ? "border-white bg-white/20 text-white font-bold ring-1 ring-white/50"

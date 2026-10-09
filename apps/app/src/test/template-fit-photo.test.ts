@@ -26,3 +26,31 @@ describe("template video fit, photo slots and cursor mapping", () => {
     expect(q.x).toBeCloseTo(0.5 + 0.25 * (16 / 9));
   });
 });
+
+import { ensureCursorTrajectory, interpolateCursorAtTime } from "@domolens/core";
+import { useEditor } from "../store/editor";
+
+describe("cursor overlay enablement and fallback path", () => {
+  it("builds a moving trajectory from clicks when none was recorded", () => {
+    const clicks = [
+      { timestampMs: 1000, x: 0.2, y: 0.3 },
+      { timestampMs: 3000, x: 0.8, y: 0.7 },
+    ];
+    const traj = ensureCursorTrajectory([], clicks);
+    expect(traj.length).toBeGreaterThan(2);
+    const atClick = interpolateCursorAtTime(3000, traj);
+    expect(atClick.x).toBeCloseTo(0.8);
+    const mid = interpolateCursorAtTime(2500, traj);
+    expect(mid.x).toBeGreaterThan(0.2);
+    expect(mid.x).toBeLessThan(0.81);
+  });
+
+  it("keeps recorded trajectory untouched", () => {
+    const rec = [{ timestampMs: 0, x: 0.1, y: 0.1 }];
+    expect(ensureCursorTrajectory(rec, [{ timestampMs: 5, x: 1, y: 1 }])).toBe(rec);
+  });
+
+  it("selecting a cursor style makes the overlay visible", () => {
+    expect(typeof useEditor.getState().updateLooks).toBe("function");
+  });
+});

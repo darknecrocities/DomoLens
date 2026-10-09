@@ -5,6 +5,7 @@ import {
   getCursorPreset,
   smoothCursorTrajectory,
   mapVideoPointToViewport,
+  ensureCursorTrajectory,
   CLICK_SOUND_PROFILES,
   TEXT_CARD_STYLE_DEFINITIONS,
   TYPING_SOUND_PROFILES,
@@ -1061,7 +1062,7 @@ export async function renderProjectVideo(options: RenderOptions): Promise<Render
 
   // Pre-smooth cursor trajectory once for fast O(1) rendering
   const smoothedTrajectory = smoothCursorTrajectory(
-    project.cursorTrajectory || [],
+    ensureCursorTrajectory(project.cursorTrajectory, project.clicks),
     looks.cursorSmoothing || "smooth",
     project.clicks,
   );
