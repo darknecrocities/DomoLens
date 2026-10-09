@@ -210,12 +210,16 @@ jobs:
       contents: write
     runs-on: ubuntu-22.04
     steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
       - name: Publish Release Atomically as Latest
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
         run: |
           TAG="${{ needs.create-release.outputs.tag }}"
           echo "Publishing release $TAG as latest public release..."
-          gh release edit "$TAG" --draft=false --latest
+          gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --draft=false --latest
           echo "Release $TAG published across all platforms."
 
