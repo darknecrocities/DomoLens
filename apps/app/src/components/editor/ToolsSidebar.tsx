@@ -71,6 +71,8 @@ export function ToolsSidebar() {
   const updateZoomBlock = useEditor((s) => s.updateZoomBlock);
   const deleteZoomBlock = useEditor((s) => s.deleteZoomBlock);
   const clearZoomBlocks = useEditor((s) => s.clearZoomBlocks);
+  const applyZoomBlockSettings = useEditor((s) => s.applyZoomBlockSettings);
+  const applyZoomBlockSettingsToAll = useEditor((s) => s.applyZoomBlockSettingsToAll);
   const updateKeyframe = useEditor((s) => s.updateKeyframe);
   const deleteKeyframe = useEditor((s) => s.deleteKeyframe);
   const clearKeyframes = useEditor((s) => s.clearKeyframes);
@@ -93,6 +95,7 @@ export function ToolsSidebar() {
   const setExportModalOpen = useEditor((s) => s.setExportModalOpen);
 
   const [holdDurationSec, setHoldDurationSec] = useState(1.0);
+  const [shiftDurationSec, setShiftDurationSec] = useState(0.75);
   const [zoomScale, setZoomScale] = useState(1.85);
   const [selectedBgCategory, setSelectedBgCategory] = useState<string>("all");
 
@@ -233,6 +236,20 @@ export function ToolsSidebar() {
                   className="w-full accent-white cursor-pointer h-1.5 bg-ink-800 rounded-lg"
                 />
 
+                <div className="flex justify-between text-[11px] pt-1">
+                  <span className="text-fg-muted">Camera Shifting Speed:</span>
+                  <span className="font-mono text-white font-semibold">{shiftDurationSec.toFixed(2)}s ({Math.round(shiftDurationSec * 1000)}ms)</span>
+                </div>
+                <input
+                  type="range"
+                  min="0.3"
+                  max="1.5"
+                  step="0.05"
+                  value={shiftDurationSec}
+                  onChange={(e) => setShiftDurationSec(parseFloat(e.target.value))}
+                  className="w-full accent-white cursor-pointer h-1.5 bg-ink-800 rounded-lg"
+                />
+
                 <div className="flex items-center justify-between rounded-lg border border-ink-800 bg-ink-950/80 p-2.5 mt-2">
                   <div>
                     <span className="block text-xs font-semibold text-white">Dynamic Camera Reframing</span>
@@ -254,6 +271,7 @@ export function ToolsSidebar() {
                     plotInteractions({
                       holdDurationMs: Math.round(holdDurationSec * 1000),
                       inactivityResetMs: Math.round(holdDurationSec * 1000),
+                      leadInMs: Math.round(shiftDurationSec * 1000),
                       continuousGlide: true,
                       scale: zoomScale,
                     })
@@ -302,7 +320,7 @@ export function ToolsSidebar() {
               </div>
 
               {selectedBlock && (
-                <div className="rounded-xl border border-neutral-700 bg-neutral-900 p-2.5 space-y-2">
+                <div className="rounded-xl border border-neutral-700 bg-neutral-900 p-2.5 space-y-2.5">
                   <div className="flex items-center justify-between">
                     <span className="font-semibold text-fg">Selected Zoom Block</span>
                     <button
@@ -314,8 +332,9 @@ export function ToolsSidebar() {
                       <Trash2 className="size-3.5" />
                     </button>
                   </div>
+
                   <div className="flex items-center justify-between text-[11px]">
-                    <span className="text-fg-muted">Scale: {selectedBlock.scale.toFixed(1)}x</span>
+                    <span className="text-fg-muted">Scale: {selectedBlock.scale.toFixed(2)}x</span>
                     <span className="font-mono text-fg-faint">
                       {formatDuration(selectedBlock.startTimeMs)} - {formatDuration(selectedBlock.endTimeMs)}
                     </span>
@@ -331,7 +350,89 @@ export function ToolsSidebar() {
                     }
                     className="w-full accent-white cursor-pointer h-1.5 bg-ink-800 rounded-lg"
                   />
-                  <div className="flex justify-between text-[10px] text-fg-muted pt-1">
+
+                  {/* Shifting Speed / Duration */}
+                  <div className="pt-1 border-t border-ink-800">
+                    <div className="flex items-center justify-between text-[11px]">
+                      <span className="text-fg-muted">Shifting Speed / Duration:</span>
+                      <span className="font-mono text-white font-semibold">
+                        {(selectedBlock.shiftDurationMs ?? 750)}ms ({(((selectedBlock.shiftDurationMs ?? 750) / 1000)).toFixed(2)}s)
+                      </span>
+                    </div>
+                    <input
+                      type="range"
+                      min="300"
+                      max="1500"
+                      step="50"
+                      value={selectedBlock.shiftDurationMs ?? 750}
+                      onChange={(e) =>
+                        updateZoomBlock(selectedBlock.id, {
+                          shiftDurationMs: parseInt(e.target.value, 10),
+                        })
+                      }
+                      className="w-full accent-white cursor-pointer h-1.5 bg-ink-800 rounded-lg mt-1"
+                    />
+                    <div className="grid grid-cols-4 gap-1 mt-1.5">
+                      {[
+                        { label: "Snappy (400ms)", ms: 400 },
+                        { label: "Smooth (750ms)", ms: 750 },
+                        { label: "Cinematic (1s)", ms: 1000 },
+                        { label: "Slow (1.3s)", ms: 1300 },
+                      ].map((preset) => (
+                        <button
+                          key={preset.ms}
+                          type="button"
+                          onClick={() =>
+                            updateZoomBlock(selectedBlock.id, { shiftDurationMs: preset.ms })
+                          }
+                          className={`rounded py-0.5 text-[9px] font-medium border text-center transition-colors ${
+                            (selectedBlock.shiftDurationMs ?? 750) === preset.ms
+                              ? "bg-white text-black border-white font-bold"
+                              : "bg-ink-800 text-fg-muted border-ink-700 hover:text-white hover:bg-ink-700"
+                          }`}
+                        >
+                          {preset.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Shifting Animation Style */}
+                  <div className="pt-1 border-t border-ink-800">
+                    <span className="text-[11px] text-fg-muted block mb-1">
+                      Shifting Animation Style:
+                    </span>
+                    <div className="grid grid-cols-3 gap-1">
+                      {[
+                        { id: "smooth" as const, label: "Smooth Ease" },
+                        { id: "cinematic" as const, label: "Cinematic" },
+                        { id: "spring" as const, label: "Spring" },
+                        { id: "drift" as const, label: "Steadicam" },
+                        { id: "linear" as const, label: "Linear" },
+                      ].map((anim) => {
+                        const isCur = (selectedBlock.shiftAnimation || "smooth") === anim.id;
+                        return (
+                          <button
+                            key={anim.id}
+                            type="button"
+                            onClick={() =>
+                              updateZoomBlock(selectedBlock.id, { shiftAnimation: anim.id })
+                            }
+                            className={`rounded py-1 px-1.5 text-[9.5px] font-medium transition-colors border text-center ${
+                              isCur
+                                ? "bg-white text-black border-white font-bold"
+                                : "bg-ink-800 text-fg-muted border-ink-700 hover:text-white hover:bg-ink-700"
+                            }`}
+                          >
+                            {anim.label}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Focal Target */}
+                  <div className="flex justify-between text-[10px] text-fg-muted pt-1 border-t border-ink-800">
                     <span>Focal Target:</span>
                     <span className="font-mono text-white">
                       ({Math.round(selectedBlock.targetX * 100)}%, {Math.round(selectedBlock.targetY * 100)}%)
@@ -367,6 +468,39 @@ export function ToolsSidebar() {
                       Dead Center (50%, 50%)
                     </button>
                   </div>
+
+                  {/* Apply & Apply to All Action Buttons */}
+                  <div className="pt-2 border-t border-ink-800/80 flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() =>
+                        applyZoomBlockSettings(selectedBlock.id, {
+                          scale: selectedBlock.scale,
+                          shiftDurationMs: selectedBlock.shiftDurationMs ?? 750,
+                          shiftAnimation: selectedBlock.shiftAnimation || "smooth",
+                        })
+                      }
+                      className="flex-1 rounded-lg bg-white py-1.5 text-center text-[11px] font-bold text-black hover:bg-neutral-200 transition-colors shadow-sm"
+                      title="Apply shift speed and animation to this zoom block"
+                    >
+                      Apply
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        applyZoomBlockSettingsToAll({
+                          scale: selectedBlock.scale,
+                          shiftDurationMs: selectedBlock.shiftDurationMs ?? 750,
+                          shiftAnimation: selectedBlock.shiftAnimation || "smooth",
+                        })
+                      }
+                      className="flex-1 rounded-lg border border-neutral-700 bg-neutral-800 py-1.5 text-center text-[11px] font-semibold text-white hover:bg-neutral-700 transition-colors shadow-sm"
+                      title="Apply this zoom block's scale, speed, and shifting animation across ALL zoom blocks"
+                    >
+                      Apply to All ({project?.zoomBlocks?.length ?? 1})
+                    </button>
+                  </div>
+
                   <p className="text-[10px] text-fg-faint leading-tight">
                     Tip: Click directly on the preview video canvas to center this zoom on any button, search bar, or element.
                   </p>
@@ -1105,7 +1239,7 @@ export function ToolsSidebar() {
                   </button>
                   <button
                     type="button"
-                    onClick={() => updateTextOverlay(selectedText.id, { y: 0.85 })}
+                    onClick={() => updateTextOverlay(selectedText.id, { y: 0.88, fontSize: 14, cardStyle: "glass" })}
                     className="flex-1 rounded bg-ink-800 py-1 text-[10px] font-medium text-fg-muted hover:text-fg"
                   >
                     Bottom Subtitle
@@ -1504,7 +1638,7 @@ export function ToolsSidebar() {
                   }
                   className={`rounded-lg py-1.5 px-1.5 text-[9.5px] font-semibold border transition-all truncate text-center ${
                     project?.looks.windowFrame === "macos"
-                      ? "border-indigo-400 bg-indigo-500/15 text-indigo-300 font-bold"
+                      ? "border-white bg-white/15 text-white font-bold"
                       : "border-ink-800 bg-ink-900/60 text-fg-muted hover:text-white hover:border-ink-700"
                   }`}
                   title="macOS studio window mockup frame"
@@ -1603,14 +1737,15 @@ export function ToolsSidebar() {
                 <span className="block text-[11px] font-semibold text-white mb-1.5">
                   Window Frame Shell
                 </span>
-                <div className="grid grid-cols-3 gap-1.5">
+                <div className="grid grid-cols-2 gap-1.5">
                   {[
-                    { id: "macos" as const, label: "macOS" },
-                    { id: "safari" as const, label: "Safari" },
-                    { id: "terminal" as const, label: "Terminal" },
-                    { id: "chrome" as const, label: "Chrome" },
-                    { id: "glass" as const, label: "Glass" },
-                    { id: "none" as const, label: "None" },
+                    { id: "macos" as const, label: "macOS Window", desc: "Cupertino traffic lights" },
+                    { id: "windows" as const, label: "Windows Terminal", desc: "Win 11 PowerShell with controls" },
+                    { id: "terminal" as const, label: "macOS Terminal", desc: "Dark zsh terminal prompt" },
+                    { id: "chrome" as const, label: "Google Chrome", desc: "Tab strip + Omnibox URL" },
+                    { id: "safari" as const, label: "Safari Browser", desc: "Unified address bar" },
+                    { id: "glass" as const, label: "Frosted Glass", desc: "Translucent glass shell" },
+                    { id: "none" as const, label: "Frameless", desc: "Edge-to-edge raw canvas" },
                   ].map((wf) => {
                     const isActive = (project?.looks.windowFrame || "macos") === wf.id;
                     return (
@@ -1618,36 +1753,21 @@ export function ToolsSidebar() {
                         key={wf.id}
                         type="button"
                         onClick={() => updateLooks({ windowFrame: wf.id })}
-                        className={`rounded-lg py-1 px-2 text-[10px] font-semibold transition-all ${
+                        className={`rounded-lg py-1.5 px-2 text-left transition-all border ${
                           isActive
-                            ? "bg-white text-black font-bold shadow-sm"
-                            : "bg-ink-800 text-fg-muted hover:text-white hover:bg-ink-700"
+                            ? "bg-white text-black font-bold shadow-sm border-white"
+                            : "bg-ink-900 border-ink-800 text-fg-muted hover:text-white hover:bg-ink-800"
                         }`}
                       >
-                        {wf.label}
+                        <span className="block text-[11px] font-semibold leading-tight">{wf.label}</span>
+                        <span className={`block text-[9px] leading-tight mt-0.5 ${isActive ? "text-neutral-700 font-medium" : "text-fg-faint"}`}>
+                          {wf.desc}
+                        </span>
                       </button>
                     );
                   })}
                 </div>
 
-                {(project?.looks.windowFrame === "safari" ||
-                  project?.looks.windowFrame === "terminal" ||
-                  project?.looks.windowFrame === "chrome") && (
-                  <div className="mt-2">
-                    <span className="text-[10px] text-fg-muted block mb-0.5">Mockup URL / Title:</span>
-                    <input
-                      type="text"
-                      value={project?.looks.mockupUrl || ""}
-                      placeholder={
-                        project?.looks.windowFrame === "terminal"
-                          ? "terminal — zsh — 80x24"
-                          : "app.yourdomain.com"
-                      }
-                      onChange={(e) => updateLooks({ mockupUrl: e.target.value })}
-                      className="w-full rounded-md border border-neutral-700 bg-neutral-900 px-2 py-1 text-[11px] text-white font-mono"
-                    />
-                  </div>
-                )}
               </div>
 
               {/* 3D Perspective Tilt Plot Box & Kinetic Motion Engine */}

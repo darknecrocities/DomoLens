@@ -18,8 +18,8 @@ export const DEFAULT_ZOOM_OPTIONS: AutoZoomOptions = {
   defaultScale: 1.8,
   minDurationMs: 1800,
   maxDurationMs: 4500,
-  leadInMs: 350,
-  leadOutMs: 400,
+  leadInMs: 750,
+  leadOutMs: 450,
   clusterWindowMs: 2000,
   clusterDistance: 0.25,
 };
@@ -229,30 +229,70 @@ export function calculateDeadzoneCamera(
  */
 export function calculateIntentZoom(
   event: import("./project").InteractionEvent | import("./project").ClickEvent,
-  options?: { typingZoomOut?: boolean },
-): { scale: number; holdMs: number; offsetY: number } {
+  options?: { typingZoomOut?: boolean; baseScale?: number },
+): { scale: number; holdMs: number; offsetY: number; offsetX?: number } {
   const isTyping = "type" in event && event.type === "typing";
   if (isTyping) {
     const zoomOut = options?.typingZoomOut === true;
     return {
-      scale: zoomOut ? 1.0 : 1.85,
+      scale: zoomOut ? 1.0 : (options?.baseScale ?? 1.85),
       holdMs: zoomOut ? 1600 : 2200,
       offsetY: 0,
+      offsetX: 0,
     };
   }
   const isHighlight = "type" in event && event.type === "highlight";
   if (isHighlight) {
     return {
-      scale: 1.80,
+      scale: options?.baseScale ?? 1.80,
       holdMs: 2400,
       offsetY: 0,
+      offsetX: 0,
     };
   }
-  const isRightClick = event.button === "right";
-  if (isRightClick) {
-    return { scale: 1.7, holdMs: 2200, offsetY: 0 };
+
+  // Dynamic edge detection & framing:
+  // If a click is near the screen boundary (e.g. browser tabs at top, dock at bottom, sidebar on left/right):
+  // 1. Dynamically soften the scale (1.45x - 1.65x instead of 1.85x) to maintain visual context and prevent extreme corner pinch.
+  // 2. Dynamically offset camera framing inward so the tab or edge button has clean headroom and breathing room.
+  const distLeft = event.x;
+  const distRight = 1 - event.x;
+  const distTop = event.y;
+  const distBottom = 1 - event.y;
+  const minEdgeDist = Math.min(distLeft, distRight, distTop, distBottom);
+
+  let scale = options?.baseScale ?? (event.button === "right" ? 1.7 : 1.85);
+  let offsetY = 0;
+  let offsetX = 0;
+
+  if (minEdgeDist < 0.12) {
+    // Dynamic edge scale: gently ease towards 1.50x at the extreme edge
+    const edgeFloor = Math.min(1.50, scale);
+    const edgeRatio = Math.max(0, Math.min(1, minEdgeDist / 0.12));
+    scale = edgeFloor + (scale - edgeFloor) * edgeRatio;
+
+    // Dynamic inward framing:
+    // If clicking a tab near the top (e.g. y = 0.04), tilt camera center slightly down (+offsetY)
+    // so the tab remains comfortably in frame without being clipped at the top boundary!
+    if (distTop < 0.14) {
+      offsetY = (0.14 - distTop) * 0.40;
+    } else if (distBottom < 0.14) {
+      offsetY = -(0.14 - distBottom) * 0.40;
+    }
+
+    if (distLeft < 0.14) {
+      offsetX = (0.14 - distLeft) * 0.40;
+    } else if (distRight < 0.14) {
+      offsetX = -(0.14 - distRight) * 0.40;
+    }
   }
-  return { scale: 1.85, holdMs: 2000, offsetY: 0 };
+
+  return {
+    scale: Number(scale.toFixed(2)),
+    holdMs: 2000,
+    offsetY,
+    offsetX,
+  };
 }
 
 
@@ -371,6 +411,8 @@ export function detectZoomBlocksFromClicks(
         targetY: clamped.y,
         scale: options.defaultScale,
         enabled: true,
+        shiftDurationMs: options.leadInMs,
+        shiftAnimation: "smooth",
       });
     }
   }
@@ -709,7 +751,8 @@ export function calculateCameraAtTime(
     const block = activeBlocks[i]!;
     const nextBlock = activeBlocks[i + 1];
 
-    const transitionInStart = Math.max(0, block.startTimeMs - leadInMs);
+    const blockLeadIn = block.shiftDurationMs ?? leadInMs;
+    const transitionInStart = Math.max(0, block.startTimeMs - blockLeadIn);
     const transitionInEnd = block.startTimeMs;
     const transitionOutStart = block.endTimeMs;
     const transitionOutEnd = block.endTimeMs + leadOutMs;
@@ -728,7 +771,12 @@ export function calculateCameraAtTime(
     // 1. Inside lead-in transition: smoothly zoom in directly on block target
     if (!glidedFromPrev && timeMs >= transitionInStart && timeMs < transitionInEnd) {
       const span = transitionInEnd - transitionInStart;
-      const progress = span > 0 ? evaluateCameraEasing((timeMs - transitionInStart) / span, options?.cameraPhysics || "smooth") : 1;
+      const easingPhysics = block.shiftAnimation === "spring"
+        ? "spring"
+        : block.shiftAnimation === "linear"
+          ? "linear"
+          : (options?.cameraPhysics || "smooth");
+      const progress = span > 0 ? evaluateCameraEasing((timeMs - transitionInStart) / span, easingPhysics) : 1;
       const target = clampCameraToBounds(block.targetX, block.targetY, block.scale, "center");
       const currentScale = 1.0 + (block.scale - 1.0) * progress;
       return {
@@ -841,6 +889,8 @@ export interface PlotInteractionsOptions {
   typingZoomOut?: boolean;
   centerTyping?: boolean;
   initialEstablishingMs?: number;
+  shiftAnimation?: import("./project").ShiftAnimationStyle;
+  cameraPhysics?: import("./project").CameraPhysicsPreset;
 }
 
 /**
@@ -1100,9 +1150,9 @@ export function plotInteractionsToKeyframesAndZoomBlocks(
     const intent = isTypingCluster
       ? calculateIntentZoom(
           { id: firstEvt.id, type: "typing", timestampMs: firstEvt.timestampMs, x: firstEvt.x, y: firstEvt.y },
-          { typingZoomOut: true },
+          { typingZoomOut: true, baseScale: options.scale },
         )
-      : calculateIntentZoom(firstEvt, { typingZoomOut: options.typingZoomOut });
+      : calculateIntentZoom(firstEvt, { typingZoomOut: options.typingZoomOut, baseScale: options.scale });
     const clusterScale = isTypingCluster ? 1.0 : (options.scale ?? intent.scale);
     const clusterHoldMs = options.holdDurationMs ?? (isTypingCluster ? 1400 : highlightEvt ? 1600 : hasTyping ? 1400 : 1200);
 
@@ -1169,7 +1219,7 @@ export function plotInteractionsToKeyframesAndZoomBlocks(
       ? { x: 0.5, y: 0.5 }
       : typingTarget
         ? clampCameraToBounds(typingTarget.x, typingTarget.y, clusterScale, "center")
-        : clampCameraToBounds(focalEvt.x, focalEvt.y + intent.offsetY, clusterScale, "center");
+        : clampCameraToBounds(focalEvt.x + (intent.offsetX || 0), focalEvt.y + intent.offsetY, clusterScale, "center");
 
     const blockEnd = canGlideToNext
       ? Math.min(endMs, nextCluster![0]!.timestampMs)
@@ -1184,6 +1234,8 @@ export function plotInteractionsToKeyframesAndZoomBlocks(
       targetY: clampedFirst.y,
       scale: clusterScale,
       enabled: true,
+      shiftDurationMs: leadInMs,
+      shiftAnimation: options.shiftAnimation || (options.cameraPhysics as import("./project").ShiftAnimationStyle) || "smooth",
     });
 
     // Strictly monotonic keyframe calculations:
@@ -1303,11 +1355,12 @@ export function plotInteractionsToKeyframesAndZoomBlocks(
       const isMidTyping = midEvt.type === "typing" && options.typingZoomOut === true;
       const isTypingMid = midEvt.type === "typing";
       const midTypingTarget = isTypingMid ? calculateTypingTarget(midEvt, options.centerTyping === true) : null;
+      const midIntent = calculateIntentZoom(midEvt);
       const clampedMid = isMidTyping
         ? { x: 0.5, y: 0.5 }
         : midTypingTarget
           ? clampCameraToBounds(midTypingTarget.x, midTypingTarget.y, clusterScale, "center")
-          : clampCameraToBounds(midEvt.x, midEvt.y, clusterScale, "center");
+          : clampCameraToBounds(midEvt.x + (midIntent.offsetX || 0), midEvt.y + midIntent.offsetY, clusterScale, "center");
       const trackMin = firstEvt.timestampMs + 60;
       const trackMax = Math.max(trackMin, endMs - effLeadOut - 100);
       const trackTime = Math.max(trackMin, Math.min(trackMax, midEvt.timestampMs));
@@ -1326,9 +1379,9 @@ export function plotInteractionsToKeyframesAndZoomBlocks(
       }
 
       // If there is a noticeable gap (> 450ms) and meaningful distance (> 0.06), hold camera steady on previous
-      // action before briskly gliding to the next action
+      // action before smoothly gliding to the next action
       if (gap > 450 && targetDist > 0.06) {
-        const panSpan = Math.min(1000, Math.max(450, Math.round(gap * 0.55)));
+        const panSpan = Math.min(1000, Math.max(650, Math.round(gap * 0.70)));
         const panStart = trackTime - panSpan;
         if (panStart > lastTrackTime + 80) {
           keyframes.push({
@@ -1448,9 +1501,9 @@ export function plotInteractionsToKeyframesAndZoomBlocks(
       const nextIntent = nextIsTyping
         ? calculateIntentZoom(
             { id: nextFirst.id, type: "typing", timestampMs: nextFirst.timestampMs, x: nextFirst.x, y: nextFirst.y },
-            { typingZoomOut: true },
+            { typingZoomOut: true, baseScale: options.scale },
           )
-        : calculateIntentZoom(nextFirst, { typingZoomOut: options.typingZoomOut });
+        : calculateIntentZoom(nextFirst, { typingZoomOut: options.typingZoomOut, baseScale: options.scale });
       const nextScale = nextIsTyping ? 1.0 : (options.scale ?? nextIntent.scale);
       const nextTypingTarget = nextHasTyping
         ? calculateTypingTarget(nextFirst, options.centerTyping === true)
@@ -1459,7 +1512,7 @@ export function plotInteractionsToKeyframesAndZoomBlocks(
         ? { x: 0.5, y: 0.5 }
         : nextTypingTarget
           ? clampCameraToBounds(nextTypingTarget.x, nextTypingTarget.y, nextScale, "center")
-          : clampCameraToBounds(nextFirst.x, nextFirst.y + nextIntent.offsetY, nextScale, "center");
+          : clampCameraToBounds(nextFirst.x + (nextIntent.offsetX || 0), nextFirst.y + nextIntent.offsetY, nextScale, "center");
 
       const spatial = classifySpatialTransition(clampedLast, clampedNext);
       const glideStart = Math.min(holdTime, Math.max(holdTime - 100, nextFirst.timestampMs - leadInMs));
@@ -1596,8 +1649,8 @@ export function zoomBlocksToKeyframes(
   if (active.length === 0 || videoDurationMs <= 0) return [];
 
   const keyframes: import("./project").KeyframeNode[] = [];
-  const leadIn = options?.leadInMs ?? 1000;
-  const leadOut = options?.leadOutMs ?? 350;
+  const defaultLeadIn = options?.leadInMs ?? 750;
+  const defaultLeadOut = options?.leadOutMs ?? 400;
   const maxGlideGapMs = options?.maxGlideGapMs ?? 1000;
 
   for (let i = 0; i < active.length; i++) {
@@ -1605,7 +1658,14 @@ export function zoomBlocksToKeyframes(
     const prev = active[i - 1];
     const next = active[i + 1];
 
-    const rawStart = Math.max(0, b.startTimeMs - leadIn);
+    const blockShiftDuration = b.shiftDurationMs ?? defaultLeadIn;
+    const blockEasing = b.shiftAnimation === "spring"
+      ? "spring"
+      : b.shiftAnimation === "linear"
+        ? "linear"
+        : "cubic";
+
+    const rawStart = Math.max(0, b.startTimeMs - blockShiftDuration);
     const glidedFromPrev = Boolean(
       options?.continuousGlide &&
         prev &&
@@ -1616,7 +1676,7 @@ export function zoomBlocksToKeyframes(
     const startMs = glidedFromPrev ? prev!.endTimeMs : rawStart;
     const holdStartMs = b.startTimeMs;
     const holdEndMs = Math.min(videoDurationMs, b.endTimeMs);
-    const endMs = Math.min(videoDurationMs, holdEndMs + leadOut);
+    const endMs = Math.min(videoDurationMs, holdEndMs + defaultLeadOut);
 
     // Lead-in keyframe: start zooming from 1.0x (unless previous block glided into this one)
     if (!glidedFromPrev) {
@@ -1626,7 +1686,7 @@ export function zoomBlocksToKeyframes(
         scale: 1.0,
         targetX: 0.5,
         targetY: 0.5,
-        easing: "cubic",
+        easing: blockEasing,
       });
     }
 
@@ -1637,7 +1697,7 @@ export function zoomBlocksToKeyframes(
       scale: b.scale,
       targetX: b.targetX,
       targetY: b.targetY,
-      easing: "spring",
+      easing: blockEasing === "linear" ? "linear" : blockEasing === "spring" ? "spring" : "cubic",
     });
 
     // Hold end
@@ -1648,7 +1708,7 @@ export function zoomBlocksToKeyframes(
         scale: b.scale,
         targetX: b.targetX,
         targetY: b.targetY,
-        easing: "cubic",
+        easing: blockEasing,
       });
     }
 
@@ -1667,7 +1727,7 @@ export function zoomBlocksToKeyframes(
         scale: 1.0,
         targetX: 0.5,
         targetY: 0.5,
-        easing: "cubic",
+        easing: blockEasing,
       });
     }
   }

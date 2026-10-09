@@ -28,6 +28,8 @@
     "check:all": "npm run typecheck && npm run test && npm run engine:test",
     "engine": "uv run --project engine python -m domolens_engine",
     "engine:test": "uv run --project engine pytest engine/tests -q",
+    "ollama:start": "bash scripts/run-ollama.sh",
+    "ollama:check": "curl -s http://127.0.0.1:11434/api/tags",
     "landing": "npm run dev -w @domolens/landing",
     "landing:build": "npm run build -w @domolens/landing"
   },

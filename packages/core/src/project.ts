@@ -69,6 +69,8 @@ export interface CursorTrajectoryPoint {
   y: number;
 }
 
+export type ShiftAnimationStyle = "smooth" | "cinematic" | "spring" | "drift" | "linear";
+
 /** A zoom section on the timeline focusing on a point of interest. */
 export interface ZoomBlock {
   id: string;
@@ -82,6 +84,10 @@ export interface ZoomBlock {
   scale: number;
   /** Whether this zoom block is active. */
   enabled: boolean;
+  /** Camera transition / shifting duration in milliseconds (default 750ms). */
+  shiftDurationMs?: number;
+  /** Camera shifting animation style (smooth, cinematic, spring, drift, linear). */
+  shiftAnimation?: ShiftAnimationStyle;
 }
 
 /** A video or media clip on the editor timeline. */
@@ -659,6 +665,6 @@ export const DEFAULT_LOOKS: ProjectLooks = {
   motionBlur: 0,
   cameraPhysics: "spring",
   brandAccentColor: "#6366f1",
-  mockupUrl: "app.domolens.dev",
+  mockupUrl: "",
 };
 

@@ -123,7 +123,7 @@ export function HomeScreen() {
                 }
               >
                 <RefreshCw
-                  className={`size-3 text-white ${isCheckingUpdate ? "animate-spin text-indigo-400" : ""}`}
+                  className={`size-3 text-white ${isCheckingUpdate ? "animate-spin text-white" : ""}`}
                 />
                 <span>
                   {isCheckingUpdate ? "Checking..." : updateStatus === "ready" ? "Update Ready" : "Check Updates"}
@@ -132,12 +132,12 @@ export function HomeScreen() {
                 {(updateStatus === "available" || updateStatus === "ready") && (
                   <span
                     className={`absolute -top-1 -right-1 flex size-2 rounded-full ${
-                      updateStatus === "ready" ? "bg-emerald-400" : "bg-indigo-400"
+                      updateStatus === "ready" ? "bg-emerald-400" : "bg-white"
                     }`}
                   >
                     <span
                       className={`inline-flex size-full animate-ping rounded-full ${
-                        updateStatus === "ready" ? "bg-emerald-400" : "bg-indigo-400"
+                        updateStatus === "ready" ? "bg-emerald-400" : "bg-white"
                       } opacity-75`}
                     />
                   </span>

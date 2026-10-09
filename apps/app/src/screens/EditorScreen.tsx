@@ -52,9 +52,11 @@ export function EditorScreen({ id }: EditorScreenProps) {
   const setExportModalOpen = useEditor((s) => s.setExportModalOpen);
   const isTemplateModalOpen = useEditor((s) => s.isTemplateModalOpen);
   const setTemplateModalOpen = useEditor((s) => s.setTemplateModalOpen);
+  const renameProject = useEditor((s) => s.renameProject);
 
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [titleDraft, setTitleDraft] = useState("");
   // Mobile responsive view selector (<md)
   const [mobileTab, setMobileTab] = useState<"canvas" | "ai" | "tools">("canvas");
 
@@ -75,6 +77,13 @@ export function EditorScreen({ id }: EditorScreenProps) {
   useEffect(() => {
     void loadProject(id);
   }, [id, loadProject]);
+
+  // Sync draft title when project loads
+  useEffect(() => {
+    if (project?.summary?.name) {
+      setTitleDraft(project.summary.name);
+    }
+  }, [project?.summary?.name]);
 
   // Playback timer loop: if no video is mounted, this rAF timer advances playback smoothly;
   // when an HTML5 video is loaded, VideoCanvas's hardware presentation clock drives currentTimeMs with zero latency.
@@ -177,9 +186,27 @@ export function EditorScreen({ id }: EditorScreenProps) {
 
           <div className="h-4 w-px bg-ink-800 hidden sm:block" />
 
-          <span className="max-w-[100px] xs:max-w-[140px] sm:max-w-xs truncate text-xs sm:text-sm font-semibold text-fg">
-            {project.summary.name}
-          </span>
+          <input
+            type="text"
+            value={titleDraft}
+            onChange={(e) => setTitleDraft(e.target.value)}
+            onBlur={() => {
+              const trimmed = titleDraft.trim();
+              if (trimmed && trimmed !== project.summary.name) {
+                void renameProject(trimmed);
+              } else {
+                setTitleDraft(project.summary.name);
+              }
+            }}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                (e.target as HTMLInputElement).blur();
+              }
+            }}
+            className="max-w-[110px] xs:max-w-[160px] sm:max-w-xs truncate text-xs sm:text-sm font-semibold text-fg bg-transparent hover:bg-white/5 focus:bg-ink-900 focus:ring-1 focus:ring-white/20 rounded px-1.5 py-0.5 outline-none transition-all cursor-text"
+            title="Click to rename project"
+            aria-label="Project name"
+          />
         </div>
 
         {/* Center / Right: Sidebar Toggles & Actions */}
@@ -204,11 +231,11 @@ export function EditorScreen({ id }: EditorScreenProps) {
           <button
             type="button"
             onClick={() => setTemplateModalOpen(true)}
-            className="flex items-center gap-1.5 rounded-lg border border-indigo-500/30 bg-indigo-950/40 px-2 sm:px-2.5 py-1 text-xs font-semibold text-indigo-300 hover:bg-indigo-900/60 hover:text-white hover:border-indigo-400 transition-all shadow-sm"
+            className="flex items-center gap-1.5 rounded-lg border border-neutral-700 bg-neutral-900 px-2 sm:px-2.5 py-1 text-xs font-semibold text-neutral-200 hover:bg-neutral-800 hover:text-white hover:border-neutral-600 transition-all shadow-sm"
             data-tutorial-target="templates-button"
             title="Browse & Apply Motion Video Templates"
           >
-            <Wand2 className="size-3.5 text-indigo-400" />
+            <Wand2 className="size-3.5 text-neutral-300" />
             <span className="hidden sm:inline">Templates</span>
           </button>
 

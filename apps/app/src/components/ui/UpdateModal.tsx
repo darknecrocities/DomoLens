@@ -54,7 +54,7 @@ export function UpdateModal() {
         {isChecking && (
           <div className="flex flex-col items-center justify-center py-6 text-center">
             <div className="relative mb-4 flex size-14 items-center justify-center rounded-2xl border border-white/15 bg-white/5 backdrop-blur-xl shadow-lg">
-              <RefreshCw className="size-6 text-indigo-400 animate-spin" />
+              <RefreshCw className="size-6 text-white animate-spin" />
             </div>
             <h3 className="text-base font-semibold text-white">Checking for Updates...</h3>
             <p className="mt-1.5 text-xs text-neutral-400">
@@ -106,7 +106,7 @@ export function UpdateModal() {
               </div>
 
               <div className="text-right">
-                <div className="inline-flex items-center gap-1 rounded-full border border-indigo-500/30 bg-indigo-500/15 px-2 py-0.5 text-[10px] font-mono uppercase font-bold text-indigo-300">
+                <div className="inline-flex items-center gap-1 rounded-full border border-white/20 bg-white/10 px-2 py-0.5 text-[10px] font-mono uppercase font-bold text-white">
                   <Sparkles className="size-3" />
                   <span>Available</span>
                 </div>
@@ -133,7 +133,7 @@ export function UpdateModal() {
               <Button
                 variant="primary"
                 onClick={() => void startDownload()}
-                className="gap-2 bg-gradient-to-r from-indigo-500 to-sky-500 hover:from-indigo-600 hover:to-sky-600 text-white border-0 shadow-lg shadow-indigo-500/20"
+                className="gap-2 bg-white hover:bg-neutral-200 text-black font-semibold border-0 shadow-lg"
               >
                 <Download className="size-4" />
                 <span>Download & Install</span>
@@ -160,7 +160,7 @@ export function UpdateModal() {
             {/* Animated Gradient Progress Bar */}
             <div className="relative h-3 w-full overflow-hidden rounded-full border border-white/10 bg-white/5 p-[1px]">
               <div
-                className="h-full rounded-full bg-gradient-to-r from-indigo-500 via-sky-400 to-emerald-400 transition-all duration-300 ease-out shadow-[0_0_12px_rgba(56,189,248,0.5)]"
+                className="h-full rounded-full bg-gradient-to-r from-neutral-400 via-sky-400 to-emerald-400 transition-all duration-300 ease-out shadow-[0_0_12px_rgba(56,189,248,0.5)]"
                 style={{ width: `${Math.max(downloadProgress, 3)}%` }}
               />
             </div>
@@ -249,7 +249,7 @@ export function UpdateModal() {
                 href="https://github.com/darknecrocities/DomoLens/releases"
                 target="_blank"
                 rel="noreferrer"
-                className="inline-flex items-center gap-1 text-indigo-400 hover:text-indigo-300 underline underline-offset-2"
+                className="inline-flex items-center gap-1 text-white hover:text-neutral-300 underline underline-offset-2"
               >
                 <span>Releases</span>
                 <ExternalLink className="size-3" />

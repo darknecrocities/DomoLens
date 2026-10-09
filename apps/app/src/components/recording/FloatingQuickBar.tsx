@@ -27,13 +27,13 @@ export function FloatingQuickBar({
   defaultMode = "laptop",
 }: FloatingQuickBarProps) {
   const [deviceMode, setDeviceMode] = useState<"laptop" | "android">(defaultMode);
-  const [isTranscribing, setIsTranscribing] = useState(true);
-
   const {
     state,
     elapsedMs,
     clicks,
     micEnabled,
+    recordingMode,
+    setRecordingMode,
     toggleMic,
     pauseRecording,
     resumeRecording,
@@ -41,6 +41,22 @@ export function FloatingQuickBar({
     cancelRecording,
     recordClick,
   } = useRecorder();
+
+  const isTranscribing =
+    micEnabled &&
+    (recordingMode === "auto-zoom-sfx-transcribe" || recordingMode === "sfx-transcribe");
+
+  const handleToggleTranscribe = () => {
+    if (isTranscribing) {
+      const nextMode = recordingMode === "sfx-transcribe" ? "regular" : "auto-zoom-sfx";
+      setRecordingMode(nextMode);
+    } else {
+      setRecordingMode("auto-zoom-sfx-transcribe");
+      if (!micEnabled) {
+        toggleMic();
+      }
+    }
+  };
 
   const handleTogglePlay = () => {
     if (state === "recording") {
@@ -209,7 +225,7 @@ export function FloatingQuickBar({
             {/* Transcribe (Whisper AI) Toggle */}
             <button
               type="button"
-              onClick={() => setIsTranscribing(!isTranscribing)}
+              onClick={handleToggleTranscribe}
               className={`flex items-center gap-1.5 rounded-lg border px-3 py-1.5 font-mono text-xs font-semibold transition-all ${
                 isTranscribing
                   ? "border-white bg-white text-black font-bold shadow-sm"

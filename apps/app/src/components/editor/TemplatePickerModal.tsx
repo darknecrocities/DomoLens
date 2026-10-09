@@ -114,7 +114,7 @@ export function TemplatePickerModal({ open, onClose }: TemplatePickerModalProps)
       footer={
         <div className="flex w-full items-center justify-between gap-3">
           <div className="flex items-center gap-2 text-xs text-neutral-400">
-            <Sparkles className="size-3.5 text-indigo-400" />
+            <Sparkles className="size-3.5 text-neutral-300" />
             <span>Fully customizable after applying — fine-tune anytime in Studio</span>
           </div>
           <div className="flex items-center gap-2">
@@ -222,7 +222,7 @@ export function TemplatePickerModal({ open, onClose }: TemplatePickerModalProps)
                   <div className="mt-3 flex items-center justify-between pt-2.5 border-t border-neutral-800/80">
                     <div className="flex items-center gap-2 text-[11px] text-neutral-300">
                       {tpl.transitionTiming?.transitionStyle && (
-                        <span className="rounded bg-indigo-500/15 px-2 py-0.5 text-[9px] font-mono font-bold text-indigo-300 border border-indigo-500/30 uppercase">
+                        <span className="rounded bg-neutral-800 px-2 py-0.5 text-[9px] font-mono font-bold text-neutral-200 border border-neutral-700 uppercase">
                           {tpl.transitionTiming.transitionStyle}
                         </span>
                       )}
@@ -292,9 +292,9 @@ export function TemplatePickerModal({ open, onClose }: TemplatePickerModalProps)
               {/* Template Specs Grid */}
               <div className="grid grid-cols-2 gap-2 text-xs">
                 {selectedTemplate.motionSignature && (
-                  <div className="col-span-2 rounded-lg bg-indigo-950/40 p-2 border border-indigo-500/30 flex items-center justify-between">
+                  <div className="col-span-2 rounded-lg bg-neutral-900 p-2 border border-neutral-700/80 flex items-center justify-between">
                     <div className="truncate pr-2">
-                      <span className="block text-indigo-300/80 font-medium text-[9px] uppercase font-mono tracking-wider">
+                      <span className="block text-neutral-400 font-medium text-[9px] uppercase font-mono tracking-wider">
                         Signature Motion Choreography
                       </span>
                       <span className="text-white font-semibold text-xs truncate">
@@ -302,7 +302,7 @@ export function TemplatePickerModal({ open, onClose }: TemplatePickerModalProps)
                       </span>
                     </div>
                     {selectedTemplate.transitionTiming?.transitionStyle && (
-                      <span className="shrink-0 rounded bg-indigo-500/25 text-indigo-300 px-2 py-0.5 text-[9px] font-mono font-bold border border-indigo-500/40 uppercase">
+                      <span className="shrink-0 rounded bg-neutral-800 text-neutral-200 px-2 py-0.5 text-[9px] font-mono font-bold border border-neutral-700 uppercase">
                         {selectedTemplate.transitionTiming.transitionStyle}
                       </span>
                     )}

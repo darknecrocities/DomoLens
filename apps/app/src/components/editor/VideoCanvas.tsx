@@ -820,7 +820,7 @@ export function VideoCanvas({ project, currentTimeMs: propTimeMs }: VideoCanvasP
         ref={viewportRef}
         data-tutorial-target="canvas-player"
         onClick={handleCanvasClick}
-        className="relative max-h-full max-w-full overflow-hidden bg-ink-950 cursor-crosshair group select-none transition-transform duration-300"
+        className="relative flex flex-col max-h-full max-w-full overflow-hidden bg-ink-950 cursor-crosshair group select-none transition-transform duration-300"
         style={{
           aspectRatio: viewportAspectRatio,
           borderRadius: `${looks.borderRadius}px`,
@@ -861,51 +861,129 @@ export function VideoCanvas({ project, currentTimeMs: propTimeMs }: VideoCanvasP
 
         {/* Modular Window Mockup Shell Bar */}
         {looks.windowFrame && looks.windowFrame !== "none" && (
-          <div className="absolute top-0 inset-x-0 h-7 z-30 flex items-center px-3 bg-black/40 backdrop-blur-md border-b border-white/10 select-none pointer-events-none">
-            {/* Traffic Light Dots */}
-            {(looks.windowFrame === "macos" ||
-              looks.windowFrame === "safari" ||
-              looks.windowFrame === "terminal") && (
-              <div className="flex items-center gap-1.5 shrink-0">
-                <span className="size-2.5 rounded-full bg-[#ff5f56] border border-black/20" />
-                <span className="size-2.5 rounded-full bg-[#ffbd2e] border border-black/20" />
-                <span className="size-2.5 rounded-full bg-[#27c93f] border border-black/20" />
+          <>
+            {/* macOS Window */}
+            {looks.windowFrame === "macos" && (
+              <div className="relative w-full shrink-0 h-7 z-30 flex items-center justify-between px-3 bg-[#1e1e20]/90 backdrop-blur-md border-b border-white/10 select-none pointer-events-none">
+                <div className="flex items-center gap-1.5 shrink-0">
+                  <span className="size-2.5 rounded-full bg-[#ff5f56] border border-black/20" />
+                  <span className="size-2.5 rounded-full bg-[#ffbd2e] border border-black/20" />
+                  <span className="size-2.5 rounded-full bg-[#27c93f] border border-black/20" />
+                </div>
+                <div className="w-12 shrink-0" />
               </div>
             )}
 
-            {/* Safari Omnibar */}
-            {looks.windowFrame === "safari" && (
-              <div className="mx-auto flex items-center gap-1.5 rounded bg-white/10 px-3 py-0.5 text-[10px] font-mono text-white/80 border border-white/10 max-w-xs truncate">
-                <span className="size-1.5 rounded-full bg-emerald-400" />
-                <span>{looks.mockupUrl || "app.domolens.dev"}</span>
-              </div>
-            )}
-
-            {/* Terminal Title */}
-            {looks.windowFrame === "terminal" && (
-              <div className="mx-auto text-[10px] font-mono text-neutral-300 font-medium">
-                {looks.mockupUrl && looks.mockupUrl !== "app.domolens.dev"
-                  ? looks.mockupUrl
-                  : "terminal — zsh — 80x24"}
-              </div>
-            )}
-
-            {/* Chrome Tab Bar */}
-            {looks.windowFrame === "chrome" && (
-              <div className="flex items-center gap-2">
-                <div className="flex items-center gap-1.5 rounded-t-md bg-neutral-800/90 px-2.5 py-0.5 text-[10px] font-medium text-white border-t border-x border-white/10">
-                  <span className="size-2 rounded-full bg-indigo-400" />
-                  <span className="max-w-[120px] truncate">{looks.mockupUrl || "DomoLens Studio"}</span>
+            {/* Windows Terminal */}
+            {looks.windowFrame === "windows" && (
+              <div className="relative w-full shrink-0 h-8 z-30 flex items-center justify-between px-2 bg-[#1f1f1f] border-b border-white/10 select-none pointer-events-none">
+                <div className="flex items-center gap-1.5 h-full pt-1">
+                  <div className="flex items-center gap-2 bg-[#2d2d2d] text-white px-2.5 py-1 rounded-t text-[11px] font-mono border-t-2 border-sky-400 shadow-sm">
+                    <span className="text-sky-400 font-bold text-xs select-none">&gt;_</span>
+                    <span className="text-neutral-400 text-[10px] ml-1">✕</span>
+                  </div>
+                  <span className="text-neutral-400 text-xs px-1 select-none">+</span>
+                </div>
+                <div className="flex items-center text-neutral-400">
+                  <div className="w-7 h-6 flex items-center justify-center">
+                    <span className="w-2.5 h-[1.5px] bg-neutral-300" />
+                  </div>
+                  <div className="w-7 h-6 flex items-center justify-center">
+                    <span className="size-2.5 border-[1.5px] border-neutral-300 rounded-[1px]" />
+                  </div>
+                  <div className="w-7 h-6 flex items-center justify-center">
+                    <span className="text-xs font-light text-neutral-300 leading-none">✕</span>
+                  </div>
                 </div>
               </div>
             )}
-          </div>
+
+            {/* macOS Terminal */}
+            {looks.windowFrame === "terminal" && (
+              <div className="relative w-full shrink-0 h-7 z-30 flex items-center justify-between px-3 bg-[#18181a] border-b border-white/10 select-none pointer-events-none">
+                <div className="flex items-center gap-1.5 shrink-0">
+                  <span className="size-2.5 rounded-full bg-[#ff5f56] border border-black/20" />
+                  <span className="size-2.5 rounded-full bg-[#ffbd2e] border border-black/20" />
+                  <span className="size-2.5 rounded-full bg-[#27c93f] border border-black/20" />
+                </div>
+                <div className="w-12 shrink-0" />
+              </div>
+            )}
+
+            {/* Google Chrome */}
+            {looks.windowFrame === "chrome" && (
+              <div className="relative w-full shrink-0 z-30 bg-[#202124] border-b border-white/10 select-none pointer-events-none">
+                <div className="h-6 flex items-center px-2 pt-1 gap-1">
+                  <div className="flex items-center gap-1.5 bg-[#292a2d] text-white px-2.5 py-0.5 rounded-t-md text-[10px] border-t border-x border-white/10 shadow-sm w-20">
+                    <svg className="size-2.5 text-neutral-400 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <circle cx="12" cy="12" r="10" />
+                      <line x1="2" y1="12" x2="22" y2="12" />
+                      <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
+                    </svg>
+                    <span className="text-neutral-400 text-[8px] ml-auto">✕</span>
+                  </div>
+                  <span className="text-neutral-400 text-[10px] px-1">+</span>
+                </div>
+                <div className="h-6 flex items-center px-2 pb-1 gap-2">
+                  <div className="flex items-center gap-1 text-neutral-400 text-[10px]">
+                    <span>←</span>
+                    <span>→</span>
+                    <span>↻</span>
+                  </div>
+                  <div className="flex-1 flex items-center gap-1 bg-[#18181a] rounded-full px-2.5 py-0.5 text-[9.5px] border border-white/10 font-sans max-w-xs h-4">
+                    <span className="text-neutral-400 text-[8px]">🔒</span>
+                  </div>
+                  <div className="flex items-center gap-1.5 text-neutral-400 text-[10px] pr-1">
+                    <span>☆</span>
+                    <span>⋮</span>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Apple Safari */}
+            {looks.windowFrame === "safari" && (
+              <div className="relative w-full shrink-0 h-7 z-30 flex items-center justify-between px-3 bg-[#242426]/95 backdrop-blur-md border-b border-white/10 select-none pointer-events-none">
+                <div className="flex items-center gap-2.5">
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    <span className="size-2.5 rounded-full bg-[#ff5f56] border border-black/20" />
+                    <span className="size-2.5 rounded-full bg-[#ffbd2e] border border-black/20" />
+                    <span className="size-2.5 rounded-full bg-[#27c93f] border border-black/20" />
+                  </div>
+                  <div className="flex items-center gap-1.5 text-neutral-400 text-[10px] font-semibold pl-1">
+                    <span>‹</span>
+                    <span>›</span>
+                  </div>
+                </div>
+                <div className="flex items-center justify-between rounded-md bg-white/10 px-2.5 py-0.5 text-[10px] font-sans text-neutral-200 border border-white/10 max-w-xs flex-1 mx-3 h-4">
+                  <span className="text-neutral-400 text-[9px]">🔒</span>
+                  <span className="text-neutral-400 text-[9px] ml-auto">↻</span>
+                </div>
+                <div className="flex items-center gap-2 text-neutral-400 text-xs">
+                  <span>⎋</span>
+                  <span>⊞</span>
+                </div>
+              </div>
+            )}
+
+            {/* Frosted Glass */}
+            {looks.windowFrame === "glass" && (
+              <div className="relative w-full shrink-0 h-7 z-30 flex items-center justify-between px-3 bg-white/5 backdrop-blur-xl border-b border-white/10 select-none pointer-events-none">
+                <div className="flex items-center gap-1.5 shrink-0">
+                  <span className="size-2 rounded-full bg-white/40" />
+                  <span className="size-2 rounded-full bg-white/25" />
+                  <span className="size-2 rounded-full bg-white/20" />
+                </div>
+                <div className="w-10 shrink-0" />
+              </div>
+            )}
+          </>
         )}
 
         {/* Dynamic Zooming Video Container: zero latency with hardware accelerated 3D transform */}
         <div
           ref={zoomLayerRef}
-          className="relative size-full origin-center will-change-transform"
+          className={`relative ${looks.windowFrame && looks.windowFrame !== "none" ? "flex-1 min-h-0 w-full" : "size-full"} origin-center will-change-transform overflow-hidden`}
           style={{
             // When playing, rAF is the SOLE owner of this transform (60fps via direct DOM write).
             // Setting undefined here prevents React re-renders (throttled to ~12fps via setCurrentTime)
@@ -1173,8 +1251,8 @@ export function VideoCanvas({ project, currentTimeMs: propTimeMs }: VideoCanvasP
                   boxShadow: cardDef.boxShadow,
                   backdropFilter: cardDef.backdropBlurPx > 0 ? `blur(${cardDef.backdropBlurPx}px)` : undefined,
                   WebkitBackdropFilter: cardDef.backdropBlurPx > 0 ? `blur(${cardDef.backdropBlurPx}px)` : undefined,
-                  padding: isMinimal ? "4px 8px" : "10px 18px",
-                  borderRadius: isTerminal ? "8px" : "14px",
+                  padding: isMinimal ? "3px 6px" : "6px 14px",
+                  borderRadius: isTerminal ? "6px" : "10px",
                   fontFamily,
                   maxWidth: "85vw",
                 }}
@@ -1183,7 +1261,7 @@ export function VideoCanvas({ project, currentTimeMs: propTimeMs }: VideoCanvasP
                 {kickerText && (
                   <div
                     data-testid={`text-kicker-${textOverlay.id}`}
-                    className="text-[11px] font-bold tracking-wider leading-none select-none mb-1.5 opacity-90"
+                    className="text-[10px] font-bold tracking-wider leading-none select-none mb-1 opacity-90"
                     style={{
                       color: looks.brandAccentColor || (isTerminal ? "#4ade80" : "#a5b4fc"),
                       letterSpacing: textOverlay.typography?.letterSpacing || "0.08em",
@@ -1200,7 +1278,7 @@ export function VideoCanvas({ project, currentTimeMs: propTimeMs }: VideoCanvasP
                   data-testid={`text-headline-${textOverlay.id}`}
                   className="font-bold leading-tight select-none tracking-tight whitespace-pre-wrap"
                   style={{
-                    fontSize: `${textOverlay.fontSize || 22}px`,
+                    fontSize: `${textOverlay.fontSize || 14}px`,
                     color: textColor,
                     fontWeight: textOverlay.typography?.fontWeight || "700",
                     letterSpacing: textOverlay.typography?.letterSpacing || "-0.015em",

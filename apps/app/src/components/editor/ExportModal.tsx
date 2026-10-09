@@ -5,6 +5,7 @@ import { Button } from "../ui/Button";
 import { Modal } from "../ui/Modal";
 import { toast } from "../../store/toast";
 import { platform } from "../../platform";
+import { useEditor } from "../../store/editor";
 import type { ProjectData } from "@domolens/core";
 import {
   renderProjectVideo,
@@ -33,12 +34,37 @@ export function ExportModal({ open, project, onClose }: ExportModalProps) {
   const [savedFilePath, setSavedFilePath] = useState<string | null>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
 
-  const safeName = (project.summary.name || "DomoLens_Recording").replace(/[^\w.-]+/g, "_");
+  const [projectName, setProjectName] = useState(project.summary.name || "DomoLens_Recording");
+  const renameProject = useEditor((s) => s.renameProject);
+
+  useEffect(() => {
+    if (open) {
+      setProjectName(project.summary.name || "DomoLens_Recording");
+    }
+  }, [open, project.summary.name]);
+
+  const safeName = (projectName || "DomoLens_Recording").replace(/[^\w.-]+/g, "_");
 
   // Determine file extension and default filename based on resolution & format
-  const getFilenameForExport = (res: ExportResolution, fmt: ExportFormat) => {
+  const getFilenameForExport = (res: ExportResolution, fmt: ExportFormat, name = safeName) => {
     const ext = res === "gif" ? "gif" : fmt;
-    return `${safeName}_${res}.${ext}`;
+    return `${name}_${res}.${ext}`;
+  };
+
+  const handleProjectNameChange = (val: string) => {
+    setProjectName(val);
+    const trimmed = val.trim();
+    if (trimmed) {
+      renameProject(trimmed);
+      const newSafeName = trimmed.replace(/[^\w.-]+/g, "_");
+      const newFilename = getFilenameForExport(resolution, format, newSafeName);
+      if (destinationPath) {
+        const separator = destinationPath.includes("\\") ? "\\" : "/";
+        const parts = destinationPath.split(separator);
+        parts[parts.length - 1] = newFilename;
+        setDestinationPath(parts.join(separator));
+      }
+    }
   };
 
   // Initialize and update default export destination (OS Downloads folder)
@@ -378,14 +404,14 @@ export function ExportModal({ open, project, onClose }: ExportModalProps) {
                       >
                         <div className="flex items-center justify-between w-full">
                           <span className="text-xs font-bold text-fg flex items-center gap-1.5">
-                            <Video className="size-3.5 text-indigo-400" />
+                            <Video className="size-3.5 text-neutral-300" />
                             {fmt.label}
                           </span>
                           {isSelected && <CheckCircle2 className="size-3.5 text-white" />}
                         </div>
                         {fmt.badge && (
                           <div className="mt-1.5">
-                            <span className="font-mono text-[9px] uppercase font-bold px-1.5 py-0.5 rounded bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">
+                            <span className="font-mono text-[9px] uppercase font-bold px-1.5 py-0.5 rounded bg-neutral-800 text-neutral-200 border border-neutral-700">
                               {fmt.badge}
                             </span>
                           </div>
@@ -434,6 +460,31 @@ export function ExportModal({ open, project, onClose }: ExportModalProps) {
                     </button>
                   );
                 })}
+              </div>
+            </div>
+
+            {/* Project / Output File Name */}
+            <div className="space-y-1.5">
+              <div className="flex items-center justify-between text-xs">
+                <label className="font-semibold uppercase tracking-wider text-fg-muted">
+                  Project & File Name
+                </label>
+                <span className="text-[11px] font-mono text-neutral-400">
+                  Renames project and export file
+                </span>
+              </div>
+              <div className="flex items-center gap-2 rounded-xl border border-neutral-700/80 bg-neutral-900/90 p-2 focus-within:border-white/50 focus-within:ring-1 focus-within:ring-white/20 transition-all">
+                <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-neutral-800 text-neutral-300">
+                  <Film className="size-4" />
+                </div>
+                <input
+                  type="text"
+                  value={projectName}
+                  onChange={(e) => handleProjectNameChange(e.target.value)}
+                  placeholder="Enter project name..."
+                  className="min-w-0 flex-1 bg-transparent px-1 font-mono text-xs text-white placeholder-neutral-500 outline-none"
+                  aria-label="Project and file name"
+                />
               </div>
             </div>
 

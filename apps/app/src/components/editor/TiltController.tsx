@@ -127,7 +127,7 @@ export function TiltController() {
       {/* Title & Reset Button */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-1.5">
-          <Layers className="size-3.5 text-indigo-400" />
+          <Layers className="size-3.5 text-neutral-300" />
           <span className="text-xs font-semibold text-white">3D Frame Tilt & Motion</span>
         </div>
         {hasNonZeroTilt && (
@@ -152,7 +152,7 @@ export function TiltController() {
         onDoubleClick={handleReset}
         className={`relative w-full aspect-[4/3] rounded-xl border bg-ink-950 overflow-hidden cursor-crosshair transition-all touch-none ${
           isDragging
-            ? "border-indigo-400 shadow-[0_0_15px_rgba(99,102,241,0.2)]"
+            ? "border-white/50 shadow-[0_0_15px_rgba(255,255,255,0.08)]"
             : "border-ink-800 hover:border-ink-700"
         }`}
         title="Click and drag to tilt the video frame in 3D. Double-click to reset."
@@ -174,7 +174,7 @@ export function TiltController() {
           style={{ perspective: "150px" }}
         >
           <div
-            className="size-6 rounded-xs border-2 border-indigo-400/80 bg-indigo-500/20 transition-transform duration-75 shadow-sm"
+            className="size-6 rounded-xs border-2 border-white/60 bg-white/10 transition-transform duration-75 shadow-sm"
             style={{
               transform: `rotateX(${currentPitch}deg) rotateY(${currentYaw}deg) rotateZ(${currentRoll}deg)`,
               transformStyle: "preserve-3d",
@@ -202,13 +202,13 @@ export function TiltController() {
           }}
         >
           {/* Outer glow ring */}
-          <div className="relative size-6 rounded-full border border-indigo-400/60 bg-white/90 shadow-lift flex items-center justify-center">
+          <div className="relative size-6 rounded-full border border-neutral-400 bg-white/95 shadow-lift flex items-center justify-center">
             {/* Center target dot */}
-            <div className="size-1.5 rounded-full bg-indigo-600" />
+            <div className="size-1.5 rounded-full bg-neutral-900" />
           </div>
 
           {/* Floating live coordinate readout tooltip */}
-          <div className="absolute -top-6 left-1/2 -translate-x-1/2 whitespace-nowrap rounded bg-ink-900/90 px-1.5 py-0.5 text-[9px] font-mono text-indigo-300 border border-white/10 shadow-sm pointer-events-none">
+          <div className="absolute -top-6 left-1/2 -translate-x-1/2 whitespace-nowrap rounded bg-ink-900/90 px-1.5 py-0.5 text-[9px] font-mono text-neutral-200 border border-white/10 shadow-sm pointer-events-none">
             {currentPitch.toFixed(0)}°, {currentYaw.toFixed(0)}°
           </div>
         </div>
@@ -230,7 +230,7 @@ export function TiltController() {
             const val = parseFloat(e.target.value);
             updateLooks({ tiltX: val, tiltAngle: val });
           }}
-          className="w-full accent-indigo-400 cursor-pointer h-1.5 bg-ink-800 rounded-lg"
+          className="w-full accent-white cursor-pointer h-1.5 bg-ink-800 rounded-lg"
         />
 
         <div className="flex items-center justify-between text-[11px] pt-1">
@@ -247,7 +247,7 @@ export function TiltController() {
             const val = parseFloat(e.target.value);
             updateLooks({ tiltY: val });
           }}
-          className="w-full accent-indigo-400 cursor-pointer h-1.5 bg-ink-800 rounded-lg"
+          className="w-full accent-white cursor-pointer h-1.5 bg-ink-800 rounded-lg"
         />
 
         <div className="flex items-center justify-between text-[11px] pt-1">
@@ -264,7 +264,7 @@ export function TiltController() {
             const val = parseFloat(e.target.value);
             updateLooks({ tiltZ: val });
           }}
-          className="w-full accent-indigo-400 cursor-pointer h-1.5 bg-ink-800 rounded-lg"
+          className="w-full accent-white cursor-pointer h-1.5 bg-ink-800 rounded-lg"
         />
       </div>
 
@@ -284,7 +284,7 @@ export function TiltController() {
                 onClick={() => applyPreset(p)}
                 className={`rounded-lg border px-2 py-1 text-left transition-all ${
                   isMatch
-                    ? "border-indigo-400 bg-indigo-500/15 text-white"
+                    ? "border-white bg-white/15 text-white font-bold"
                     : "border-ink-800 bg-ink-900/60 text-fg-muted hover:border-ink-700 hover:text-white"
                 }`}
                 title={p.desc}
@@ -300,7 +300,7 @@ export function TiltController() {
       <div className="pt-2 border-t border-ink-800/80 space-y-2">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-1">
-            <Activity className="size-3 text-indigo-400" />
+            <Activity className="size-3 text-neutral-300" />
             <span className="text-[11px] font-semibold text-white">Motion Animation</span>
           </div>
           <span className="text-[10px] text-fg-faint">
@@ -319,7 +319,7 @@ export function TiltController() {
                 onClick={() => updateLooks({ tiltAnimation: m.id })}
                 className={`flex flex-col items-center justify-center rounded-lg border py-1.5 px-1 text-center transition-all ${
                   isSelected
-                    ? "border-indigo-400 bg-indigo-500/20 text-white font-semibold"
+                    ? "border-white bg-white/20 text-white font-semibold"
                     : "border-ink-800 bg-ink-900/50 text-neutral-400 hover:border-ink-700 hover:text-white"
                 }`}
                 title={m.desc}
@@ -336,7 +336,7 @@ export function TiltController() {
           <div className="space-y-1 pt-1">
             <div className="flex items-center justify-between text-[10px]">
               <span className="text-fg-muted">Motion Intensity</span>
-              <span className="font-mono text-indigo-300">{Math.round(currentIntensity * 100)}%</span>
+              <span className="font-mono text-neutral-200">{Math.round(currentIntensity * 100)}%</span>
             </div>
             <input
               type="range"
@@ -345,7 +345,7 @@ export function TiltController() {
               step="0.05"
               value={currentIntensity}
               onChange={(e) => updateLooks({ tiltAnimationIntensity: parseFloat(e.target.value) })}
-              className="w-full accent-indigo-400 cursor-pointer h-1.5 bg-ink-800 rounded-lg"
+              className="w-full accent-white cursor-pointer h-1.5 bg-ink-800 rounded-lg"
             />
           </div>
         )}
@@ -360,11 +360,13 @@ export function TiltController() {
             type="button"
             onClick={() => updateLooks({ tiltGlare: !currentGlare })}
             className={`relative inline-flex h-4 w-8 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
-              currentGlare ? "bg-indigo-600" : "bg-ink-800"
+              currentGlare ? "bg-white" : "bg-ink-800"
             }`}
           >
             <span
-              className={`pointer-events-none inline-block size-3 rounded-full bg-white shadow-lg transform ring-0 transition duration-200 ease-in-out ${
+              className={`pointer-events-none inline-block size-3 rounded-full ${
+                currentGlare ? "bg-black" : "bg-white"
+              } shadow-lg transform ring-0 transition duration-200 ease-in-out ${
                 currentGlare ? "translate-x-4" : "translate-x-0"
               }`}
             />

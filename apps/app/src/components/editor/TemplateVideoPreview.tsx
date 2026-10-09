@@ -331,7 +331,7 @@ export function TemplateVideoPreview({ template, customFields }: TemplateVideoPr
             </span>
             {template.transitionTiming?.transitionStyle && (
               <span
-                className="hidden sm:inline-flex items-center gap-1 px-1.5 py-0.2 text-[8px] font-mono font-bold uppercase tracking-wider text-indigo-300"
+                className="hidden sm:inline-flex items-center gap-1 px-1.5 py-0.2 text-[8px] font-mono font-bold uppercase tracking-wider text-neutral-300"
               >
                 <span>✦</span>
                 <span>{template.transitionTiming.transitionStyle}</span>
@@ -341,7 +341,7 @@ export function TemplateVideoPreview({ template, customFields }: TemplateVideoPr
 
           <div className="flex items-center gap-1">
             {tiltAngle > 0 && (
-              <span className="rounded bg-indigo-500/25 text-indigo-300 px-1.5 py-0.5 text-[9px] font-mono font-bold border border-indigo-500/30">
+              <span className="rounded bg-white/10 text-neutral-200 px-1.5 py-0.5 text-[9px] font-mono font-bold border border-white/20">
                 {tiltAngle}° 3D
               </span>
             )}
@@ -367,7 +367,7 @@ export function TemplateVideoPreview({ template, customFields }: TemplateVideoPr
               style={{ perspective: 800 }}
             >
               <div className="h-3 bg-black/80 border-b border-white/10 w-full" />
-              <div className="flex-1 bg-gradient-to-br from-indigo-950/70 via-black to-neutral-950 flex flex-col justify-end p-2">
+              <div className="flex-1 bg-gradient-to-br from-neutral-900 via-black to-neutral-950 flex flex-col justify-end p-2">
                 <div className="space-y-1 opacity-70">
                   <div className="h-1.5 bg-white/40 rounded w-2/3" />
                   <div className="h-1 bg-white/20 rounded w-1/2" />
@@ -389,7 +389,7 @@ export function TemplateVideoPreview({ template, customFields }: TemplateVideoPr
                 style={{ perspective: 800 }}
               >
                 <div className="h-3 bg-black/80 border-b border-white/10 w-full" />
-                <div className="flex-1 bg-gradient-to-br from-purple-950/70 via-black to-neutral-950 flex flex-col justify-end p-2">
+                <div className="flex-1 bg-gradient-to-br from-neutral-900 via-black to-neutral-950 flex flex-col justify-end p-2">
                   <div className="space-y-1 opacity-70">
                     <div className="h-1.5 bg-white/40 rounded w-3/4" />
                     <div className="h-1 bg-white/20 rounded w-2/5" />
@@ -417,9 +417,6 @@ export function TemplateVideoPreview({ template, customFields }: TemplateVideoPr
                   <span className="size-2 rounded-full bg-rose-500/90" />
                   <span className="size-2 rounded-full bg-amber-500/90" />
                   <span className="size-2 rounded-full bg-emerald-500/90" />
-                  <span className="ml-1 text-[8px] font-mono text-neutral-400 truncate max-w-[120px]">
-                    {template.looks.mockupUrl || "DomoLens Studio"}
-                  </span>
                 </div>
               )}
               {windowFrame === "safari" && (
@@ -428,24 +425,16 @@ export function TemplateVideoPreview({ template, customFields }: TemplateVideoPr
                     <span className="size-1.5 rounded-full bg-neutral-600" />
                     <span className="size-1.5 rounded-full bg-neutral-600" />
                   </div>
-                  <div className="mx-auto rounded bg-neutral-900 px-2.5 py-0.5 text-[8px] font-mono text-neutral-400 border border-white/5 truncate max-w-[130px]">
-                    {template.looks.mockupUrl || "domolens.app/pro"}
-                  </div>
+                  <div className="mx-auto rounded bg-neutral-900 h-2 w-14 border border-white/5" />
                 </div>
               )}
               {windowFrame === "terminal" && (
                 <div className="flex items-center gap-1.5">
                   <Terminal className="size-2.5 text-emerald-400" />
-                  <span className="text-[8px] font-mono text-neutral-300">
-                    {template.looks.mockupUrl || "bash — 80x24"}
-                  </span>
                 </div>
               )}
               {windowFrame === "windows" && (
-                <div className="flex items-center justify-between w-full">
-                  <span className="text-[8px] font-mono text-neutral-400 truncate max-w-[130px]">
-                    {template.looks.mockupUrl || "DomoLens Studio"}
-                  </span>
+                <div className="flex items-center justify-end w-full">
                   <div className="flex items-center gap-1 text-[7px] text-neutral-400">
                     <span>—</span>
                     <span>□</span>
@@ -653,7 +642,7 @@ export function TemplateVideoPreview({ template, customFields }: TemplateVideoPr
             className="relative h-1.5 w-full rounded-full bg-white/15 cursor-pointer overflow-hidden group/scrub"
           >
             <div
-              className="h-full bg-white transition-all duration-75 group-hover/scrub:bg-indigo-400"
+              className="h-full bg-white transition-all duration-75 group-hover/scrub:bg-neutral-300"
               style={{
                 width: duration > 0 ? `${(currentTime / duration) * 100}%` : "0%",
               }}
@@ -669,7 +658,7 @@ export function TemplateVideoPreview({ template, customFields }: TemplateVideoPr
             onClick={() => setIsChoreographyActive(!isChoreographyActive)}
             className={`flex items-center gap-1 rounded px-2 py-0.5 text-[9px] font-mono font-medium transition-all cursor-pointer ${
               isChoreographyActive
-                ? "bg-indigo-500/20 text-indigo-300 border border-indigo-500/40 shadow-[0_0_8px_rgba(99,102,241,0.25)]"
+                ? "bg-white/15 text-white border border-white/30 shadow-sm"
                 : "bg-white/5 text-neutral-400 border border-white/10 hover:text-white"
             }`}
             title="Toggle signature motion choreography loop"
