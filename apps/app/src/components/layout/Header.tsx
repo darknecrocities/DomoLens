@@ -144,7 +144,7 @@ export function Header() {
             }
           >
             <RefreshCw
-              className={`size-3.5 ${isCheckingUpdate ? "animate-spin text-indigo-400" : ""}`}
+              className={`size-3.5 ${isCheckingUpdate ? "animate-spin text-white" : ""}`}
             />
             <span className="hidden xl:inline">
               {isCheckingUpdate ? "Checking..." : updateStatus === "ready" ? "Update Ready" : "Check Updates"}
@@ -157,12 +157,12 @@ export function Header() {
             {(updateStatus === "available" || updateStatus === "ready") && (
               <span
                 className={`absolute -top-1 -right-1 flex size-2.5 rounded-full ${
-                  updateStatus === "ready" ? "bg-emerald-400" : "bg-indigo-400"
-                } shadow-[0_0_8px_rgba(129,140,248,0.8)]`}
+                  updateStatus === "ready" ? "bg-emerald-400" : "bg-white"
+                } shadow-[0_0_8px_rgba(255,255,255,0.6)]`}
               >
                 <span
                   className={`inline-flex size-full animate-ping rounded-full ${
-                    updateStatus === "ready" ? "bg-emerald-400" : "bg-indigo-400"
+                    updateStatus === "ready" ? "bg-emerald-400" : "bg-white"
                   } opacity-75`}
                 />
               </span>

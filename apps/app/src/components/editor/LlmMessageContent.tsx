@@ -46,7 +46,7 @@ function renderInlineContent(text: string): React.ReactNode[] {
       tokens.push(
         <code
           key={`c-${match.index}`}
-          className="rounded bg-white/10 px-1 py-0.5 font-mono text-[11px] text-indigo-300 border border-white/5"
+          className="rounded bg-white/10 px-1 py-0.5 font-mono text-[11px] text-neutral-200 border border-white/5"
         >
           {inner}
         </code>,
@@ -56,7 +56,7 @@ function renderInlineContent(text: string): React.ReactNode[] {
       tokens.push(
         <span
           key={`q-${match.index}`}
-          className="font-medium text-indigo-200 bg-indigo-950/40 px-1 py-0.5 rounded border border-indigo-800/40 text-[11px]"
+          className="font-medium text-neutral-200 bg-neutral-800/80 px-1 py-0.5 rounded border border-neutral-700/80 text-[11px]"
         >
           "{inner}"
         </span>,

@@ -183,7 +183,7 @@ export function LlmSidebar() {
         <div className="border-b border-ink-800 bg-ink-900/90 p-3 text-xs flex flex-col gap-2.5 animate-in slide-in-from-top-2 duration-150">
           <div className="flex items-center justify-between">
             <span className="flex items-center gap-1.5 font-semibold text-white text-[11px]">
-              <Cpu className="size-3.5 text-indigo-400" />
+              <Cpu className="size-3.5 text-neutral-300" />
               Ollama Local LLM Configuration
             </span>
             <button
@@ -249,7 +249,7 @@ export function LlmSidebar() {
                     href="https://ollama.com/download"
                     target="_blank"
                     rel="noreferrer"
-                    className="flex items-center gap-1 text-[10px] text-indigo-400 hover:underline"
+                    className="flex items-center gap-1 text-[10px] text-neutral-300 hover:text-white hover:underline"
                   >
                     <span>ollama.com</span>
                     <ExternalLink className="size-2.5" />
@@ -361,7 +361,7 @@ export function LlmSidebar() {
                       className="rounded-lg bg-ink-950/70 p-2 border border-ink-800/90 space-y-1.5"
                     >
                       <div className="text-[11px] font-medium text-neutral-300 flex items-center gap-1.5">
-                        <HelpCircle className="size-3 text-indigo-400 shrink-0" />
+                        <HelpCircle className="size-3 text-neutral-300 shrink-0" />
                         <span>{q.prompt}</span>
                       </div>
                       <div className="flex flex-wrap gap-1.5">

@@ -26,6 +26,7 @@ import {
   type ProjectAudioSettings,
   type ProjectData,
   type ProjectLooks,
+  type ProjectSummary,
   type TextOverlay,
   type TimelineClip,
   type TypingSoundPreset,
@@ -254,6 +255,7 @@ export interface EditorState {
   deleteSelected: () => void;
   deleteVideoClip: (clipId?: string) => void;
   deleteCurrentProject: () => Promise<boolean>;
+  renameProject: (name: string) => Promise<boolean>;
 
   // Conversational AI Assistant
   sendLlmMessage: (content: string) => Promise<void>;
@@ -2159,6 +2161,50 @@ export const useEditor = create<EditorState>((set, get) => ({
       set({ project: null, currentTimeMs: 0, durationMs: 0 });
     }
     return success;
+  },
+
+  renameProject: async (name: string) => {
+    const trimmed = name.trim();
+    if (!trimmed) return false;
+    const state = get();
+    if (!state.project) return false;
+    const id = state.project.summary.id;
+    const updatedSummary: ProjectSummary = {
+      ...state.project.summary,
+      name: trimmed,
+      updatedAt: Date.now(),
+    };
+    const updatedProject: ProjectData = {
+      ...state.project,
+      summary: updatedSummary,
+    };
+    set({ project: updatedProject });
+
+    try {
+      await useProjects.getState().rename(id, trimmed);
+    } catch (e) {
+      console.warn("Failed to rename via useProjects:", e);
+    }
+
+    if (platform.saveProject) {
+      try {
+        await platform.saveProject(updatedSummary);
+      } catch (e) {
+        console.warn("Failed to save project summary:", e);
+      }
+    }
+
+    if (typeof sessionStorage !== "undefined") {
+      try {
+        sessionStorage.setItem(`domolens_project_${id}`, JSON.stringify(updatedProject));
+      } catch {}
+    }
+    if (typeof localStorage !== "undefined") {
+      try {
+        localStorage.setItem(`domolens_full_project_${id}`, JSON.stringify(updatedProject));
+      } catch {}
+    }
+    return true;
   },
 
   answerLlmQuestion: async (_questionId: string, answerValue: string) => {

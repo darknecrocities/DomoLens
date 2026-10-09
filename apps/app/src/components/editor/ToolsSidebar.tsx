@@ -1638,7 +1638,7 @@ export function ToolsSidebar() {
                   }
                   className={`rounded-lg py-1.5 px-1.5 text-[9.5px] font-semibold border transition-all truncate text-center ${
                     project?.looks.windowFrame === "macos"
-                      ? "border-indigo-400 bg-indigo-500/15 text-indigo-300 font-bold"
+                      ? "border-white bg-white/15 text-white font-bold"
                       : "border-ink-800 bg-ink-900/60 text-fg-muted hover:text-white hover:border-ink-700"
                   }`}
                   title="macOS studio window mockup frame"

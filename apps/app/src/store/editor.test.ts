@@ -866,5 +866,19 @@ describe("useEditor store", () => {
     useEditor.getState().updateLooks({ windowFrame: "safari" });
     expect(useEditor.getState().project?.looks.windowFrame).toBe("safari");
   });
+
+  it("renameProject renames active project summary and persists changes", async () => {
+    await useEditor.getState().loadProject("proj-test");
+    expect(useEditor.getState().project?.summary.name).toBe("Test Recording");
+
+    const success = await useEditor.getState().renameProject("My Custom Launch Video");
+    expect(success).toBe(true);
+    expect(useEditor.getState().project?.summary.name).toBe("My Custom Launch Video");
+
+    // Empty or whitespace-only names should be rejected
+    const invalid = await useEditor.getState().renameProject("   ");
+    expect(invalid).toBe(false);
+    expect(useEditor.getState().project?.summary.name).toBe("My Custom Launch Video");
+  });
 });
 

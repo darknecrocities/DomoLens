@@ -656,8 +656,8 @@ export function Timeline({ project }: TimelineProps) {
             className="h-8 flex items-center justify-between px-2 rounded-md bg-ink-900/60 text-[10px] font-semibold uppercase tracking-wider text-fg-muted group"
           >
             <div className="flex items-center gap-1.5 min-w-0">
-              <Type className="size-3 text-purple-400 shrink-0" />
-              <span className="truncate text-purple-300">Text</span>
+              <Type className="size-3 text-neutral-300 shrink-0" />
+              <span className="truncate text-neutral-300">Text</span>
             </div>
             <button
               type="button"
@@ -665,7 +665,7 @@ export function Timeline({ project }: TimelineProps) {
                 e.stopPropagation();
                 addTextOverlay("New Caption");
               }}
-              className="flex items-center gap-0.5 px-1 py-0.5 rounded hover:bg-purple-950/60 text-purple-300 hover:text-white border border-purple-800/60 hover:border-purple-500 transition-colors"
+              className="flex items-center gap-0.5 px-1 py-0.5 rounded hover:bg-neutral-800 text-neutral-300 hover:text-white border border-neutral-700/80 hover:border-neutral-500 transition-colors"
               title="Add text overlay at playhead (+ Text)"
               aria-label="Add text overlay at playhead"
             >
@@ -1265,8 +1265,8 @@ export function Timeline({ project }: TimelineProps) {
                     }
                     className={`group/text-chip absolute top-1 bottom-1 flex items-center justify-between rounded-md border px-2 text-[11px] transition-all overflow-hidden ${
                       isSelected
-                        ? "border-purple-400 bg-purple-500/30 text-white ring-1 ring-purple-400 shadow-md z-20 font-bold"
-                        : "border-purple-800/80 bg-purple-950/40 text-purple-200 hover:border-purple-500"
+                        ? "border-white bg-white/20 text-white ring-1 ring-white/40 shadow-md z-20 font-bold"
+                        : "border-neutral-700 bg-neutral-900/90 text-neutral-200 hover:border-neutral-500"
                     } ${isEditing ? "cursor-text z-30" : "cursor-grab active:cursor-grabbing"}`}
                     style={{ left: `${left}%`, width: `${width}%` }}
                   >
@@ -1290,13 +1290,13 @@ export function Timeline({ project }: TimelineProps) {
                         onBlur={() => commitTextEdit(t.id)}
                         onClick={(e) => e.stopPropagation()}
                         onPointerDown={(e) => e.stopPropagation()}
-                        className="w-full bg-ink-950 text-white text-[10px] font-medium px-1.5 py-0.5 rounded border border-purple-400 focus:outline-none focus:ring-1 focus:ring-purple-400"
+                        className="w-full bg-ink-950 text-white text-[10px] font-medium px-1.5 py-0.5 rounded border border-neutral-600 focus:outline-none focus:ring-1 focus:ring-white/40"
                         aria-label="Edit text overlay"
                       />
                     ) : (
                       <>
                         <div className="flex items-center gap-1 min-w-0 truncate select-none">
-                          <Type className="size-3 text-purple-300 shrink-0" />
+                          <Type className="size-3 text-neutral-300 shrink-0" />
                           <span className="truncate">{t.text}</span>
                         </div>
 
@@ -1350,7 +1350,7 @@ export function Timeline({ project }: TimelineProps) {
                             window.addEventListener("pointerup", onUp);
                           }}
                         >
-                          <div className={`w-1 h-3/4 rounded-full transition-colors ${isSelected ? "bg-purple-200" : "bg-purple-300/40 group-hover/handle:bg-purple-200"}`} />
+                          <div className={`w-1 h-3/4 rounded-full transition-colors ${isSelected ? "bg-white" : "bg-neutral-400/40 group-hover/handle:bg-white"}`} />
                         </div>
                         <div
                           className="absolute right-0 top-0 bottom-0 w-3 cursor-ew-resize flex items-center justify-center touch-none z-20 group/handle"
@@ -1376,7 +1376,7 @@ export function Timeline({ project }: TimelineProps) {
                             window.addEventListener("pointerup", onUp);
                           }}
                         >
-                          <div className={`w-1 h-3/4 rounded-full transition-colors ${isSelected ? "bg-purple-200" : "bg-purple-300/40 group-hover/handle:bg-purple-200"}`} />
+                          <div className={`w-1 h-3/4 rounded-full transition-colors ${isSelected ? "bg-white" : "bg-neutral-400/40 group-hover/handle:bg-white"}`} />
                         </div>
                       </>
                     )}
