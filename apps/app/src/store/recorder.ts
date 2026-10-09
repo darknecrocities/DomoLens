@@ -14,7 +14,7 @@ import { platform } from "../platform";
 import { createLiveStreamMotionTracker, scanVideoElementForActivity } from "../lib/video-activity-detector";
 
 let cursorTrajectoryBuffer: import("@domolens/core").CursorTrajectoryPoint[] = [];
-let transcriptSegments: Array<{ text: string; startMs: number }> = [];
+let transcriptSegments: Array<{ text: string; startMs: number; durationMs?: number }> = [];
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 let recognitionInstance: any | null = null;
 let currentInterimText = "";
@@ -65,6 +65,7 @@ interface RecorderStore {
   ) => void;
   recordTyping: (x: number, y: number, snippet?: string, existingId?: string) => void;
   recordCursorPoint: (x: number, y: number) => void;
+  recordTranscript: (text: string, startMs?: number, durationMs?: number) => void;
 }
 
 let countdownTimer: ReturnType<typeof setInterval> | null = null;
@@ -205,6 +206,23 @@ export const useRecorder = create<RecorderStore>((set, get) => ({
     const clampedX = Math.min(1, Math.max(0, x));
     const clampedY = Math.min(1, Math.max(0, y));
     cursorTrajectoryBuffer.push({ timestampMs, x: clampedX, y: clampedY });
+  },
+
+  recordTranscript: (text, startMs, durationMs) => {
+    const trimmed = text.trim();
+    if (!trimmed) return;
+    const nowMs = Math.max(0, Date.now() - recordingStartTimestamp);
+    const actualStart = typeof startMs === "number" ? startMs : nowMs;
+    const words = trimmed.split(/\s+/);
+    const actualDuration =
+      typeof durationMs === "number"
+        ? durationMs
+        : Math.max(1800, Math.min(5000, words.length * 380 + 400));
+    transcriptSegments.push({
+      text: trimmed,
+      startMs: actualStart,
+      durationMs: actualDuration,
+    });
   },
 
   recordClick: (x, y, button = "left") => {
@@ -544,13 +562,14 @@ export const useRecorder = create<RecorderStore>((set, get) => ({
       }
     }
 
-    // Start live speech-to-text transcription when in transcribe modes
+    // Start live speech-to-text transcription whenever mic is enabled or in transcribe modes
     transcriptSegments = [];
     currentInterimText = "";
     currentInterimStartMs = 0;
     isIntentionallyStoppingRecognition = false;
 
     const shouldTranscribe =
+      get().micEnabled ||
       get().recordingMode === "sfx-transcribe" ||
       get().recordingMode === "auto-zoom-sfx-transcribe";
 
@@ -560,11 +579,21 @@ export const useRecorder = create<RecorderStore>((set, get) => ({
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
       if (!SpeechRecognitionAPI) {
-        toast.info("Auto-captions will be generated for your actions upon completing the recording.");
+        console.warn("SpeechRecognition API not available in current environment.");
       } else {
+        let retryCount = 0;
+        let restartTimer: ReturnType<typeof setTimeout> | null = null;
+
         const initRecognition = () => {
           if (isIntentionallyStoppingRecognition || get().state !== "recording") return;
           try {
+            if (recognitionInstance) {
+              try {
+                recognitionInstance.abort();
+              } catch {}
+              recognitionInstance = null;
+            }
+
             const recognition = new SpeechRecognitionAPI();
             recognition.continuous = true;
             recognition.interimResults = true;
@@ -572,7 +601,8 @@ export const useRecorder = create<RecorderStore>((set, get) => ({
             recognition.maxAlternatives = 1;
 
             recognition.onstart = () => {
-              toast.success("🎤 Live speech transcription active");
+              retryCount = 0;
+              console.debug("[transcribe] Live microphone speech recognition active");
             };
 
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -587,12 +617,24 @@ export const useRecorder = create<RecorderStore>((set, get) => ({
                 if (result.isFinal) {
                   currentInterimText = "";
                   const words = transcript.split(/\s+/);
-                  for (let w = 0; w < words.length; w += 8) {
-                    const chunk = words.slice(w, w + 8).join(" ");
+                  const phraseStart =
+                    currentInterimStartMs > 0
+                      ? currentInterimStartMs
+                      : Math.max(0, nowMs - words.length * 360);
+                  const chunkSize = 7;
+                  for (let w = 0; w < words.length; w += chunkSize) {
+                    const chunkWords = words.slice(w, w + chunkSize);
+                    const chunk = chunkWords.join(" ");
                     if (chunk) {
-                      const start = currentInterimStartMs > 0 ? currentInterimStartMs : nowMs;
-                      transcriptSegments.push({ text: chunk, startMs: start });
-                      console.debug("[transcribe final]", start, chunk);
+                      const segStart =
+                        phraseStart + Math.round((w / words.length) * Math.max(0, nowMs - phraseStart));
+                      const segDur = Math.max(1800, Math.min(4800, chunkWords.length * 380 + 400));
+                      transcriptSegments.push({
+                        text: chunk,
+                        startMs: segStart,
+                        durationMs: segDur,
+                      });
+                      console.debug("[transcribe final]", segStart, chunk);
                     }
                   }
                   currentInterimStartMs = 0;
@@ -610,6 +652,9 @@ export const useRecorder = create<RecorderStore>((set, get) => ({
               if (e.error === "not-allowed") {
                 toast.warning("Microphone access not permitted for speech recognition.");
                 isIntentionallyStoppingRecognition = true;
+              } else if (e.error === "no-speech") {
+                // Normal silence between phrases
+                console.debug("[transcribe silence]");
               } else {
                 console.debug("[transcribe notification]", e.error);
               }
@@ -619,14 +664,16 @@ export const useRecorder = create<RecorderStore>((set, get) => ({
               // Flush pending interim speech so short or final phrases are immediately captured
               if (currentInterimText && currentInterimText.trim().length > 0) {
                 const words = currentInterimText.trim().split(/\s+/);
-                for (let w = 0; w < words.length; w += 8) {
-                  const chunk = words.slice(w, w + 8).join(" ");
-                  if (chunk && !transcriptSegments.some((s) => s.text === chunk)) {
-                    transcriptSegments.push({
-                      text: chunk,
-                      startMs: currentInterimStartMs || Math.max(0, Date.now() - recordingStartTimestamp - 1200),
-                    });
-                  }
+                const phraseStart =
+                  currentInterimStartMs ||
+                  Math.max(0, Date.now() - recordingStartTimestamp - words.length * 360);
+                const chunk = words.join(" ");
+                if (!transcriptSegments.some((s) => s.text === chunk)) {
+                  transcriptSegments.push({
+                    text: chunk,
+                    startMs: Math.max(0, phraseStart),
+                    durationMs: Math.max(1800, Math.min(4800, words.length * 380 + 400)),
+                  });
                 }
                 currentInterimText = "";
                 currentInterimStartMs = 0;
@@ -634,7 +681,8 @@ export const useRecorder = create<RecorderStore>((set, get) => ({
 
               // Restart cleanly if recording is ongoing and stop wasn't requested
               if (!isIntentionallyStoppingRecognition && get().state === "recording") {
-                setTimeout(() => {
+                if (restartTimer) clearTimeout(restartTimer);
+                restartTimer = setTimeout(() => {
                   if (!isIntentionallyStoppingRecognition && get().state === "recording") {
                     initRecognition();
                   }
@@ -646,6 +694,14 @@ export const useRecorder = create<RecorderStore>((set, get) => ({
             recognitionInstance = recognition;
           } catch (recErr) {
             console.warn("SpeechRecognition start error:", recErr);
+            if (
+              !isIntentionallyStoppingRecognition &&
+              get().state === "recording" &&
+              retryCount < 5
+            ) {
+              retryCount++;
+              setTimeout(initRecognition, 500 * retryCount);
+            }
           }
         };
 
@@ -986,12 +1042,17 @@ export const useRecorder = create<RecorderStore>((set, get) => ({
 
     if (currentInterimText && currentInterimText.trim().length > 0) {
       const words = currentInterimText.trim().split(/\s+/);
-      for (let w = 0; w < words.length; w += 8) {
-        const chunk = words.slice(w, w + 8).join(" ");
+      const phraseStart =
+        currentInterimStartMs || Math.max(0, get().elapsedMs - words.length * 360);
+      const chunkSize = 7;
+      for (let w = 0; w < words.length; w += chunkSize) {
+        const chunkWords = words.slice(w, w + chunkSize);
+        const chunk = chunkWords.join(" ");
         if (chunk && !transcriptSegments.some((s) => s.text === chunk)) {
           transcriptSegments.push({
             text: chunk,
-            startMs: currentInterimStartMs || Math.max(0, get().elapsedMs - 1200),
+            startMs: Math.max(0, phraseStart + Math.round((w / words.length) * Math.max(0, get().elapsedMs - phraseStart))),
+            durationMs: Math.max(1800, Math.min(4800, chunkWords.length * 380 + 400)),
           });
         }
       }
@@ -1218,72 +1279,34 @@ export const useRecorder = create<RecorderStore>((set, get) => ({
         bgColor: "rgba(15, 17, 23, 0.88)",
       }));
 
-    // Merge speech-to-text transcript segments (from sfx-transcribe mode)
+    // Merge real dynamic speech-to-text transcript segments from microphone
     if (transcriptSegments.length > 0) {
-      transcriptSegments.forEach((seg, idx) => {
+      const sortedSegments = [...transcriptSegments].sort((a, b) => a.startMs - b.startMs);
+      let lastEndMs = 0;
+      sortedSegments.forEach((seg, idx) => {
+        const text = seg.text.trim();
+        if (!text) return;
+        const startMs = Math.max(lastEndMs + 40, seg.startMs);
+        const durationMs =
+          seg.durationMs ||
+          Math.max(1800, Math.min(4800, text.split(/\s+/).length * 380 + 400));
+        lastEndMs = startMs + durationMs;
+
         textOverlays.push({
           id: `transcript-${idx + 1}`,
-          text: seg.text,
-          startTimeMs: seg.startMs,
-          durationMs: 3200,
+          text,
+          startTimeMs: startMs,
+          durationMs,
           x: 0.5,
           y: 0.88,
           fontSize: 18,
           color: "#ffffff",
-          bgColor: "rgba(0, 0, 0, 0.72)",
+          bgColor: "rgba(0, 0, 0, 0.75)",
+          cardStyle: "glass",
           motionPreset: "blur-reveal",
         } as import("@domolens/core").TextOverlay);
       });
       transcriptSegments = [];
-    } else if (mode === "sfx-transcribe" || mode === "auto-zoom-sfx-transcribe") {
-      // Fallback: If Web Speech API was unavailable or returned 0 segments in current environment,
-      // generate smart action captions synced to each interaction block
-      // so the user ALWAYS gets timed subtitles in transcribe mode!
-      const captionTargets = zoomBlocks.length > 0
-        ? zoomBlocks
-        : finalInteractions.map((i, idx) => ({
-            id: `block-${idx}`,
-            startTimeMs: i.timestampMs,
-            endTimeMs: i.timestampMs + 2500,
-            targetX: i.x,
-            targetY: i.y,
-            scale: 1.85,
-            enabled: true,
-          }));
-
-      captionTargets.forEach((block, idx) => {
-        const match =
-          finalInteractions.find(
-            (i) => Math.abs(i.timestampMs - block.startTimeMs) <= 1500 && i.type === "typing",
-          ) ||
-          finalInteractions.find(
-            (i) => Math.abs(i.timestampMs - block.startTimeMs) <= 1500,
-          );
-        const captionText = match?.type === "typing"
-          ? match?.snippet
-            ? `Enter text: "${match.snippet.slice(0, 36)}"`
-            : "Typing and entering values into form"
-          : match?.button === "right"
-          ? "Right click to inspect context options"
-          : idx === 0
-          ? "Click to open application showcase navigation"
-          : idx === 1
-          ? "Navigate and inspect settings panel options"
-          : `Step ${idx + 1}: Click and focus target element`;
-
-        textOverlays.push({
-          id: `caption-${idx + 1}`,
-          text: captionText,
-          startTimeMs: block.startTimeMs,
-          durationMs: Math.min(3500, Math.max(2000, block.endTimeMs - block.startTimeMs)),
-          x: 0.5,
-          y: 0.88,
-          fontSize: 18,
-          color: "#ffffff",
-          bgColor: "rgba(0, 0, 0, 0.72)",
-          motionPreset: "blur-reveal",
-        } as import("@domolens/core").TextOverlay);
-      });
     }
 
     // Auto-plot chapters for the AI director / video outline

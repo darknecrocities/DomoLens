@@ -318,9 +318,20 @@ export const useEditor = create<EditorState>((set, get) => ({
       if (!parsed.keyframes) parsed.keyframes = [];
       if (!parsed.clicks) parsed.clicks = [];
       if (!parsed.interactions) parsed.interactions = [];
-      if (!parsed.cursorTrajectory) parsed.cursorTrajectory = [];
       if (!parsed.textOverlays) parsed.textOverlays = [];
-      if (!parsed.audioTracks) parsed.audioTracks = [];
+      // Clean up any stale legacy static dummy captions from older recordings so subtitles are 100% dynamic!
+      if (parsed.textOverlays.length > 0 && parsed.summary.source === "recording") {
+        const staticPatterns = [
+          "Click to open application showcase navigation",
+          "Navigate and inspect settings panel options",
+          "Click and focus target element",
+          "Typing and entering values into form",
+          "Right click to inspect context options",
+        ];
+        parsed.textOverlays = parsed.textOverlays.filter((o) => {
+          return !staticPatterns.some((pattern) => o.text.includes(pattern));
+        });
+      }
 
       if (!parsed.looks) parsed.looks = { ...DEFAULT_LOOKS };
       // Self-heal: If recording had windowFrame stripped to "none", restore MacBook terminal frame

@@ -283,6 +283,9 @@ describe("useRecorder store", () => {
       ],
     });
 
+    // Record dynamic voice speech transcript captured from microphone
+    useRecorder.getState().recordTranscript("Speaking into the mic and explaining the workflow", 1500);
+
     const storageMap = new Map<string, string>();
     const originalStorage = globalThis.sessionStorage;
     globalThis.sessionStorage = {
@@ -307,8 +310,10 @@ describe("useRecorder store", () => {
     expect(project.audioSettings.clickSoundEnabled).toBe(true);
     expect(project.audioSettings.typingSoundEnabled).toBe(true);
 
-    // Subtitles generated
+    // Dynamic subtitles generated from speech
     expect(project.textOverlays.length).toBeGreaterThanOrEqual(1);
+    expect(project.textOverlays[0]?.text).toBe("Speaking into the mic and explaining the workflow");
+    expect(project.textOverlays[0]?.cardStyle).toBe("glass");
 
     // MacBook terminal frame with studio styling and fit contain (no edge cutoffs)
     expect(project.looks.fit).toBe("contain");
@@ -320,6 +325,44 @@ describe("useRecorder store", () => {
     // Video starts full screen unzoomed at timeMs 0
     expect(project.keyframes[0].timeMs).toBe(0);
     expect(project.keyframes[0].scale).toBe(1.0);
+
+    globalThis.sessionStorage = originalStorage;
+  });
+
+  it("does not generate static placeholder subtitles when recording in transcribe mode without speech", async () => {
+    useRecorder.getState().setRecordingMode("auto-zoom-sfx-transcribe");
+    useRecorder.setState({
+      state: "recording",
+      elapsedMs: 5000,
+      clicks: [
+        { id: "c-silent", timestampMs: 2000, x: 0.5, y: 0.5, button: "left" },
+      ],
+      interactions: [
+        { id: "c-silent", type: "click", timestampMs: 2000, x: 0.5, y: 0.5, button: "left" },
+      ],
+      cursorTrajectory: [
+        { timestampMs: 0, x: 0.5, y: 0.5 },
+        { timestampMs: 2000, x: 0.5, y: 0.5 },
+      ],
+    });
+
+    const storageMap = new Map<string, string>();
+    const originalStorage = globalThis.sessionStorage;
+    globalThis.sessionStorage = {
+      getItem: (key: string) => storageMap.get(key) ?? null,
+      setItem: (key: string, val: string) => storageMap.set(key, val),
+      removeItem: (key: string) => storageMap.delete(key),
+      clear: () => storageMap.clear(),
+      length: 0,
+      key: () => null,
+    };
+
+    const summary = await useRecorder.getState().stopRecording();
+    const saved = globalThis.sessionStorage.getItem(`domolens_project_${summary?.id}`);
+    const project = JSON.parse(saved!);
+
+    // Static placeholder captions eradicated: 0 overlays when speech was not recorded
+    expect(project.textOverlays).toHaveLength(0);
 
     globalThis.sessionStorage = originalStorage;
   });
