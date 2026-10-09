@@ -44,6 +44,12 @@ import { useNav } from "./nav";
 import { toast } from "./toast";
 
 
+import {
+  checkOllamaConnection,
+  queryOllamaDirector,
+  DEFAULT_OLLAMA_ENDPOINT,
+} from "../lib/ollama";
+
 export type ToolTab =
   | "style"
   | "motion"
@@ -66,6 +72,17 @@ export type ToolTab =
  */
 export type TimelineToolMode = "select" | "split" | "pan";
 
+export interface LlmQuestionOption {
+  label: string;
+  value: string;
+}
+
+export interface LlmQuestion {
+  id: string;
+  prompt: string;
+  options: LlmQuestionOption[];
+}
+
 export interface LlmMessage {
   id: string;
   role: "user" | "assistant";
@@ -75,6 +92,7 @@ export interface LlmMessage {
     label: string;
     actionKey: string;
   }>;
+  questions?: LlmQuestion[];
 }
 
 export interface EditorState {
@@ -97,9 +115,17 @@ export interface EditorState {
   isLeftSidebarOpen: boolean; // LLM
   isRightSidebarOpen: boolean; // Tools
 
-  // LLM Assistant
+  // LLM Assistant & Ollama
   llmMessages: LlmMessage[];
   isLlmThinking: boolean;
+  ollamaStatus: "disconnected" | "connecting" | "connected" | "error";
+  ollamaModels: string[];
+  selectedOllamaModel: string;
+  ollamaEndpoint: string;
+  checkOllamaStatus: () => Promise<void>;
+  setSelectedOllamaModel: (model: string) => void;
+  setOllamaEndpoint: (endpoint: string) => void;
+  answerLlmQuestion: (questionId: string, answerValue: string) => Promise<void>;
 
   // History for undo/redo
   history: ProjectData[];
@@ -268,6 +294,41 @@ export const useEditor = create<EditorState>((set, get) => ({
 
   llmMessages: INITIAL_LLM_MESSAGES,
   isLlmThinking: false,
+  ollamaStatus: "disconnected",
+  ollamaModels: [],
+  selectedOllamaModel: "llama3.2:latest",
+  ollamaEndpoint: DEFAULT_OLLAMA_ENDPOINT,
+
+  checkOllamaStatus: async () => {
+    set({ ollamaStatus: "connecting" });
+    const res = await checkOllamaConnection(get().ollamaEndpoint);
+    if (res.connected) {
+      const curSelected = get().selectedOllamaModel;
+      const targetModel =
+        curSelected && res.models.includes(curSelected)
+          ? curSelected
+          : (res.recommendedModel || res.models[0] || "llama3.2:latest");
+      set({
+        ollamaStatus: "connected",
+        ollamaModels: res.models,
+        selectedOllamaModel: targetModel,
+      });
+      toast.success(`Ollama connected: ${targetModel}`);
+    } else {
+      set({ ollamaStatus: "disconnected" });
+      toast.info("Ollama is offline. Start 'ollama serve' to enable local LLM.");
+    }
+  },
+
+  setSelectedOllamaModel: (model: string) => {
+    set({ selectedOllamaModel: model });
+    toast.info(`Active Ollama Model: ${model}`);
+  },
+
+  setOllamaEndpoint: (endpoint: string) => {
+    set({ ollamaEndpoint: endpoint });
+    void get().checkOllamaStatus();
+  },
 
   history: [],
   future: [],
@@ -2045,6 +2106,20 @@ export const useEditor = create<EditorState>((set, get) => ({
     return success;
   },
 
+  answerLlmQuestion: async (_questionId: string, answerValue: string) => {
+    let promptText = answerValue;
+    if (answerValue === "app_type:cli") {
+      promptText = "My app is a Developer CLI / Terminal Tool. Recommend the best styling and preset.";
+    } else if (answerValue === "app_type:saas") {
+      promptText = "My app is a Modern SaaS Web App. Recommend the best styling and preset.";
+    } else if (answerValue === "app_type:mobile") {
+      promptText = "My app is a Mobile / Desktop App. Recommend the best styling and preset.";
+    } else if (answerValue === "app_type:creative") {
+      promptText = "My app is a Creative & Indie Tool. Recommend the best styling and preset.";
+    }
+    await get().sendLlmMessage(promptText);
+  },
+
   sendLlmMessage: async (content: string) => {
     const userMsg: LlmMessage = {
       id: `usr-${Date.now()}`,
@@ -2058,51 +2133,196 @@ export const useEditor = create<EditorState>((set, get) => ({
       isLlmThinking: true,
     }));
 
-    // Generate responsive contextual AI answer and execute video edits
-    await new Promise((r) => setTimeout(r, 400));
+    const proj = get().project;
+    const isOllamaConnected = get().ollamaStatus === "connected";
+
+    // 1. ATTEMPT REAL LOCAL OLLAMA INFERENCE IF CONNECTED
+    if (isOllamaConnected) {
+      try {
+        const projectSummary = {
+          name: proj?.summary.name || "Recording",
+          durationSec: proj && proj.summary.durationMs != null ? Number((proj.summary.durationMs / 1000).toFixed(1)) : 0,
+          width: proj?.summary.width || 1920,
+          height: proj?.summary.height || 1080,
+          mouseClicksCount: proj?.clicks?.length ?? 0,
+          typingInteractionsCount: proj?.interactions?.filter((i) => i.type === "typing").length ?? 0,
+          zoomBlocksCount: proj?.zoomBlocks?.length ?? 0,
+          textOverlaysCount: proj?.textOverlays?.length ?? 0,
+          windowFrame: proj?.looks?.windowFrame ?? "none",
+          tiltX: proj?.looks?.tiltX ?? proj?.looks?.tiltAngle ?? 0,
+          tiltY: proj?.looks?.tiltY ?? 0,
+          background: proj?.looks?.backgroundValue || "obsidian",
+          cursorStyle: proj?.looks?.cursorStyle || "default",
+          sfxEnabled: Boolean(proj?.audioSettings?.clickSoundEnabled),
+        };
+
+        const ollamaRes = await queryOllamaDirector({
+          endpoint: get().ollamaEndpoint,
+          model: get().selectedOllamaModel,
+          userPrompt: content,
+          projectSummary,
+          conversationHistory: get().llmMessages.map((m) => ({ role: m.role, content: m.content })),
+        });
+
+        // If user gave a direct command to edit (tilt, background, cursor, frame, etc.) and model returned an action, execute it!
+        const isEditCommand =
+          !content.toLowerCase().includes("recommend") &&
+          !content.toLowerCase().includes("suggest") &&
+          !content.toLowerCase().includes("what");
+
+        if (isEditCommand && ollamaRes.actions && ollamaRes.actions.length === 1) {
+          const firstAct = ollamaRes.actions[0];
+          if (firstAct) {
+            get().executeLlmAction(firstAct.actionKey);
+          }
+        }
+
+        const aiMsg: LlmMessage = {
+          id: `ai-${Date.now()}`,
+          role: "assistant",
+          content: ollamaRes.message,
+          timestamp: Date.now(),
+          actions: ollamaRes.actions,
+          questions: ollamaRes.questions,
+        };
+
+        set((s) => ({
+          llmMessages: [...s.llmMessages, aiMsg],
+          isLlmThinking: false,
+        }));
+        return;
+      } catch (ollamaErr) {
+        console.warn("Ollama inference failed, using heuristic director fallback:", ollamaErr);
+      }
+    }
+
+    // 2. RESPONSIVE HEURISTIC DIRECTOR (INSTANT FALLBACK / OFFLINE RUNNER)
+    await new Promise((r) => setTimeout(r, 350));
 
     const lower = content.toLowerCase();
-    const proj = get().project;
     let reply = "I analyzed your recording timeline.";
     let actions: Array<{ label: string; actionKey: string }> = [];
+    let questions: LlmQuestion[] | undefined;
 
-    // 1. VIDEO DESCRIPTION & TIMELINE BREAKDOWN
+    const clicks = proj?.clicks?.length ?? 0;
+    const typing = proj?.interactions?.filter((i) => i.type === "typing").length ?? 0;
+    const zoomCount = proj?.zoomBlocks?.length ?? 0;
+    const textCount = proj?.textOverlays?.length ?? 0;
+    const frame = proj?.looks?.windowFrame ?? "none";
+    const tiltX = proj?.looks?.tiltX ?? proj?.looks?.tiltAngle ?? 0;
+    const tiltY = proj?.looks?.tiltY ?? 0;
+    const bg = proj?.looks?.backgroundValue || "obsidian";
+    const cursor = proj?.looks?.cursorStyle || "default";
+    const sfxOn = Boolean(proj?.audioSettings?.clickSoundEnabled);
+    const durSec = proj && proj.summary.durationMs != null ? (proj.summary.durationMs / 1000).toFixed(1) : "0";
+
+    // A. APP IDENTIFICATION & VALIDATION INQUIRY
     if (
-      lower.includes("describe") ||
-      lower.includes("what's in") ||
-      lower.includes("whats in") ||
-      lower.includes("analyze") ||
-      lower.includes("summary") ||
-      lower.includes("overview") ||
-      lower.includes("breakdown")
+      lower.includes("what is my app") ||
+      lower.includes("what app") ||
+      lower.includes("analyze my app") ||
+      lower.includes("app category") ||
+      lower.includes("app type") ||
+      lower.includes("validate")
     ) {
-      const durSec = proj && proj.summary.durationMs != null ? (proj.summary.durationMs / 1000).toFixed(1) : "0";
-      const clicks = proj?.clicks?.length ?? 0;
-      const typing = proj?.interactions?.filter((i) => i.type === "typing").length ?? 0;
-      const zoomCount = proj?.zoomBlocks?.length ?? 0;
-      const textCount = proj?.textOverlays?.length ?? 0;
-      const frame = proj?.looks?.windowFrame ?? "none";
-      const tiltX = proj?.looks?.tiltX ?? proj?.looks?.tiltAngle ?? 0;
-      const tiltY = proj?.looks?.tiltY ?? 0;
-      const bg = proj?.looks?.backgroundValue || "obsidian";
-      const cursor = proj?.looks?.cursorStyle || "default";
+      const detectedCategory =
+        frame === "terminal" || (clicks < 6 && typing > 0)
+          ? "Developer CLI / Terminal Utility"
+          : clicks >= 6
+          ? "Modern SaaS Web Platform"
+          : "Product Showcase & Indie App";
 
       reply =
-        `🎬 **Video Description & Timeline Analysis**:\n` +
-        `• **Project**: ${proj?.summary.name || "Recording"} (${durSec}s • ${proj?.summary.width || 1920}×${proj?.summary.height || 1080})\n` +
-        `• **User Activity**: ${clicks} mouse clicks, ${typing} typing bursts captured\n` +
-        `• **Camera Motion**: ${zoomCount} auto-zoom blocks (${zoomCount > 0 ? "active camera tracking" : "full frame 1.0x"})\n` +
-        `• **Subtitles & Text**: ${textCount} overlay cards on timeline\n` +
-        `• **Visual Styling**: ${frame.toUpperCase()} frame, 3D tilt (${tiltX}° pitch, ${tiltY}° yaw), ${bg.length > 25 ? "custom gradient" : bg} backdrop, ${cursor} pointer\n\n` +
-        `Would you like me to auto-plot camera zooms, apply a 3D tilt, or audit recommendations to elevate this video?`;
+        `🎬 **App Analysis & Showcase Validation**:\n` +
+        `Based on your recorded window framing (${frame.toUpperCase()}), ${clicks} mouse clicks, and typing bursts, your product appears to be a **${detectedCategory}**.\n\n` +
+        `To generate the most impactful, high-converting showcase recommendations, **confirm or choose your application type:**`;
+
+      questions = [
+        {
+          id: "app_category",
+          prompt: "Select or confirm your application type:",
+          options: [
+            { label: "💻 Developer CLI / Terminal", value: "app_type:cli" },
+            { label: "🌐 Modern SaaS Web App", value: "app_type:saas" },
+            { label: "📱 Mobile / Desktop App", value: "app_type:mobile" },
+            { label: "🎨 Creative & Indie Tool", value: "app_type:creative" },
+          ],
+        },
+      ];
 
       actions = [
-        { label: "AI Recommendations", actionKey: "get_recommendations" },
-        { label: "Apply 3D Tilt (+12°)", actionKey: "apply_rec_tilt" },
+        { label: "Apply Developer Preset", actionKey: "apply_developer_style" },
+        { label: "Apply SaaS Preset", actionKey: "apply_saas_style" },
         { label: "Auto-Plot Zooms", actionKey: "plot_zooms" },
       ];
     }
-    // 2. VIDEO RECOMMENDATIONS & AUDIT
+    // B. TAILORED RECOMMENDATIONS: DEVELOPER CLI / TERMINAL
+    else if (lower.includes("developer cli") || lower.includes("terminal tool") || lower.includes("app_type:cli")) {
+      reply =
+        `✨ **Tailored Recommendations for Developer CLI & Terminal Tools**:\n\n` +
+        `1. **Window Frame**: Keep macOS Terminal frame with traffic lights for authentic terminal aesthetics.\n` +
+        `2. **Canvas Backdrop**: Studio Obsidian with deep dark contrast to make code and syntax stand out.\n` +
+        `3. **Cursor Styling**: Neon Laser Dot or Terminal Caret to guide eyes to outputs.\n` +
+        `4. **Acoustic Audio**: Mechanical keyboard click sounds with music ducking.\n` +
+        `5. **Camera Glides**: Smooth zoom in on compilation commands and execution results.\n\n` +
+        `Click **Apply Developer Preset** below to apply all these visual settings instantly:`;
+
+      actions = [
+        { label: "Apply Developer Preset", actionKey: "apply_developer_style" },
+        { label: "Auto-Plot Zooms", actionKey: "plot_zooms" },
+        { label: "Turn On Tactile SFX", actionKey: "apply_rec_sfx" },
+      ];
+    }
+    // C. TAILORED RECOMMENDATIONS: MODERN SAAS WEB APP
+    else if (lower.includes("modern saas") || lower.includes("saas web") || lower.includes("app_type:saas")) {
+      reply =
+        `✨ **Tailored Recommendations for Modern SaaS Web Platforms**:\n\n` +
+        `1. **3D Frame Perspective**: +12° pitch / -10° yaw for an Apple launch / Keynote presentation vibe.\n` +
+        `2. **Backdrop**: Indigo Dusk or Studio Clean White gradient.\n` +
+        `3. **Window Frame**: macOS Classic window frame with soft ambient drop-shadow.\n` +
+        `4. **Cursor**: macOS Sculpted Arrow with click ripples.\n` +
+        `5. **Subtitles**: Compact bottom glass pills to call out product features.\n\n` +
+        `Click **Apply SaaS Preset** below to apply all these settings in one click:`;
+
+      actions = [
+        { label: "Apply SaaS Preset", actionKey: "apply_saas_style" },
+        { label: "Apply 3D Tilt (+12°)", actionKey: "apply_rec_tilt" },
+        { label: "Insert Subtitle", actionKey: "add_subtitle" },
+      ];
+    }
+    // D. TAILORED RECOMMENDATIONS: MOBILE / DESKTOP APP
+    else if (lower.includes("mobile") || lower.includes("app_type:mobile")) {
+      reply =
+        `✨ **Tailored Recommendations for Mobile & Desktop Apps**:\n\n` +
+        `1. **Framing**: Frameless clean presentation with subtle glow.\n` +
+        `2. **Cursor**: Scaled cursor (1.8x) for high mobile feed visibility.\n` +
+        `3. **Camera**: Dynamic zoom tracking on touch/click hotspots.\n` +
+        `4. **Audio**: Tactile pop sounds.\n\n` +
+        `Click **Apply Mobile Preset** below:`;
+
+      actions = [
+        { label: "Apply Mobile Preset", actionKey: "apply_mobile_style" },
+        { label: "Auto-Plot Zooms", actionKey: "plot_zooms" },
+        { label: "Turn On Tactile SFX", actionKey: "apply_rec_sfx" },
+      ];
+    }
+    // E. TAILORED RECOMMENDATIONS: CREATIVE & INDIE
+    else if (lower.includes("creative") || lower.includes("app_type:creative")) {
+      reply =
+        `✨ **Tailored Recommendations for Creative & Indie Tools**:\n\n` +
+        `1. **Backdrop**: Sunset Amber or Emerald Studio vibrant gradient.\n` +
+        `2. **3D Frame Tilt**: +12° dynamic perspective.\n` +
+        `3. **Camera**: Cinematic Camera Shift Tour across interactive elements.\n` +
+        `4. **Subtitles**: Glassmorphic punchy overlays.\n\n` +
+        `Click any action below:`;
+
+      actions = [
+        { label: "Sunset Amber Backdrop", actionKey: "apply_backdrop_sunset" },
+        { label: "Camera Shift Tour", actionKey: "tour_shift" },
+        { label: "Apply 3D Tilt (+12°)", actionKey: "apply_rec_tilt" },
+      ];
+    }
+    // F. GENERAL RECOMMENDATIONS & AUDIT
     else if (
       lower.includes("recommend") ||
       lower.includes("suggest") ||
@@ -2111,12 +2331,6 @@ export const useEditor = create<EditorState>((set, get) => ({
       lower.includes("advice") ||
       lower.includes("feedback")
     ) {
-      const clicks = proj?.clicks?.length ?? 0;
-      const zoomCount = proj?.zoomBlocks?.length ?? 0;
-      const textCount = proj?.textOverlays?.length ?? 0;
-      const tiltX = proj?.looks?.tiltX ?? proj?.looks?.tiltAngle ?? 0;
-      const sfxOn = Boolean(proj?.audioSettings?.clickSoundEnabled);
-
       reply =
         `✨ **DomoLens AI Director Recommendations**:\n\n` +
         `1. **Camera Focus**: ${
@@ -2139,17 +2353,54 @@ export const useEditor = create<EditorState>((set, get) => ({
             ? `⚠️ Tactile sound effects are off. Adding click bops gives the viewer immediate tactile satisfaction.`
             : `✓ Tactile click sound effects active.`
         }\n\n` +
-        `Click any action below to apply these improvements immediately:`;
+        `What kind of application is this? Select below to unlock targeted styling presets:`;
+
+      questions = [
+        {
+          id: "app_category",
+          prompt: "What kind of application are you showcasing?",
+          options: [
+            { label: "💻 Developer CLI / Terminal", value: "app_type:cli" },
+            { label: "🌐 Modern SaaS Web App", value: "app_type:saas" },
+            { label: "📱 Mobile / Desktop App", value: "app_type:mobile" },
+            { label: "🎨 Creative & Indie Tool", value: "app_type:creative" },
+          ],
+        },
+      ];
 
       actions = [
         ...(tiltX === 0 ? [{ label: "Apply 3D Tilt (+12°)", actionKey: "apply_rec_tilt" }] : []),
         ...(zoomCount === 0 ? [{ label: "Auto-Plot Zooms", actionKey: "apply_rec_zooms" }] : []),
         ...(!sfxOn ? [{ label: "Turn On Tactile SFX", actionKey: "apply_rec_sfx" }] : []),
         { label: "Switch to Obsidian Backdrop", actionKey: "apply_rec_backdrop" },
-        { label: "Insert Subtitle", actionKey: "add_subtitle" },
       ];
     }
-    // 3. DIRECT VIDEO EDITING: 3D FRAME TILT
+    // G. VIDEO DESCRIPTION & TIMELINE BREAKDOWN
+    else if (
+      lower.includes("describe") ||
+      lower.includes("what's in") ||
+      lower.includes("whats in") ||
+      lower.includes("analyze") ||
+      lower.includes("summary") ||
+      lower.includes("overview") ||
+      lower.includes("breakdown")
+    ) {
+      reply =
+        `🎬 **Video Description & Timeline Analysis**:\n` +
+        `• **Project**: ${proj?.summary.name || "Recording"} (${durSec}s • ${proj?.summary.width || 1920}×${proj?.summary.height || 1080})\n` +
+        `• **User Activity**: ${clicks} mouse clicks, ${typing} typing bursts captured\n` +
+        `• **Camera Motion**: ${zoomCount} auto-zoom blocks (${zoomCount > 0 ? "active camera tracking" : "full frame 1.0x"})\n` +
+        `• **Subtitles & Text**: ${textCount} overlay cards on timeline\n` +
+        `• **Visual Styling**: ${frame.toUpperCase()} frame, 3D tilt (${tiltX}° pitch, ${tiltY}° yaw), ${bg.length > 25 ? "custom gradient" : bg} backdrop, ${cursor} pointer\n\n` +
+        `Would you like me to auto-plot camera zooms, apply a 3D tilt, or audit recommendations to elevate this video?`;
+
+      actions = [
+        { label: "AI Recommendations", actionKey: "get_recommendations" },
+        { label: "Apply 3D Tilt (+12°)", actionKey: "apply_rec_tilt" },
+        { label: "Auto-Plot Zooms", actionKey: "plot_zooms" },
+      ];
+    }
+    // H. DIRECT VIDEO EDITING: 3D FRAME TILT
     else if (lower.includes("tilt") || lower.includes("angle") || lower.includes("3d")) {
       if (lower.includes("reset") || lower.includes("flat") || lower.includes("zero") || lower.includes("0")) {
         get().updateLooks({ tiltX: 0, tiltY: 0, tiltAngle: 0 });
@@ -2161,7 +2412,7 @@ export const useEditor = create<EditorState>((set, get) => ({
         actions = [{ label: "Reset Tilt", actionKey: "reset_tilt" }];
       }
     }
-    // 4. DIRECT VIDEO EDITING: CANVAS BACKDROP & BACKGROUNDS
+    // I. DIRECT VIDEO EDITING: CANVAS BACKDROP & BACKGROUNDS
     else if (lower.includes("background") || lower.includes("backdrop")) {
       let bgValue = "linear-gradient(135deg, #090a0f 0%, #151821 100%)";
       let bgName = "Studio Obsidian";
@@ -2193,7 +2444,7 @@ export const useEditor = create<EditorState>((set, get) => ({
         { label: "Apply 3D Tilt (+12°)", actionKey: "apply_rec_tilt" },
       ];
     }
-    // 5. DIRECT VIDEO EDITING: WINDOW FRAMING
+    // J. DIRECT VIDEO EDITING: WINDOW FRAMING
     else if (lower.includes("frame") || lower.includes("window")) {
       if (lower.includes("terminal")) {
         get().updateLooks({ windowFrame: "terminal" });
@@ -2210,7 +2461,7 @@ export const useEditor = create<EditorState>((set, get) => ({
       }
       actions = [{ label: "Apply 3D Tilt (+12°)", actionKey: "apply_rec_tilt" }];
     }
-    // 6. DIRECT VIDEO EDITING: CURSOR STYLING
+    // K. DIRECT VIDEO EDITING: CURSOR STYLING
     else if (lower.includes("cursor") || lower.includes("pointer")) {
       if (lower.includes("laser")) {
         get().updateLooks({ cursorStyle: "laser-dot" });
@@ -2230,7 +2481,7 @@ export const useEditor = create<EditorState>((set, get) => ({
       }
       actions = [{ label: "Auto-Plot Zooms", actionKey: "plot_zooms" }];
     }
-    // 7. DIRECT VIDEO EDITING: SOUND EFFECTS & AFX
+    // L. DIRECT VIDEO EDITING: SOUND EFFECTS & AFX
     else if (lower.includes("audio") || lower.includes("sound") || lower.includes("sfx")) {
       if (lower.includes("off") || lower.includes("disable") || lower.includes("mute")) {
         get().updateAudioSettings({ clickSoundEnabled: false, typingSoundEnabled: false });
@@ -2242,7 +2493,7 @@ export const useEditor = create<EditorState>((set, get) => ({
         actions = [{ label: "Add Subtitle", actionKey: "add_subtitle" }];
       }
     }
-    // 8. DIRECT VIDEO EDITING: CAMERA ZOOMS & GLIDES
+    // M. DIRECT VIDEO EDITING: CAMERA ZOOMS & GLIDES
     else if (lower.includes("zoom") || lower.includes("plot") || lower.includes("click") || lower.includes("glide")) {
       if (lower.includes("clear") || lower.includes("remove") || lower.includes("delete") || lower.includes("reset")) {
         const curProj = get().project;
@@ -2263,9 +2514,8 @@ export const useEditor = create<EditorState>((set, get) => ({
         ];
       }
     }
-    // 9. DIRECT VIDEO EDITING: SUBTITLES & TEXT
+    // N. DIRECT VIDEO EDITING: SUBTITLES & TEXT
     else if (lower.includes("text") || lower.includes("caption") || lower.includes("subtitle")) {
-      // Extract custom subtitle text if user asked "add subtitle <text>"
       let customText = "";
       const matchQuotes = content.match(/["']([^"']+)["']/);
       if (matchQuotes && matchQuotes[1]) {
@@ -2285,7 +2535,7 @@ export const useEditor = create<EditorState>((set, get) => ({
         { label: "Apply 3D Tilt (+12°)", actionKey: "apply_rec_tilt" },
       ];
     }
-    // 10. TOUR / WALKTHROUGH
+    // O. TOUR / WALKTHROUGH
     else if (lower.includes("tour") || lower.includes("walkthrough") || lower.includes("shift")) {
       get().createTourCameraShift();
       reply = "✓ Created a cinematic Camera Shift Tour gliding smoothly across all UI interaction hotspots.";
@@ -2294,22 +2544,35 @@ export const useEditor = create<EditorState>((set, get) => ({
         { label: "Add Subtitle", actionKey: "add_subtitle" },
       ];
     }
-    // 11. CHAPTERS & HEADINGS
+    // P. CHAPTERS & HEADINGS
     else if (lower.includes("title") || lower.includes("chapter")) {
       get().addTextOverlay("Chapter: Key Feature Demonstration");
       reply = "✓ Applied chapter highlight card at current playhead position.";
       actions = [{ label: "Auto-Plot Zooms", actionKey: "plot_zooms" }];
     }
-    // 12. GENERAL CONVERSATION & ASSISTANT PROMPT
+    // Q. GENERAL FALLBACK PROMPT
     else {
       reply =
         `I am your DomoLens AI Director. I can directly edit your video, describe its content, or audit improvements:\n\n` +
         `• **Ask to edit**: "change background to obsidian", "tilt frame 12 degrees", "add subtitle 'Check this out'", "turn on click sounds"\n` +
-        `• **Ask to analyze**: "describe my video", "give me recommendations"\n` +
+        `• **Ask to analyze**: "what is my app?", "describe my video", "give me recommendations"\n` +
         `• **Camera tools**: "plot zooms", "clear zooms", "camera shift tour"`;
 
+      questions = [
+        {
+          id: "app_category",
+          prompt: "What kind of application are you showcasing?",
+          options: [
+            { label: "💻 Developer CLI / Terminal", value: "app_type:cli" },
+            { label: "🌐 Modern SaaS Web App", value: "app_type:saas" },
+            { label: "📱 Mobile / Desktop App", value: "app_type:mobile" },
+            { label: "🎨 Creative & Indie Tool", value: "app_type:creative" },
+          ],
+        },
+      ];
+
       actions = [
-        { label: "Describe Video", actionKey: "describe_video" },
+        { label: "What is my App?", actionKey: "analyze_app" },
         { label: "AI Recommendations", actionKey: "get_recommendations" },
         { label: "Apply 3D Tilt (+12°)", actionKey: "apply_rec_tilt" },
         { label: "Auto-Plot Zooms", actionKey: "plot_zooms" },
@@ -2322,6 +2585,7 @@ export const useEditor = create<EditorState>((set, get) => ({
       content: reply,
       timestamp: Date.now(),
       actions,
+      questions,
     };
 
     set((s) => ({
@@ -2335,6 +2599,15 @@ export const useEditor = create<EditorState>((set, get) => ({
     if (actionKey === "plot_zooms" || actionKey === "apply_rec_zooms") {
       state.plotInteractions({ fallbackIfEmpty: true });
       toast.success("Auto-plotted camera zooms!");
+    } else if (actionKey === "clear_zooms") {
+      const curProj = state.project;
+      if (curProj) {
+        set({
+          ...pushHistory(state),
+          project: { ...curProj, keyframes: [], zoomBlocks: [] },
+        });
+        toast.info("Cleared all camera zooms (full frame 1.0x)");
+      }
     } else if (actionKey === "tour_shift") {
       state.createTourCameraShift();
       toast.success("Created Camera Shift Tour!");
@@ -2350,9 +2623,103 @@ export const useEditor = create<EditorState>((set, get) => ({
         backgroundType: "gradient",
       });
       toast.success("Applied Studio Obsidian backdrop!");
+    } else if (actionKey === "apply_backdrop_indigo") {
+      state.updateLooks({
+        backgroundValue: "linear-gradient(135deg, #1e1b4b 0%, #312e81 50%, #4338ca 100%)",
+        backgroundType: "gradient",
+      });
+      toast.success("Applied Indigo Dusk backdrop!");
+    } else if (actionKey === "apply_backdrop_sunset") {
+      state.updateLooks({
+        backgroundValue: "linear-gradient(135deg, #451a03 0%, #7c2d12 50%, #9a3412 100%)",
+        backgroundType: "gradient",
+      });
+      toast.success("Applied Sunset Amber backdrop!");
+    } else if (actionKey === "apply_backdrop_white") {
+      state.updateLooks({
+        backgroundValue: "#ffffff",
+        backgroundType: "solid",
+      });
+      toast.success("Applied Studio Clean White backdrop!");
+    } else if (actionKey === "apply_backdrop_emerald") {
+      state.updateLooks({
+        backgroundValue: "linear-gradient(135deg, #022c22 0%, #064e3b 50%, #047857 100%)",
+        backgroundType: "gradient",
+      });
+      toast.success("Applied Emerald Studio backdrop!");
+    } else if (actionKey === "apply_frame_terminal") {
+      state.updateLooks({ windowFrame: "terminal" });
+      toast.success("Applied macOS Terminal window frame!");
+    } else if (actionKey === "apply_frame_macos") {
+      state.updateLooks({ windowFrame: "macos" });
+      toast.success("Applied macOS window frame!");
+    } else if (actionKey === "apply_frame_none") {
+      state.updateLooks({ windowFrame: "none" });
+      toast.success("Removed window frame (frameless)!");
+    } else if (actionKey === "apply_cursor_laser") {
+      state.updateLooks({ cursorStyle: "laser-dot" });
+      toast.success("Set cursor to Neon Laser Dot!");
+    } else if (actionKey === "apply_cursor_obsidian") {
+      state.updateLooks({ cursorStyle: "obsidian-glow" });
+      toast.success("Set cursor to Obsidian Glow!");
+    } else if (actionKey === "apply_cursor_macos") {
+      state.updateLooks({ cursorStyle: "mac" });
+      toast.success("Set cursor to macOS Arrow!");
+    } else if (actionKey === "apply_cursor_scale_up") {
+      state.updateLooks({ cursorSize: 1.8 });
+      toast.success("Scaled cursor size to 1.8x!");
     } else if (actionKey === "apply_rec_sfx") {
       state.updateAudioSettings({ clickSoundEnabled: true, typingSoundEnabled: true, musicDuckingEnabled: true });
       toast.success("Tactile SFX and music ducking enabled!");
+    } else if (actionKey === "mute_sfx") {
+      state.updateAudioSettings({ clickSoundEnabled: false, typingSoundEnabled: false });
+      toast.info("Muted acoustic sound effects");
+    } else if (actionKey === "apply_developer_style") {
+      state.updateLooks({
+        windowFrame: "terminal",
+        backgroundValue: "linear-gradient(135deg, #090a0f 0%, #151821 100%)",
+        backgroundType: "gradient",
+        cursorStyle: "laser-dot",
+        cursorSize: 1.4,
+        tiltX: 0,
+        tiltY: 0,
+        tiltAngle: 0,
+      });
+      state.updateAudioSettings({
+        clickSoundEnabled: true,
+        typingSoundEnabled: true,
+        musicDuckingEnabled: true,
+      });
+      toast.success("Applied Developer CLI showcase preset!");
+    } else if (actionKey === "apply_saas_style") {
+      state.updateLooks({
+        windowFrame: "macos",
+        backgroundValue: "linear-gradient(135deg, #1e1b4b 0%, #312e81 50%, #4338ca 100%)",
+        backgroundType: "gradient",
+        cursorStyle: "mac",
+        cursorSize: 1.2,
+        tiltX: 12,
+        tiltY: -10,
+        tiltAngle: 12,
+      });
+      state.updateAudioSettings({
+        clickSoundEnabled: true,
+        typingSoundEnabled: true,
+        musicDuckingEnabled: true,
+      });
+      toast.success("Applied Modern SaaS showcase preset!");
+    } else if (actionKey === "apply_mobile_style") {
+      state.updateLooks({
+        windowFrame: "none",
+        backgroundValue: "linear-gradient(135deg, #020617 0%, #0f172a 100%)",
+        backgroundType: "gradient",
+        cursorStyle: "laser-dot",
+        cursorSize: 1.8,
+        tiltX: 6,
+        tiltY: 0,
+        tiltAngle: 6,
+      });
+      toast.success("Applied Mobile showcase preset!");
     } else if (actionKey === "suggest_chapters") {
       state.addTextOverlay("Chapter: Key Interaction");
       toast.success("Applied chapter highlight card!");
@@ -2366,6 +2733,8 @@ export const useEditor = create<EditorState>((set, get) => ({
       void state.sendLlmMessage("Describe my video");
     } else if (actionKey === "get_recommendations") {
       void state.sendLlmMessage("Give me recommendations to improve this video");
+    } else if (actionKey === "analyze_app") {
+      void state.sendLlmMessage("What is my app?");
     }
   },
 
