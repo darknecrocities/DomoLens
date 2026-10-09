@@ -890,7 +890,13 @@ export function VideoCanvas({ project, currentTimeMs: propTimeMs }: VideoCanvasP
               poster={thumbnailSrc || undefined}
               playsInline
               preload="auto"
-              style={{ filter: effectsState.filterStyle || undefined }}
+              style={{
+                filter: effectsState.filterStyle || undefined,
+                imageRendering: "auto",
+                WebkitBackfaceVisibility: "hidden",
+                backfaceVisibility: "hidden",
+                transform: "translateZ(0)",
+              }}
               className="size-full object-cover pointer-events-none"
               onLoadedMetadata={(e) => {
                 const v = e.currentTarget;

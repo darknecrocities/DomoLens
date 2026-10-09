@@ -17,15 +17,19 @@ let cursorTrajectoryBuffer: import("@domolens/core").CursorTrajectoryPoint[] = [
 let transcriptSegments: Array<{ text: string; startMs: number }> = [];
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 let recognitionInstance: any | null = null;
+let currentInterimText = "";
+let currentInterimStartMs = 0;
+let isIntentionallyStoppingRecognition = false;
 
 
 export type RecordingState = "idle" | "requesting_share" | "countdown" | "recording" | "paused";
 export type RecordingSource = "screen" | "window";
 export type RecordingMode =
-  | "regular"        // Plain screen capture — no auto-zoom, no SFX
-  | "auto-zoom-sfx"  // Auto-zoom on clicks + sound effects (default)
-  | "auto-zoom"      // Auto-zoom only, no SFX
-  | "sfx-transcribe"; // SFX + live speech-to-text transcription synced to keyframes
+  | "regular"                   // Plain screen capture — no auto-zoom, no SFX
+  | "auto-zoom-sfx"             // Auto-zoom on clicks + sound effects
+  | "auto-zoom"                 // Auto-zoom only, no SFX
+  | "sfx-transcribe"            // SFX + live speech-to-text subtitles
+  | "auto-zoom-sfx-transcribe"; // Complete studio: Auto-Zoom + SFX + live subtitles
 
 interface RecorderStore {
   state: RecordingState;
@@ -78,12 +82,20 @@ let activeRecordingMime = "";
 function getBestSupportedMimeType(): string {
   if (typeof MediaRecorder === "undefined") return "";
   const candidateTypes = [
-    "video/webm;codecs=vp9,opus",
+    // 1. Hardware-accelerated High Profile H.264 (Native VideoToolbox on macOS Apple Silicon & Intel)
     "video/mp4;codecs=avc1.640028,mp4a.40.2",
+    "video/mp4;codecs=avc1.4d4028,mp4a.40.2",
     "video/mp4;codecs=avc1,mp4a.40.2",
+    "video/mp4",
+    // 2. Hardware H.264 in WebM container (Chrome on macOS)
+    "video/webm;codecs=h264,opus",
+    "video/webm;codecs=h264",
+    // 3. VP9 WebM
+    "video/webm;codecs=vp9,opus",
+    "video/webm;codecs=vp9",
+    // 4. Fallback WebM
     "video/webm;codecs=vp8,opus",
     "video/webm",
-    "video/mp4",
   ];
   for (const c of candidateTypes) {
     if (MediaRecorder.isTypeSupported(c)) return c;
@@ -330,9 +342,10 @@ export const useRecorder = create<RecorderStore>((set, get) => ({
           stream = await navigator.mediaDevices.getDisplayMedia({
             video: {
               displaySurface: targetSurface,
-              frameRate: { ideal: 60, max: 60 },
-              width: { ideal: 3840, max: 3840 },
-              height: { ideal: 2160, max: 2160 },
+              frameRate: { ideal: 60 },
+              width: { ideal: 3840 },
+              height: { ideal: 2160 },
+              resizeMode: "none",
             } as MediaTrackConstraints,
             audio: get().systemAudioEnabled
               ? {
@@ -351,8 +364,8 @@ export const useRecorder = create<RecorderStore>((set, get) => ({
           // Fallback to relaxed constraints for environments without advanced displaySurface options
           stream = await navigator.mediaDevices.getDisplayMedia({
             video: {
-              width: { ideal: 2560 },
-              height: { ideal: 1440 },
+              width: { ideal: 3840 },
+              height: { ideal: 2160 },
               frameRate: { ideal: 60 },
             },
             audio: get().systemAudioEnabled,
@@ -360,6 +373,24 @@ export const useRecorder = create<RecorderStore>((set, get) => ({
         }
 
         activeStream = stream;
+
+        // Apply native Retina detail content hint and maximum clarity constraints
+        const activeVideoTrack = stream.getVideoTracks()[0];
+        if (activeVideoTrack) {
+          if ("contentHint" in activeVideoTrack) {
+            activeVideoTrack.contentHint = "detail";
+          }
+          try {
+            await activeVideoTrack.applyConstraints({
+              width: { ideal: 3840 },
+              height: { ideal: 2160 },
+              frameRate: { ideal: 60 },
+              resizeMode: "none",
+            } as any);
+          } catch {
+            // Keep native track settings if custom constraint rejected
+          }
+        }
 
         // If mic requested, capture clean studio voice via Web Audio API with echo cancellation
         if (get().micEnabled && navigator.mediaDevices?.getUserMedia) {
@@ -479,7 +510,7 @@ export const useRecorder = create<RecorderStore>((set, get) => ({
         activeRecordingMime = mimeType;
 
         let recorder: MediaRecorder;
-        const targetBps = 30_000_000; // 30 Mbps ultra-crisp resolution for razor-sharp text and UI icons
+        const targetBps = 40_000_000; // 40 Mbps cinema-grade bitrate for Mac Retina clarity
         try {
           recorder = new MediaRecorder(activeStream, {
             mimeType: mimeType || undefined,
@@ -490,7 +521,7 @@ export const useRecorder = create<RecorderStore>((set, get) => ({
           try {
             recorder = new MediaRecorder(activeStream, {
               mimeType: mimeType || undefined,
-              videoBitsPerSecond: 16_000_000,
+              videoBitsPerSecond: 25_000_000,
               audioBitsPerSecond: 192_000,
             });
           } catch {
@@ -513,9 +544,17 @@ export const useRecorder = create<RecorderStore>((set, get) => ({
       }
     }
 
-    // Start live speech-to-text transcription when in sfx-transcribe mode
+    // Start live speech-to-text transcription when in transcribe modes
     transcriptSegments = [];
-    if (get().recordingMode === "sfx-transcribe") {
+    currentInterimText = "";
+    currentInterimStartMs = 0;
+    isIntentionallyStoppingRecognition = false;
+
+    const shouldTranscribe =
+      get().recordingMode === "sfx-transcribe" ||
+      get().recordingMode === "auto-zoom-sfx-transcribe";
+
+    if (shouldTranscribe) {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const SpeechRecognitionAPI: (new () => any) | undefined =
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -523,83 +562,94 @@ export const useRecorder = create<RecorderStore>((set, get) => ({
       if (!SpeechRecognitionAPI) {
         toast.info("Auto-captions will be generated for your actions upon completing the recording.");
       } else {
-        try {
-          const recognition = new SpeechRecognitionAPI();
-          recognition.continuous = true;
-          recognition.interimResults = true;
-          recognition.lang = (typeof navigator !== "undefined" && navigator.language) || "en-US";
-          recognition.maxAlternatives = 1;
+        const initRecognition = () => {
+          if (isIntentionallyStoppingRecognition || get().state !== "recording") return;
+          try {
+            const recognition = new SpeechRecognitionAPI();
+            recognition.continuous = true;
+            recognition.interimResults = true;
+            recognition.lang = (typeof navigator !== "undefined" && navigator.language) || "en-US";
+            recognition.maxAlternatives = 1;
 
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          recognition.onstart = () => {
-            toast.success("🎤 Live speech transcription active");
-          };
+            recognition.onstart = () => {
+              toast.success("🎤 Live speech transcription active");
+            };
 
-          let currentInterim = "";
-          let currentInterimStart = 0;
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            recognition.onresult = (event: any) => {
+              const nowMs = Math.max(0, Date.now() - recordingStartTimestamp);
+              for (let i = event.resultIndex; i < event.results.length; i++) {
+                const result = event.results[i];
+                if (!result) continue;
+                const transcript: string = result[0]?.transcript?.trim() ?? "";
+                if (!transcript) continue;
 
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          recognition.onresult = (event: any) => {
-            for (let i = event.resultIndex; i < event.results.length; i++) {
-              const result = event.results[i];
-              if (!result) continue;
-              const transcript: string = result[0]?.transcript?.trim() ?? "";
-              if (!transcript) continue;
+                if (result.isFinal) {
+                  currentInterimText = "";
+                  const words = transcript.split(/\s+/);
+                  for (let w = 0; w < words.length; w += 8) {
+                    const chunk = words.slice(w, w + 8).join(" ");
+                    if (chunk) {
+                      const start = currentInterimStartMs > 0 ? currentInterimStartMs : nowMs;
+                      transcriptSegments.push({ text: chunk, startMs: start });
+                      console.debug("[transcribe final]", start, chunk);
+                    }
+                  }
+                  currentInterimStartMs = 0;
+                } else {
+                  if (!currentInterimStartMs) {
+                    currentInterimStartMs = nowMs;
+                  }
+                  currentInterimText = transcript;
+                }
+              }
+            };
 
-              const startMs = Math.max(0, Date.now() - recordingStartTimestamp);
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            recognition.onerror = (e: any) => {
+              if (e.error === "not-allowed") {
+                toast.warning("Microphone access not permitted for speech recognition.");
+                isIntentionallyStoppingRecognition = true;
+              } else {
+                console.debug("[transcribe notification]", e.error);
+              }
+            };
 
-              if (result.isFinal) {
-                currentInterim = "";
-                const words = transcript.split(/\s+/);
-                for (let w = 0; w < words.length; w += 10) {
-                  const chunk = words.slice(w, w + 10).join(" ");
-                  if (chunk) {
-                    transcriptSegments.push({ text: chunk, startMs });
-                    console.debug("[transcribe final]", startMs, chunk);
+            recognition.onend = () => {
+              // Flush pending interim speech so short or final phrases are immediately captured
+              if (currentInterimText && currentInterimText.trim().length > 0) {
+                const words = currentInterimText.trim().split(/\s+/);
+                for (let w = 0; w < words.length; w += 8) {
+                  const chunk = words.slice(w, w + 8).join(" ");
+                  if (chunk && !transcriptSegments.some((s) => s.text === chunk)) {
+                    transcriptSegments.push({
+                      text: chunk,
+                      startMs: currentInterimStartMs || Math.max(0, Date.now() - recordingStartTimestamp - 1200),
+                    });
                   }
                 }
-              } else {
-                currentInterim = transcript;
-                currentInterimStart = startMs;
+                currentInterimText = "";
+                currentInterimStartMs = 0;
               }
-            }
-          };
 
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          recognition.onerror = (e: any) => {
-            if (e.error === "no-speech" || e.error === "audio-capture") {
-              if (get().state === "recording" && recognitionInstance) {
-                try { recognitionInstance.start(); } catch { /* ignore */ }
+              // Restart cleanly if recording is ongoing and stop wasn't requested
+              if (!isIntentionallyStoppingRecognition && get().state === "recording") {
+                setTimeout(() => {
+                  if (!isIntentionallyStoppingRecognition && get().state === "recording") {
+                    initRecognition();
+                  }
+                }, 150);
               }
-            } else if (e.error === "not-allowed") {
-              toast.warning("Microphone access not permitted for speech recognition.");
-            } else {
-              console.warn("[transcribe] recognition error:", e.error);
-            }
-          };
+            };
 
-          recognition.onend = () => {
-            // Flush pending interim speech so short phrases are never dropped
-            if (currentInterim && currentInterim.trim().length > 0) {
-              const words = currentInterim.trim().split(/\s+/);
-              for (let w = 0; w < words.length; w += 10) {
-                const chunk = words.slice(w, w + 10).join(" ");
-                if (chunk && !transcriptSegments.some((s) => s.text === chunk)) {
-                  transcriptSegments.push({ text: chunk, startMs: currentInterimStart || 500 });
-                }
-              }
-              currentInterim = "";
-            }
-            if (get().state === "recording" && recognitionInstance) {
-              try { recognitionInstance.start(); } catch { /* ignore */ }
-            }
-          };
+            recognition.start();
+            recognitionInstance = recognition;
+          } catch (recErr) {
+            console.warn("SpeechRecognition start error:", recErr);
+          }
+        };
 
-          recognition.start();
-          recognitionInstance = recognition;
-        } catch (recErr) {
-          console.warn("SpeechRecognition start error:", recErr);
-        }
+        initRecognition();
       }
     }
 
@@ -925,6 +975,30 @@ export const useRecorder = create<RecorderStore>((set, get) => ({
       recorderCleanupFn = null;
     }
 
+    // Stop live speech-to-text recognition cleanly and flush any buffered speech immediately
+    isIntentionallyStoppingRecognition = true;
+    if (recognitionInstance) {
+      try {
+        recognitionInstance.stop();
+      } catch {}
+      recognitionInstance = null;
+    }
+
+    if (currentInterimText && currentInterimText.trim().length > 0) {
+      const words = currentInterimText.trim().split(/\s+/);
+      for (let w = 0; w < words.length; w += 8) {
+        const chunk = words.slice(w, w + 8).join(" ");
+        if (chunk && !transcriptSegments.some((s) => s.text === chunk)) {
+          transcriptSegments.push({
+            text: chunk,
+            startMs: currentInterimStartMs || Math.max(0, get().elapsedMs - 1200),
+          });
+        }
+      }
+      currentInterimText = "";
+      currentInterimStartMs = 0;
+    }
+
     if (mediaRecorderInstance && mediaRecorderInstance.state !== "inactive") {
       try {
         await new Promise<void>((resolve) => {
@@ -1160,7 +1234,7 @@ export const useRecorder = create<RecorderStore>((set, get) => ({
         } as import("@domolens/core").TextOverlay);
       });
       transcriptSegments = [];
-    } else if (mode === "sfx-transcribe") {
+    } else if (mode === "sfx-transcribe" || mode === "auto-zoom-sfx-transcribe") {
       // Fallback: If Web Speech API was unavailable or returned 0 segments in current environment,
       // generate smart action captions synced to each interaction block
       // so the user ALWAYS gets timed subtitles in transcribe mode!
@@ -1278,8 +1352,14 @@ export const useRecorder = create<RecorderStore>((set, get) => ({
       audioSettings: {
         ...DEFAULT_AUDIO_SETTINGS,
         // SFX only active when mode includes SFX (not regular or auto-zoom-only)
-        clickSoundEnabled: mode === "auto-zoom-sfx" || mode === "sfx-transcribe",
-        typingSoundEnabled: mode === "auto-zoom-sfx" || mode === "sfx-transcribe",
+        clickSoundEnabled:
+          mode === "auto-zoom-sfx" ||
+          mode === "sfx-transcribe" ||
+          mode === "auto-zoom-sfx-transcribe",
+        typingSoundEnabled:
+          mode === "auto-zoom-sfx" ||
+          mode === "sfx-transcribe" ||
+          mode === "auto-zoom-sfx-transcribe",
         musicDuckingEnabled: true,
       },
       aiData: {
@@ -1321,6 +1401,15 @@ export const useRecorder = create<RecorderStore>((set, get) => ({
       recorderCleanupFn();
       recorderCleanupFn = null;
     }
+    isIntentionallyStoppingRecognition = true;
+    if (recognitionInstance) {
+      try {
+        recognitionInstance.stop();
+      } catch {}
+      recognitionInstance = null;
+    }
+    currentInterimText = "";
+    currentInterimStartMs = 0;
     if (audioContextInstance) {
       try {
         void audioContextInstance.close();

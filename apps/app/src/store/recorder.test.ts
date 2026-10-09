@@ -263,4 +263,53 @@ describe("useRecorder store", () => {
     useRecorder.getState().setSource("window");
     expect(useRecorder.getState().source).toBe("window");
   });
+
+  it("supports auto-zoom-sfx-transcribe mode with zooms, SFX, and subtitles", async () => {
+    useRecorder.getState().setRecordingMode("auto-zoom-sfx-transcribe");
+    expect(useRecorder.getState().recordingMode).toBe("auto-zoom-sfx-transcribe");
+
+    useRecorder.setState({
+      state: "recording",
+      elapsedMs: 6000,
+      clicks: [
+        { id: "c-unified", timestampMs: 2000, x: 0.4, y: 0.4, button: "left" },
+      ],
+      interactions: [
+        { id: "c-unified", type: "click", timestampMs: 2000, x: 0.4, y: 0.4, button: "left" },
+      ],
+      cursorTrajectory: [
+        { timestampMs: 0, x: 0.5, y: 0.5 },
+        { timestampMs: 2000, x: 0.4, y: 0.4 },
+      ],
+    });
+
+    const storageMap = new Map<string, string>();
+    const originalStorage = globalThis.sessionStorage;
+    globalThis.sessionStorage = {
+      getItem: (key: string) => storageMap.get(key) ?? null,
+      setItem: (key: string, val: string) => storageMap.set(key, val),
+      removeItem: (key: string) => storageMap.delete(key),
+      clear: () => storageMap.clear(),
+      length: 0,
+      key: () => null,
+    };
+
+    const summary = await useRecorder.getState().stopRecording();
+    expect(summary).not.toBeNull();
+    const saved = globalThis.sessionStorage.getItem(`domolens_project_${summary?.id}`);
+    const project = JSON.parse(saved!);
+
+    // Zoom blocks and keyframes plotted
+    expect(project.zoomBlocks.length).toBeGreaterThanOrEqual(1);
+    expect(project.keyframes.length).toBeGreaterThanOrEqual(1);
+
+    // Audio SFX active
+    expect(project.audioSettings.clickSoundEnabled).toBe(true);
+    expect(project.audioSettings.typingSoundEnabled).toBe(true);
+
+    // Subtitles generated
+    expect(project.textOverlays.length).toBeGreaterThanOrEqual(1);
+
+    globalThis.sessionStorage = originalStorage;
+  });
 });
