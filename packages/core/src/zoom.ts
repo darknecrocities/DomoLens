@@ -538,20 +538,21 @@ export function calculateCameraAtTime(
     const firstKf = sortedKf[0]!;
     const lastKf = sortedKf[sortedKf.length - 1]!;
 
+    if (timeMs <= 0) {
+      return {
+        x: 0.5,
+        y: 0.5,
+        scale: 1.0,
+        isZoomed: false,
+        cursorX: defaultCursor.x,
+        cursorY: defaultCursor.y,
+      };
+    }
+
     if (timeMs <= firstKf.timeMs) {
       // If first keyframe has a scale > 1.05 and is not at time 0,
       // playback before firstKf should be baseline 1.0x full-screen!
-      if (firstKf.timeMs > 0 && firstKf.scale > 1.05) {
-        return {
-          x: 0.5,
-          y: 0.5,
-          scale: 1.0,
-          isZoomed: false,
-          cursorX: defaultCursor.x,
-          cursorY: defaultCursor.y,
-        };
-      }
-      if (firstKf.scale <= 1.05) {
+      if (firstKf.scale <= 1.05 || firstKf.timeMs > 0) {
         return {
           x: 0.5,
           y: 0.5,
@@ -839,6 +840,7 @@ export interface PlotInteractionsOptions {
   enableRevealDip?: boolean;
   typingZoomOut?: boolean;
   centerTyping?: boolean;
+  initialEstablishingMs?: number;
 }
 
 /**
@@ -1104,7 +1106,10 @@ export function plotInteractionsToKeyframesAndZoomBlocks(
     const clusterScale = isTypingCluster ? 1.0 : (options.scale ?? intent.scale);
     const clusterHoldMs = options.holdDurationMs ?? (isTypingCluster ? 1400 : highlightEvt ? 1600 : hasTyping ? 1400 : 1200);
 
-    const rawStart = Math.max(0, firstEvt.timestampMs - leadInMs);
+    const minIntroHold = options.initialEstablishingMs ?? 0;
+    const rawStart = i === 0 && minIntroHold > 0
+      ? Math.max(minIntroHold, firstEvt.timestampMs - leadInMs)
+      : Math.max(0, firstEvt.timestampMs - leadInMs);
     let startMs = rawStart;
 
     if (lastBlockEndTime > 0) {
@@ -1188,6 +1193,17 @@ export function plotInteractionsToKeyframesAndZoomBlocks(
 
     // Keyframe 1: Start zoom lead-in (only if previous cluster did not already glide into this cluster)
     if (!previousGlidedIntoThis) {
+      if (i === 0 && startMs > 0 && !keyframes.some((k) => k.timeMs === 0)) {
+        keyframes.push({
+          id: `kf-intro-full`,
+          timeMs: 0,
+          scale: 1.0,
+          targetX: 0.5,
+          targetY: 0.5,
+          easing: "cubic",
+        });
+      }
+
       keyframes.push({
         id: `kf-start-${firstEvt.id}`,
         timeMs: startMs,

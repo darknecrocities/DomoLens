@@ -485,7 +485,18 @@ export const useEditor = create<EditorState>((set, get) => ({
       textOverlays,
       audioTracks,
       clips,
-      looks: DEFAULT_LOOKS,
+      looks:
+        summary.source === "recording"
+          ? {
+              ...DEFAULT_LOOKS,
+              aspectRatio: "auto" as const,
+              fit: "contain" as const,
+              windowFrame: "none" as const,
+              padding: 0,
+              borderRadius: 0,
+              shadow: "none" as const,
+            }
+          : DEFAULT_LOOKS,
       audioSettings: { ...DEFAULT_AUDIO_SETTINGS },
     };
 

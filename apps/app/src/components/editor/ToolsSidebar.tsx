@@ -39,6 +39,7 @@ import {
 } from "@domolens/core";
 import { useEditor, type ToolTab } from "../../store/editor";
 import { useTutorial } from "../../store/tutorial";
+import { TiltController } from "./TiltController";
 
 function AddKeyframeButton({ zoomScale }: { zoomScale: number }) {
   const currentTimeMs = useEditor((s) => s.currentTimeMs);
@@ -1433,6 +1434,118 @@ export function ToolsSidebar() {
             </div>
 
             <div className="space-y-3 pt-2">
+              {/* Aspect Ratio & Display Mode */}
+              <div className="space-y-1.5">
+                <div className="flex justify-between items-center text-[11px]">
+                  <span className="font-semibold text-white">Aspect Ratio</span>
+                  <span className="text-[10px] text-fg-muted font-mono">
+                    {project?.looks.aspectRatio === "auto" ? "Native Display" : project?.looks.aspectRatio || "16:9"}
+                  </span>
+                </div>
+                <div className="grid grid-cols-5 gap-1">
+                  {[
+                    { id: "auto" as const, label: "Whole" },
+                    { id: "16:9" as const, label: "16:9" },
+                    { id: "9:16" as const, label: "9:16" },
+                    { id: "1:1" as const, label: "1:1" },
+                    { id: "4:3" as const, label: "4:3" },
+                  ].map((asp) => {
+                    const isSelected = (project?.looks.aspectRatio || "16:9") === asp.id;
+                    return (
+                      <button
+                        key={asp.id}
+                        type="button"
+                        onClick={() => updateLooks({ aspectRatio: asp.id })}
+                        className={`rounded-md py-1 text-[10px] font-semibold text-center transition-all ${
+                          isSelected
+                            ? "bg-white text-black shadow-sm font-bold"
+                            : "bg-ink-900 border border-ink-800 text-fg-muted hover:text-white hover:bg-ink-800"
+                        }`}
+                      >
+                        {asp.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Quick Framing Presets: Whole Screen vs Studio Frame */}
+              <div className="grid grid-cols-2 gap-1.5 pt-1">
+                <button
+                  type="button"
+                  onClick={() =>
+                    updateLooks({
+                      padding: 0,
+                      borderRadius: 0,
+                      windowFrame: "none",
+                      aspectRatio: "auto",
+                      fit: "contain",
+                    })
+                  }
+                  className={`rounded-lg py-1.5 px-2 text-[10px] font-semibold border transition-all ${
+                    (project?.looks.padding ?? 0) === 0 && project?.looks.windowFrame === "none"
+                      ? "border-emerald-400 bg-emerald-500/15 text-emerald-300 font-bold"
+                      : "border-ink-800 bg-ink-900/60 text-fg-muted hover:text-white hover:border-ink-700"
+                  }`}
+                  title="Make recording fill the whole screen edge-to-edge without margins or cutoffs"
+                >
+                  Whole Screen (0 Margin)
+                </button>
+                <button
+                  type="button"
+                  onClick={() =>
+                    updateLooks({
+                      padding: 32,
+                      borderRadius: 16,
+                      windowFrame: "macos",
+                      fit: "contain",
+                    })
+                  }
+                  className={`rounded-lg py-1.5 px-2 text-[10px] font-semibold border transition-all ${
+                    (project?.looks.padding ?? 0) > 0 && project?.looks.windowFrame !== "none"
+                      ? "border-indigo-400 bg-indigo-500/15 text-indigo-300 font-bold"
+                      : "border-ink-800 bg-ink-900/60 text-fg-muted hover:text-white hover:border-ink-700"
+                  }`}
+                  title="Frame recording inside a centered studio mockup box"
+                >
+                  Studio Frame
+                </button>
+              </div>
+
+              {/* Framing Fit Mode */}
+              <div className="pt-1">
+                <div className="flex justify-between items-center text-[11px] mb-1">
+                  <span className="text-fg-muted">Screen Edge Preservation</span>
+                  <span className="text-[10px] text-fg-faint">
+                    {project?.looks.fit === "cover" ? "Fill Frame (Clipped)" : "Whole Screen (No Cutoffs)"}
+                  </span>
+                </div>
+                <div className="grid grid-cols-2 gap-1">
+                  <button
+                    type="button"
+                    onClick={() => updateLooks({ fit: "contain" })}
+                    className={`rounded-md py-1 text-[10px] font-medium transition-all ${
+                      (project?.looks.fit ?? "contain") === "contain"
+                        ? "bg-white text-black font-bold shadow-sm"
+                        : "bg-ink-900 border border-ink-800 text-fg-muted hover:text-white"
+                    }`}
+                  >
+                    No Cutoffs (Fit)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => updateLooks({ fit: "cover" })}
+                    className={`rounded-md py-1 text-[10px] font-medium transition-all ${
+                      project?.looks.fit === "cover"
+                        ? "bg-white text-black font-bold shadow-sm"
+                        : "bg-ink-900 border border-ink-800 text-fg-muted hover:text-white"
+                    }`}
+                  >
+                    Fill (Crop Edges)
+                  </button>
+                </div>
+              </div>
+
               <div>
                 <div className="flex justify-between text-[11px]">
                   <span className="text-fg-muted">Canvas Padding</span>
@@ -1511,34 +1624,9 @@ export function ToolsSidebar() {
                 )}
               </div>
 
-              {/* 3D Perspective Tilt Pitch */}
+              {/* 3D Perspective Tilt Plot Box & Kinetic Motion Engine */}
               <div className="pt-2 border-t border-ink-800/80">
-                <div className="flex justify-between items-center text-[11px]">
-                  <span className="text-fg-muted">3D Perspective Tilt</span>
-                  <div className="flex items-center gap-1.5">
-                    <span className="font-mono text-white font-semibold">
-                      {(project?.looks.tiltAngle ?? 0).toFixed(1)}°
-                    </span>
-                    {(project?.looks.tiltAngle ?? 0) !== 0 && (
-                      <button
-                        type="button"
-                        onClick={() => updateLooks({ tiltAngle: 0 })}
-                        className="text-[9px] rounded bg-ink-800 px-1 py-0.5 text-neutral-400 hover:text-white"
-                      >
-                        Reset
-                      </button>
-                    )}
-                  </div>
-                </div>
-                <input
-                  type="range"
-                  min="-15"
-                  max="15"
-                  step="0.5"
-                  value={project?.looks.tiltAngle ?? 0}
-                  onChange={(e) => updateLooks({ tiltAngle: parseFloat(e.target.value) })}
-                  className="w-full accent-white cursor-pointer h-1.5 bg-ink-800 rounded-lg mt-1"
-                />
+                <TiltController />
               </div>
 
               {/* Camera Physics Model */}

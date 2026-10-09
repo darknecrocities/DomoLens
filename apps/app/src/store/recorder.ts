@@ -1190,6 +1190,7 @@ export const useRecorder = create<RecorderStore>((set, get) => ({
               enableRevealDip: false,
               cursorTrajectory: finalTrajectory,
               typingZoomOut: false,
+              initialEstablishingMs: 1400,
             },
           )
         : { keyframes: [], zoomBlocks: [] };
@@ -1348,7 +1349,15 @@ export const useRecorder = create<RecorderStore>((set, get) => ({
           volume: 1,
         },
       ],
-      looks: DEFAULT_LOOKS,
+      looks: {
+        ...DEFAULT_LOOKS,
+        aspectRatio: "auto" as const,
+        fit: "contain" as const,
+        windowFrame: "none" as const,
+        padding: 0,
+        borderRadius: 0,
+        shadow: "none" as const,
+      },
       audioSettings: {
         ...DEFAULT_AUDIO_SETTINGS,
         // SFX only active when mode includes SFX (not regular or auto-zoom-only)

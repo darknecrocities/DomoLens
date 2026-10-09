@@ -219,6 +219,11 @@ export interface PhotoOverlay {
   shape: "circle" | "rounded" | "square";
 }
 
+export type TiltMotionMode = "none" | "hover" | "reactive" | "sweep";
+
+export type AspectRatioPreset = "auto" | "16:9" | "9:16" | "1:1" | "4:3";
+export type VideoFitMode = "contain" | "cover";
+
 export interface ProjectLooks {
   backgroundType: BackgroundKind;
   /** CSS background value (e.g. solid hex or gradient definition). */
@@ -249,12 +254,28 @@ export interface ProjectLooks {
   cursorAvatar?: CursorAvatar;
   /** Optional user-supplied photo placed on the canvas (template photo placeholder). */
   photoOverlay?: PhotoOverlay;
-  /** Aspect ratio of the canvas (default "16:9"). */
-  aspectRatio?: "16:9" | "9:16" | "1:1" | "4:3";
+  /** Aspect ratio of the canvas (default "16:9", or "auto" to match source video). */
+  aspectRatio?: AspectRatioPreset;
+  /** Video framing fit mode ("contain" preserves all edges without cropping, "cover" fills viewport). */
+  fit?: VideoFitMode;
   /** Window mockup frame shell around the recording. */
   windowFrame?: WindowFrameStyle;
-  /** 3D Perspective tilt pitch angle (-15 to 15 degrees). */
+  /** 3D Perspective tilt pitch angle (-15 to 15 degrees, legacy master pitch). */
   tiltAngle?: number;
+  /** 3D Perspective Pitch: rotation around X axis in degrees (-30 to +30). */
+  tiltX?: number;
+  /** 3D Perspective Yaw: rotation around Y axis in degrees (-30 to +30). */
+  tiltY?: number;
+  /** 3D Perspective Roll: rotation around Z axis in degrees (-20 to +20). */
+  tiltZ?: number;
+  /** 3D Perspective viewing distance in pixels (default 1200). */
+  tiltPerspective?: number;
+  /** Kinetic motion animation mode for the 3D frame. */
+  tiltAnimation?: TiltMotionMode;
+  /** Intensity scaling for 3D motion animation (0.0 to 1.0, default 0.6). */
+  tiltAnimationIntensity?: number;
+  /** Whether to render specular glass light reflection across the tilted frame. */
+  tiltGlare?: boolean;
   /** Motion blur strength (0.0 to 1.0). */
   motionBlur?: number;
   /** Camera physics model for zoom transitions. */
@@ -625,8 +646,16 @@ export const DEFAULT_LOOKS: ProjectLooks = {
   autoTrackScale: 1.6,
   cursorAvatar: DEFAULT_CURSOR_AVATAR,
   aspectRatio: "16:9",
+  fit: "contain",
   windowFrame: "macos",
   tiltAngle: 0,
+  tiltX: 0,
+  tiltY: 0,
+  tiltZ: 0,
+  tiltPerspective: 1200,
+  tiltAnimation: "none",
+  tiltAnimationIntensity: 0.6,
+  tiltGlare: true,
   motionBlur: 0,
   cameraPhysics: "spring",
   brandAccentColor: "#6366f1",

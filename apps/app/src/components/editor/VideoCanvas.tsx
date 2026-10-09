@@ -17,6 +17,7 @@ import {
 import {
   calculateActiveEffectsState,
   calculateCameraAtTime,
+  evaluate3DTiltAtTime,
   evaluateTextOverlayMotion,
   getCursorPreset,
   screenToVideoCoordinates,
@@ -420,11 +421,22 @@ export function VideoCanvas({ project, currentTimeMs: propTimeMs }: VideoCanvasP
   computeCameraRef.current = computeCamera;
   const zoomLayerRef = useRef<HTMLDivElement>(null);
   const cursorOverlayRef = useRef<HTMLDivElement>(null);
+  const glareOverlayRef = useRef<HTMLDivElement>(null);
+  const looksRef = useRef(looks);
+  looksRef.current = looks;
+  const interactionsRef = useRef(project.interactions);
+  interactionsRef.current = project.interactions;
+  const keyframesRef = useRef(project.keyframes);
+  keyframesRef.current = project.keyframes;
   // Refs for aspect ratios accessible inside rAF closure without stale closure issues
   const videoAspectRef = useRef<number | null>(null);
   const viewAspectRef = useRef<number | null>(null);
 
   const camera = useMemo(() => computeCamera(currentTimeMs), [computeCamera, currentTimeMs]);
+  const tilt3D = useMemo(
+    () => evaluate3DTiltAtTime(currentTimeMs, looks, project.interactions, project.keyframes),
+    [currentTimeMs, looks, project.interactions, project.keyframes],
+  );
 
   // Real-time video effects calculation (Spotlight, Vignette, Blur, Color Grade, Glow, Speed)
   const effectsState = useMemo(() => {
@@ -527,6 +539,17 @@ export function VideoCanvas({ project, currentTimeMs: propTimeMs }: VideoCanvasP
           const cMapped = mapVideoPointToViewport(cam.cursorX, cam.cursorY, vAspect, vpAspect);
           cursorEl.style.left = `${cMapped.x * 100}%`;
           cursorEl.style.top = `${cMapped.y * 100}%`;
+        }
+
+        // Drive 3D frame tilt & kinetic motion at 60fps via direct DOM
+        const vp = viewportRef.current;
+        const lk = looksRef.current;
+        if (vp && (lk.tiltAnimation !== "none" || lk.tiltX || lk.tiltY || lk.tiltZ || lk.tiltAngle)) {
+          const t3D = evaluate3DTiltAtTime(frameMs, lk, interactionsRef.current, keyframesRef.current);
+          vp.style.transform = `perspective(${t3D.perspective}px) rotateX(${t3D.rotateX}deg) rotateY(${t3D.rotateY}deg) rotateZ(${t3D.rotateZ}deg)`;
+          if (glareOverlayRef.current && lk.tiltGlare) {
+            glareOverlayRef.current.style.background = `radial-gradient(circle at ${t3D.glareX}% ${t3D.glareY}%, rgba(255, 255, 255, 0.16) 0%, transparent 65%)`;
+          }
         }
       }
 
@@ -729,7 +752,7 @@ export function VideoCanvas({ project, currentTimeMs: propTimeMs }: VideoCanvasP
   }, [summary.width, summary.height]);
 
   const viewportAspectRatio = useMemo(() => {
-    if (looks.aspectRatio) {
+    if (looks.aspectRatio && looks.aspectRatio !== "auto") {
       if (looks.aspectRatio === "9:16") return "9 / 16";
       if (looks.aspectRatio === "1:1") return "1 / 1";
       if (looks.aspectRatio === "4:3") return "4 / 3";
@@ -765,7 +788,7 @@ export function VideoCanvas({ project, currentTimeMs: propTimeMs }: VideoCanvasP
       className="relative flex size-full items-center justify-center overflow-hidden"
       style={{
         background: looks.backgroundValue,
-        padding: `clamp(6px, 2.5vw, ${looks.padding}px)`,
+        padding: looks.padding === 0 ? "0px" : `clamp(4px, 2vw, ${looks.padding}px)`,
         perspective: "1200px",
       }}
     >
@@ -801,14 +824,22 @@ export function VideoCanvas({ project, currentTimeMs: propTimeMs }: VideoCanvasP
         style={{
           aspectRatio: viewportAspectRatio,
           borderRadius: `${looks.borderRadius}px`,
-          boxShadow: shadowStyles[looks.shadow] || shadowStyles.lift,
-          transform: looks.tiltAngle
-            ? `rotateX(${looks.tiltAngle}deg) rotateY(${-(looks.tiltAngle * 0.45)}deg)`
-            : undefined,
+          boxShadow: looks.padding === 0 ? "none" : (shadowStyles[looks.shadow] || shadowStyles.lift),
+          transform: `perspective(${tilt3D.perspective}px) rotateX(${tilt3D.rotateX}deg) rotateY(${tilt3D.rotateY}deg) rotateZ(${tilt3D.rotateZ}deg)`,
           transformStyle: "preserve-3d",
         }}
         title="Click anywhere to shift camera focal center"
       >
+        {/* Specular Glass Glare Sheen Overlay */}
+        {looks.tiltGlare && (
+          <div
+            ref={glareOverlayRef}
+            className="pointer-events-none absolute inset-0 z-30 transition-opacity duration-150"
+            style={{
+              background: `radial-gradient(circle at ${tilt3D.glareX}% ${tilt3D.glareY}%, rgba(255, 255, 255, 0.16) 0%, transparent 65%)`,
+            }}
+          />
+        )}
         {/* User photo placeholder overlay */}
         {looks.photoOverlay?.src && (
           <img
@@ -897,7 +928,7 @@ export function VideoCanvas({ project, currentTimeMs: propTimeMs }: VideoCanvasP
                 backfaceVisibility: "hidden",
                 transform: "translateZ(0)",
               }}
-              className="size-full object-cover pointer-events-none"
+              className={`size-full pointer-events-none ${looks.fit === "cover" ? "object-cover" : "object-contain"}`}
               onLoadedMetadata={(e) => {
                 const v = e.currentTarget;
                 if (v.videoWidth && v.videoHeight) {
@@ -925,7 +956,7 @@ export function VideoCanvas({ project, currentTimeMs: propTimeMs }: VideoCanvasP
               src={thumbnailSrc}
               alt=""
               style={{ filter: effectsState.filterStyle || undefined }}
-              className="size-full object-cover pointer-events-none"
+              className={`size-full pointer-events-none ${looks.fit === "cover" ? "object-cover" : "object-contain"}`}
             />
           ) : (
             <div className="flex size-full flex-col items-center justify-center bg-ink-950 p-6 text-center text-fg-muted">

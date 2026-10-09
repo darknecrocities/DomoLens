@@ -310,6 +310,18 @@ describe("useRecorder store", () => {
     // Subtitles generated
     expect(project.textOverlays.length).toBeGreaterThanOrEqual(1);
 
+    // Full screen presentation by default with no edge cutoffs
+    expect(project.looks.aspectRatio).toBe("auto");
+    expect(project.looks.fit).toBe("contain");
+    expect(project.looks.windowFrame).toBe("none");
+    expect(project.looks.padding).toBe(0);
+    expect(project.looks.borderRadius).toBe(0);
+    expect(project.looks.shadow).toBe("none");
+
+    // Video starts full screen at timeMs 0
+    expect(project.keyframes[0].timeMs).toBe(0);
+    expect(project.keyframes[0].scale).toBe(1.0);
+
     globalThis.sessionStorage = originalStorage;
   });
 });

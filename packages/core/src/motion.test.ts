@@ -7,6 +7,7 @@ import {
   detectActivityEventsFromFrames,
   detectOpticalCursorCandidate,
   evaluateTextOverlayMotion,
+  evaluate3DTiltAtTime,
   extractLuminanceBuffer,
   gaussianBlurRamp,
   quarticEaseOut,
@@ -553,6 +554,137 @@ describe("evaluateTextOverlayMotion & Analytical Easing Primitives", () => {
       const hold = evaluateTextOverlayMotion(shortOverlay, 1150);
       expect(hold.opacity).toBe(1);
       expect(hold.scale).toBe(1);
+    });
+  });
+
+  describe("evaluate3DTiltAtTime 3D perspective and motion animation engine", () => {
+    it("evaluates base 3D angles correctly with backward compatibility for tiltAngle", () => {
+      // Legacy tiltAngle
+      const legacyResult = evaluate3DTiltAtTime(1000, {
+        backgroundType: "gradient",
+        backgroundValue: "",
+        padding: 0,
+        borderRadius: 0,
+        shadow: "none",
+        cursorStyle: "hidden",
+        showClickRipples: false,
+        tiltAngle: 10,
+      });
+      expect(legacyResult.rotateX).toBe(10);
+      expect(legacyResult.rotateY).toBeCloseTo(-4.5, 2);
+      expect(legacyResult.rotateZ).toBe(0);
+      expect(legacyResult.perspective).toBe(1200);
+
+      // Explicit tiltX, tiltY, tiltZ
+      const customResult = evaluate3DTiltAtTime(1000, {
+        backgroundType: "gradient",
+        backgroundValue: "",
+        padding: 0,
+        borderRadius: 0,
+        shadow: "none",
+        cursorStyle: "hidden",
+        showClickRipples: false,
+        tiltX: 14,
+        tiltY: -12,
+        tiltZ: 3,
+        tiltPerspective: 1600,
+      });
+      expect(customResult.rotateX).toBe(14);
+      expect(customResult.rotateY).toBe(-12);
+      expect(customResult.rotateZ).toBe(3);
+      expect(customResult.perspective).toBe(1600);
+    });
+
+    it("evaluates hover ambient floating animation with organic oscillation", () => {
+      const looks = {
+        backgroundType: "gradient" as const,
+        backgroundValue: "",
+        padding: 0,
+        borderRadius: 0,
+        shadow: "none" as const,
+        cursorStyle: "hidden" as const,
+        showClickRipples: false,
+        tiltX: 10,
+        tiltY: -5,
+        tiltAnimation: "hover" as const,
+        tiltAnimationIntensity: 0.8,
+      };
+
+      const t0 = evaluate3DTiltAtTime(0, looks);
+      const t1 = evaluate3DTiltAtTime(1050, looks); // ~1/4 cycle
+      const t2 = evaluate3DTiltAtTime(2100, looks); // ~1/2 cycle
+
+      // Oscillates non-zero deltas around base (10, -5)
+      expect(t0.rotateX).toBeCloseTo(10, 1);
+      expect(t1.rotateX).not.toBe(t0.rotateX);
+      expect(t2.rotateX).not.toBe(t1.rotateX);
+
+      // Glare coordinates dynamically track tilt
+      expect(t0.glareX).toBeGreaterThanOrEqual(5);
+      expect(t0.glareX).toBeLessThanOrEqual(95);
+      expect(t0.glareY).toBeGreaterThanOrEqual(5);
+      expect(t0.glareY).toBeLessThanOrEqual(95);
+    });
+
+    it("evaluates reactive animation leaning dynamically into user clicks", () => {
+      const looks = {
+        backgroundType: "gradient" as const,
+        backgroundValue: "",
+        padding: 0,
+        borderRadius: 0,
+        shadow: "none" as const,
+        cursorStyle: "hidden" as const,
+        showClickRipples: false,
+        tiltX: 0,
+        tiltY: 0,
+        tiltAnimation: "reactive" as const,
+        tiltAnimationIntensity: 1.0,
+      };
+
+      const interactions = [
+        { id: "c1", type: "click" as const, timestampMs: 3000, x: 0.8, y: 0.2, button: "left" as const },
+      ];
+
+      // Well before click (t=1000ms): zero tilt
+      const before = evaluate3DTiltAtTime(1000, looks, interactions);
+      expect(before.rotateX).toBe(0);
+      expect(before.rotateY).toBe(0);
+
+      // At click peak (t=3000ms): leans towards click position (x=0.8 > 0.5, y=0.2 < 0.5)
+      const atClick = evaluate3DTiltAtTime(3000, looks, interactions);
+      expect(atClick.rotateY).toBeGreaterThan(0); // leans right
+      expect(atClick.rotateX).toBeGreaterThan(0); // leans up
+
+      // Well after click (t=5000ms): smoothly settled back
+      const after = evaluate3DTiltAtTime(5000, looks, interactions);
+      expect(after.rotateX).toBe(0);
+      expect(after.rotateY).toBe(0);
+    });
+
+    it("evaluates sweep cinematic intro reveal and settles to base angle", () => {
+      const looks = {
+        backgroundType: "gradient" as const,
+        backgroundValue: "",
+        padding: 0,
+        borderRadius: 0,
+        shadow: "none" as const,
+        cursorStyle: "hidden" as const,
+        showClickRipples: false,
+        tiltX: 5,
+        tiltY: -5,
+        tiltAnimation: "sweep" as const,
+        tiltAnimationIntensity: 1.0,
+      };
+
+      // Intro start (t=0): elevated sweep angles
+      const t0 = evaluate3DTiltAtTime(0, looks);
+      expect(t0.rotateX).toBe(13); // 5 + 8
+      expect(t0.rotateY).toBe(-19); // -5 - 14
+
+      // Intro complete (t=2000ms): settles exactly at base angle
+      const tSettle = evaluate3DTiltAtTime(2000, looks);
+      expect(tSettle.rotateX).toBe(5);
+      expect(tSettle.rotateY).toBe(-5);
     });
   });
 });
