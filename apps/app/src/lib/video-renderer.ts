@@ -4,6 +4,7 @@ import {
   evaluateTextOverlayMotion,
   getCursorPreset,
   smoothCursorTrajectory,
+  mapVideoPointToViewport,
   CLICK_SOUND_PROFILES,
   TEXT_CARD_STYLE_DEFINITIONS,
   TYPING_SOUND_PROFILES,
@@ -1041,6 +1042,23 @@ export async function renderProjectVideo(options: RenderOptions): Promise<Render
     throw new Error("Unable to create 2D canvas context for rendering");
   }
 
+  // Preload the user's template photo (if any) so export matches the editor canvas
+  let photoImg: HTMLImageElement | null = null;
+  if (looks.photoOverlay?.src) {
+    try {
+      const img = new Image();
+      img.crossOrigin = "anonymous";
+      img.src = looks.photoOverlay.src;
+      await new Promise<void>((resolve, reject) => {
+        img.onload = () => resolve();
+        img.onerror = () => reject(new Error("photo"));
+      });
+      photoImg = img;
+    } catch {
+      photoImg = null;
+    }
+  }
+
   // Pre-smooth cursor trajectory once for fast O(1) rendering
   const smoothedTrajectory = smoothCursorTrajectory(
     project.cursorTrajectory || [],
@@ -1350,10 +1368,15 @@ export async function renderProjectVideo(options: RenderOptions): Promise<Render
       }
 
       // 5. Apply camera transform (scale and target centering)
+      const exportVideoAspect =
+        videoLoaded && video.videoWidth && video.videoHeight ? video.videoWidth / video.videoHeight : null;
+      const mapExportPt = (px: number, py: number) =>
+        mapVideoPointToViewport(px, py, exportVideoAspect, winW / winH);
+      const camView = mapExportPt(camera.x, camera.y);
       ctx.save();
       ctx.translate(winX + winW / 2, winY + winH / 2);
       ctx.scale(camera.scale, camera.scale);
-      ctx.translate((0.5 - camera.x) * winW, (0.5 - camera.y) * winH);
+      ctx.translate((0.5 - camView.x) * winW, (0.5 - camView.y) * winH);
 
       // 6. Draw video source or high-fidelity mockup
       if (videoLoaded && video.readyState >= 2) {
@@ -1419,8 +1442,9 @@ export async function renderProjectVideo(options: RenderOptions): Promise<Render
           const rippleRadius = (20 + rippleProgress * 55) * baseScale;
           const alpha = 1 - rippleProgress;
 
-          const cx = activeClick.x * winW - winW / 2;
-          const cy = activeClick.y * winH - winH / 2;
+          const clickView = mapExportPt(activeClick.x, activeClick.y);
+          const cx = clickView.x * winW - winW / 2;
+          const cy = clickView.y * winH - winH / 2;
 
           ctx.strokeStyle = `rgba(255, 255, 255, ${alpha * 0.9})`;
           ctx.lineWidth = 3 * baseScale;
@@ -1432,8 +1456,9 @@ export async function renderProjectVideo(options: RenderOptions): Promise<Render
 
       // 7b. Draw Mouse Cursor Pointer and Cursor Glow if enabled
       if (looks.showCursor && looks.cursorStyle !== "hidden") {
-        const curX = camera.cursorX * winW - winW / 2;
-        const curY = camera.cursorY * winH - winH / 2;
+        const curView = mapExportPt(camera.cursorX, camera.cursorY);
+        const curX = curView.x * winW - winW / 2;
+        const curY = curView.y * winH - winH / 2;
         const cursorScale = (looks.cursorSize || 1.4) * baseScale;
         const preset = getCursorPreset(looks.cursorStyle) || getCursorPreset("mac")!;
         const [hx, hy] = preset.hotspot;
@@ -1524,6 +1549,47 @@ export async function renderProjectVideo(options: RenderOptions): Promise<Render
       }
 
       ctx.restore(); // Restore window clipping
+
+      // 8b. Draw user's template photo placeholder image
+      if (photoImg && looks.photoOverlay) {
+        const po = looks.photoOverlay;
+        const pSize = po.size * width;
+        const pX = po.x * width - pSize / 2;
+        const pY = po.y * height - pSize / 2;
+        const side = Math.min(photoImg.naturalWidth, photoImg.naturalHeight);
+        const psx = (photoImg.naturalWidth - side) / 2;
+        const psy = (photoImg.naturalHeight - side) / 2;
+        ctx.save();
+        ctx.beginPath();
+        if (po.shape === "circle") {
+          ctx.arc(pX + pSize / 2, pY + pSize / 2, pSize / 2, 0, Math.PI * 2);
+        } else if (typeof ctx.roundRect === "function") {
+          ctx.roundRect(pX, pY, pSize, pSize, po.shape === "rounded" ? pSize * 0.22 : 0);
+        } else {
+          ctx.rect(pX, pY, pSize, pSize);
+        }
+        ctx.shadowColor = "rgba(0,0,0,0.45)";
+        ctx.shadowBlur = 18 * baseScale;
+        ctx.fillStyle = "#000";
+        ctx.fill();
+        ctx.shadowColor = "transparent";
+        ctx.clip();
+        ctx.drawImage(photoImg, psx, psy, side, side, pX, pY, pSize, pSize);
+        ctx.restore();
+        ctx.save();
+        ctx.beginPath();
+        if (po.shape === "circle") {
+          ctx.arc(pX + pSize / 2, pY + pSize / 2, pSize / 2, 0, Math.PI * 2);
+        } else if (typeof ctx.roundRect === "function") {
+          ctx.roundRect(pX, pY, pSize, pSize, po.shape === "rounded" ? pSize * 0.22 : 0);
+        } else {
+          ctx.rect(pX, pY, pSize, pSize);
+        }
+        ctx.strokeStyle = "rgba(255,255,255,0.9)";
+        ctx.lineWidth = 3 * baseScale;
+        ctx.stroke();
+        ctx.restore();
+      }
 
       // 9. Draw Window Mockup Shell Header
       if (looks.windowFrame && looks.windowFrame !== "none") {

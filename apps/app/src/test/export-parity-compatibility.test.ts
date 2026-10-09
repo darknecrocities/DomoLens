@@ -512,7 +512,7 @@ describe("Milestone 1: Export Parity (createUniversalBackgroundFill vs createBac
 
 describe("Milestone 1: Studio Templates defaultTextOverlays Motion Evaluation", () => {
   it("defines exactly 10 high-craft studio motion templates", () => {
-    expect(STUDIO_MOTION_TEMPLATES.length).toBe(10);
+    expect(STUDIO_MOTION_TEMPLATES.length).toBe(12);
   });
 
   it("every template contains at least 1 defaultTextOverlay without any pill badge properties", () => {

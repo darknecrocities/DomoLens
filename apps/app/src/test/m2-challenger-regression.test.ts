@@ -516,7 +516,7 @@ describe("M2 Challenger 2: Empirical Regressions & Backward Compatibility", () =
   /* ------------------------------------------------------------------------ */
   describe("Challenge 2: All 10 studio templates text overlay rendering with motionPreset and cardStyle", () => {
     it("2.1. verifies all 10 templates have valid defaultTextOverlays with explicit motionPreset and cardStyle", () => {
-      expect(STUDIO_MOTION_TEMPLATES).toHaveLength(10);
+      expect(STUDIO_MOTION_TEMPLATES).toHaveLength(12);
 
       const validMotionPresets: TextMotionPreset[] = [
         "none",

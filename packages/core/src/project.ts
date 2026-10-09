@@ -206,6 +206,19 @@ export const DEFAULT_CURSOR_AVATAR: CursorAvatar = {
   badgeLabel: "",
 };
 
+/** User photo inserted into a template's photo placeholder. */
+export interface PhotoOverlay {
+  /** Image data URL or media URL. */
+  src: string;
+  /** Normalized center X (0..1). */
+  x: number;
+  /** Normalized center Y (0..1). */
+  y: number;
+  /** Size as a fraction of the canvas width (0.08..0.6). */
+  size: number;
+  shape: "circle" | "rounded" | "square";
+}
+
 export interface ProjectLooks {
   backgroundType: BackgroundKind;
   /** CSS background value (e.g. solid hex or gradient definition). */
@@ -234,6 +247,8 @@ export interface ProjectLooks {
   autoTrackScale?: number;
   /** Optional user avatar / presenter badge anchored to the cursor pointer. */
   cursorAvatar?: CursorAvatar;
+  /** Optional user-supplied photo placed on the canvas (template photo placeholder). */
+  photoOverlay?: PhotoOverlay;
   /** Aspect ratio of the canvas (default "16:9"). */
   aspectRatio?: "16:9" | "9:16" | "1:1" | "4:3";
   /** Window mockup frame shell around the recording. */

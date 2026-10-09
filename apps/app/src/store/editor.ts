@@ -34,6 +34,7 @@ import {
   type ZoomBlock,
   STUDIO_MOTION_TEMPLATES,
   generateTemplateKeyframes,
+  checkTemplateVideoFit,
   enforceNonOverlappingZoomBlocks,
 } from "@domolens/core";
 import { sfx } from "../lib/sound-effects";
@@ -535,6 +536,12 @@ export const useEditor = create<EditorState>((set, get) => ({
     if (!state.project) return;
     const template = STUDIO_MOTION_TEMPLATES.find((t) => t.id === templateId);
     if (!template) return;
+    const fit = checkTemplateVideoFit(
+      template,
+      state.project.summary.width,
+      state.project.summary.height,
+    );
+    if (!fit.ok) return;
 
     // Generate fresh IDs for template text overlays with user-customized fields merged
     const newTextOverlays: TextOverlay[] = template.defaultTextOverlays.map((to, i) => ({
@@ -549,6 +556,18 @@ export const useEditor = create<EditorState>((set, get) => ({
       ...state.project.looks,
       ...template.looks,
       brandAccentColor: customFields?.["accent"] || template.looks.brandAccentColor || state.project.looks.brandAccentColor,
+      photoOverlay:
+        customFields?.["photo"] && template.photoSlot
+          ? {
+              src: customFields["photo"],
+              x: template.photoSlot.x,
+              y: template.photoSlot.y,
+              size: template.photoSlot.size,
+              shape: template.photoSlot.shape,
+            }
+          : template.photoSlot
+            ? undefined
+            : state.project.looks.photoOverlay,
     };
 
     const updatedAudio: ProjectAudioSettings = {

@@ -1849,3 +1849,27 @@ export function generateTourShiftSequence(
 }
 
 
+
+/**
+ * Maps a normalized point in source-video space (0..1) to normalized viewport
+ * space when the video is rendered with "cover" fitting (center-cropped) into a
+ * viewport of a different aspect ratio. Keeps the cursor, ripples and camera
+ * locked onto the actual pixels shown on screen and in export.
+ */
+export function mapVideoPointToViewport(
+  x: number,
+  y: number,
+  videoAspect: number | null | undefined,
+  viewAspect: number | null | undefined,
+): { x: number; y: number } {
+  if (!videoAspect || !viewAspect || !isFinite(videoAspect) || !isFinite(viewAspect)) {
+    return { x, y };
+  }
+  if (videoAspect > viewAspect) {
+    return { x: 0.5 + (x - 0.5) * (videoAspect / viewAspect), y };
+  }
+  if (videoAspect < viewAspect) {
+    return { x, y: 0.5 + (y - 0.5) * (viewAspect / videoAspect) };
+  }
+  return { x, y };
+}

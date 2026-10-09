@@ -21,6 +21,7 @@ import {
   getCursorPreset,
   screenToVideoCoordinates,
   smoothCursorTrajectory,
+  mapVideoPointToViewport,
   TEXT_CARD_STYLE_DEFINITIONS,
   type CursorAvatar,
   type CursorStyle,
@@ -695,6 +696,17 @@ export function VideoCanvas({ project, currentTimeMs: propTimeMs }: VideoCanvasP
     return naturalAspectRatio || (summary.width && summary.height ? `${summary.width} / ${summary.height}` : "16 / 9");
   }, [looks.aspectRatio, naturalAspectRatio, summary.width, summary.height]);
 
+  const parseAspect = (v: string | null | undefined): number | null => {
+    if (!v) return null;
+    const [a, b] = v.split("/").map((n) => parseFloat(n.trim()));
+    return a && b ? a / b : null;
+  };
+  const videoAspectNum = parseAspect(naturalAspectRatio) ?? (summary.width && summary.height ? summary.width / summary.height : null);
+  const viewAspectNum = parseAspect(viewportAspectRatio);
+  const mapPt = (x: number, y: number) => mapVideoPointToViewport(x, y, videoAspectNum, viewAspectNum);
+  const camView = mapPt(camera.x, camera.y);
+  const cursorView = mapPt(camera.cursorX, camera.cursorY);
+
   // Shadow styling lookup
   const shadowStyles: Record<string, string> = {
     none: "none",
@@ -745,6 +757,25 @@ export function VideoCanvas({ project, currentTimeMs: propTimeMs }: VideoCanvasP
         }}
         title="Click anywhere to shift camera focal center"
       >
+        {/* User photo placeholder overlay */}
+        {looks.photoOverlay?.src && (
+          <img
+            src={looks.photoOverlay.src}
+            alt=""
+            draggable={false}
+            className="pointer-events-none absolute z-40 object-cover border-2 border-white/90 shadow-xl"
+            style={{
+              left: `${looks.photoOverlay.x * 100}%`,
+              top: `${looks.photoOverlay.y * 100}%`,
+              width: `${looks.photoOverlay.size * 100}%`,
+              aspectRatio: "1 / 1",
+              transform: "translate(-50%, -50%)",
+              borderRadius:
+                looks.photoOverlay.shape === "circle" ? "9999px" : looks.photoOverlay.shape === "rounded" ? "22%" : "0",
+            }}
+          />
+        )}
+
         {/* Modular Window Mockup Shell Bar */}
         {looks.windowFrame && looks.windowFrame !== "none" && (
           <div className="absolute top-0 inset-x-0 h-7 z-30 flex items-center px-3 bg-black/40 backdrop-blur-md border-b border-white/10 select-none pointer-events-none">
@@ -791,7 +822,7 @@ export function VideoCanvas({ project, currentTimeMs: propTimeMs }: VideoCanvasP
           ref={zoomLayerRef}
           className="relative size-full origin-center will-change-transform"
           style={{
-            transform: `scale(${camera.scale}) translate3d(${(0.5 - camera.x) * 100}%, ${(0.5 - camera.y) * 100}%, 0)`,
+            transform: `scale(${camera.scale}) translate3d(${(0.5 - camView.x) * 100}%, ${(0.5 - camView.y) * 100}%, 0)`,
             transition: isPlaying ? "none" : "transform 0.1s ease-out",
           }}
         >
@@ -883,8 +914,8 @@ export function VideoCanvas({ project, currentTimeMs: propTimeMs }: VideoCanvasP
               <div
                 className="pointer-events-none absolute will-change-transform z-30"
                 style={{
-                  left: `${camera.cursorX * 100}%`,
-                  top: `${camera.cursorY * 100}%`,
+                  left: `${cursorView.x * 100}%`,
+                  top: `${cursorView.y * 100}%`,
                   transform: `translate3d(-${hx * cursorScale}px, -${hy * cursorScale}px, 0) scale(${cursorScale})`,
                   transformOrigin: "0 0",
                 }}
@@ -914,8 +945,8 @@ export function VideoCanvas({ project, currentTimeMs: propTimeMs }: VideoCanvasP
                 key={`ripple-${click.id}`}
                 className="pointer-events-none absolute -translate-x-1/2 -translate-y-1/2 z-25"
                 style={{
-                  left: `${click.x * 100}%`,
-                  top: `${click.y * 100}%`,
+                  left: `${mapPt(click.x, click.y).x * 100}%`,
+                  top: `${mapPt(click.x, click.y).y * 100}%`,
                 }}
               >
                 {/* Expanding tactile ripple ring */}

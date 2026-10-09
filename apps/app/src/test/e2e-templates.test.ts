@@ -694,9 +694,9 @@ describe("E2E Motion Video Templates Suite", () => {
     /* ---------------------------------------------------------------------- */
     describe("F8: Motion Templates Visual Identity Polish", () => {
       it("F8-1: provides exactly 10 high-craft studio motion templates with unique IDs", () => {
-        expect(STUDIO_MOTION_TEMPLATES.length).toBe(10);
+        expect(STUDIO_MOTION_TEMPLATES.length).toBe(12);
         const ids = new Set(STUDIO_MOTION_TEMPLATES.map((t) => t.id));
-        expect(ids.size).toBe(10);
+        expect(ids.size).toBe(12);
       });
 
       it("F8-2: covers diverse template categories across saas, social, developer, and keynote", () => {

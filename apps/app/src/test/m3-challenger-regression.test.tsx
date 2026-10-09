@@ -607,8 +607,12 @@ describe("Milestone 3 Challenger: Regression & Backward Compatibility Suite", ()
   describe("Dimension 3: All 10 Motion Templates Regression Testing", () => {
     STUDIO_MOTION_TEMPLATES.forEach((template, index) => {
       it(`3.${index + 1} verifies template '${template.id}' (${template.name}) applies and edits seamlessly without regression`, () => {
+        const base = createMockProject();
+        if (template.videoRequirement) {
+          base.summary = { ...base.summary, width: 1080, height: 1920 };
+        }
         useEditor.setState({
-          project: createMockProject(),
+          project: base,
           currentTimeMs: 2000,
           durationMs: 12000,
         });

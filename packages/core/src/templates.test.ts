@@ -75,10 +75,10 @@ describe("Studio Motion Templates & Expanded Audio Engine", () => {
       for (const field of tpl.customizableFields) {
         expect(field.id).toBeTruthy();
         expect(field.label).toBeTruthy();
-        expect(field.defaultValue).toBeTruthy();
+        if (field.type !== "image") expect(field.defaultValue).toBeTruthy();
         expect(field.id).not.toBe("badge");
         expect(field.type).not.toBe("badge");
-        expect(["text", "color"]).toContain(field.type);
+        expect(["text", "color", "image"]).toContain(field.type);
       }
 
       // Default text overlays (pure kinetic typography without badges)
@@ -329,7 +329,7 @@ describe("Studio Motion Templates & Expanded Audio Engine", () => {
         expect(field.id.toLowerCase()).not.toContain("badge");
         expect(field.label.toLowerCase()).not.toContain("badge");
         expect(field.type).not.toBe("badge");
-        expect(["text", "color"]).toContain(field.type);
+        expect(["text", "color", "image"]).toContain(field.type);
       }
 
       // 6. Default text overlays contain zero badge properties

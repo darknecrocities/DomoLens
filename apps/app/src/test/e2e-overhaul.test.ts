@@ -836,7 +836,7 @@ describe("DomoLens E2E Overhaul Test Suite (R1 - R7)", () => {
       });
 
       it("F4-6: renders unboxed kinetic kickers without deprecated pill badges", () => {
-        expect(STUDIO_MOTION_TEMPLATES.length).toBe(10);
+        expect(STUDIO_MOTION_TEMPLATES.length).toBe(12);
         const tOverlay: TextOverlay = {
           id: "to-kicker",
           text: "Headline Text",

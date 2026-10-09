@@ -46,14 +46,15 @@ export type TemplateCategory =
   | "developer"
   | "tutorial"
   | "teaser"
-  | "showcase";
+  | "showcase"
+  | "mobile";
 
 export interface TemplateCustomizableField {
   id: string;
   label: string;
   placeholder: string;
   defaultValue: string;
-  type: "text" | "color";
+  type: "text" | "color" | "image";
 }
 
 export type MotionSignatureType =
@@ -75,7 +76,30 @@ export interface TemplateMotionSignature {
   description: string;
 }
 
+/** Photo placeholder users can fill with their own image. */
+export interface TemplatePhotoSlot {
+  label: string;
+  shape: "circle" | "rounded" | "square";
+  x: number;
+  y: number;
+  size: number;
+}
+
+/** Source-video size requirement for a template (e.g. mobile portrait recordings). */
+export interface TemplateVideoRequirement {
+  label: string;
+  /** Inclusive width/height ratio range accepted. */
+  minAspect: number;
+  maxAspect: number;
+  minWidth?: number;
+  minHeight?: number;
+}
+
 export interface MotionTemplate {
+  /** Optional photo placeholder (user can insert a photo). */
+  photoSlot?: TemplatePhotoSlot;
+  /** If set, template is disabled when the project's video does not match. */
+  videoRequirement?: TemplateVideoRequirement;
   id: string;
   name: string;
   tagline: string;
@@ -910,6 +934,113 @@ export const STUDIO_MOTION_TEMPLATES: MotionTemplate[] = [
     ],
   },
 ];
+
+const viralBase = STUDIO_MOTION_TEMPLATES.find((t) => t.id === "viral-short-tiktok")!;
+const MOBILE_REQUIREMENT: TemplateVideoRequirement = {
+  label: "Needs a portrait phone recording (9:16, about 1080x1920)",
+  minAspect: 0.5,
+  maxAspect: 0.62,
+  minWidth: 540,
+  minHeight: 960,
+};
+
+STUDIO_MOTION_TEMPLATES.push(
+  {
+    ...viralBase,
+    id: "mobile-app-showcase",
+    name: "Mobile App Showcase",
+    tagline: "Phone-shaped hero with floating device and spring captions",
+    description: "Made for app store previews and launch posts. Requires a 9:16 phone screen recording.",
+    category: "mobile",
+    accentColor: "#38bdf8",
+    visualAccent: "specular-sweep",
+    looks: {
+      ...viralBase.looks,
+      backgroundValue: "linear-gradient(160deg, #0b1220 0%, #1e3a5f 55%, #0ea5e9 130%)",
+      brandAccentColor: "#38bdf8",
+      cursorStyle: "dot",
+      cursorSize: 2,
+      tiltAngle: 4,
+    },
+    customizableFields: [
+      { id: "headline", label: "App Headline", placeholder: "Meet your new favorite app", defaultValue: "Meet your new favorite app", type: "text" },
+      { id: "accent", label: "Accent Color", placeholder: "#38bdf8", defaultValue: "#38bdf8", type: "color" },
+    ],
+    defaultTextOverlays: viralBase.defaultTextOverlays.map((o) => ({
+      ...o,
+      text: "Meet your new favorite app",
+      motionPreset: "whip-slide" as typeof o.motionPreset,
+    })),
+    videoRequirement: MOBILE_REQUIREMENT,
+    photoSlot: { label: "App icon / logo photo", shape: "rounded", x: 0.5, y: 0.1, size: 0.16 },
+  },
+  {
+    ...viralBase,
+    id: "mobile-story-reel",
+    name: "Mobile Story Reel",
+    tagline: "Warm editorial gradient with blur-reveal caption for in-app flows",
+    description: "Story-style walkthrough for mobile flows. Requires a 9:16 phone screen recording.",
+    category: "mobile",
+    accentColor: "#fb7185",
+    looks: {
+      ...viralBase.looks,
+      backgroundValue: "linear-gradient(200deg, #fde68a 0%, #fb7185 60%, #7c3aed 120%)",
+      brandAccentColor: "#fb7185",
+      cursorStyle: "dot",
+      cursorSize: 2.1,
+    },
+    customizableFields: [
+      { id: "headline", label: "Story Caption", placeholder: "Swipe through in seconds", defaultValue: "Swipe through in seconds", type: "text" },
+      { id: "accent", label: "Accent Color", placeholder: "#fb7185", defaultValue: "#fb7185", type: "color" },
+    ],
+    defaultTextOverlays: viralBase.defaultTextOverlays.map((o) => ({
+      ...o,
+      text: "Swipe through in seconds",
+      motionPreset: "blur-reveal" as typeof o.motionPreset,
+    })),
+    videoRequirement: MOBILE_REQUIREMENT,
+    photoSlot: { label: "Profile photo", shape: "circle", x: 0.5, y: 0.1, size: 0.18 },
+  },
+);
+
+// Every template gets a user photo placeholder.
+const PHOTO_SLOT_BY_CATEGORY: Record<TemplateCategory, TemplatePhotoSlot> = {
+  saas: { label: "Logo / product photo", shape: "rounded", x: 0.9, y: 0.12, size: 0.1 },
+  keynote: { label: "Presenter photo", shape: "circle", x: 0.1, y: 0.14, size: 0.09 },
+  social: { label: "Creator photo", shape: "circle", x: 0.5, y: 0.1, size: 0.18 },
+  developer: { label: "Avatar photo", shape: "square", x: 0.92, y: 0.12, size: 0.08 },
+  tutorial: { label: "Instructor photo", shape: "circle", x: 0.9, y: 0.14, size: 0.1 },
+  teaser: { label: "Maker photo", shape: "circle", x: 0.12, y: 0.12, size: 0.14 },
+  showcase: { label: "Designer photo", shape: "rounded", x: 0.88, y: 0.14, size: 0.12 },
+  mobile: { label: "App icon / photo", shape: "rounded", x: 0.5, y: 0.1, size: 0.16 },
+};
+for (const t of STUDIO_MOTION_TEMPLATES) {
+  t.photoSlot ??= PHOTO_SLOT_BY_CATEGORY[t.category];
+  if (!t.customizableFields.some((f) => f.type === "image")) {
+    t.customizableFields = [
+      ...t.customizableFields,
+      { id: "photo", label: t.photoSlot.label, placeholder: "Choose a photo", defaultValue: "", type: "image" },
+    ];
+  }
+}
+
+/** Checks whether a project's source video satisfies a template's size requirement. */
+export function checkTemplateVideoFit(
+  template: Pick<MotionTemplate, "videoRequirement">,
+  width?: number | null,
+  height?: number | null,
+): { ok: boolean; reason?: string } {
+  const req = template.videoRequirement;
+  if (!req) return { ok: true };
+  if (!width || !height) return { ok: true };
+  const aspect = width / height;
+  if (aspect < req.minAspect || aspect > req.maxAspect) return { ok: false, reason: req.label };
+  if ((req.minWidth && width < req.minWidth) || (req.minHeight && height < req.minHeight)) {
+    return { ok: false, reason: req.label };
+  }
+  return { ok: true };
+}
+
 
 export interface GenerateTemplateKeyframesOptions {
   existingKeyframes?: KeyframeNode[];
