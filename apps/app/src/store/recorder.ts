@@ -42,6 +42,9 @@ interface RecorderStore {
   clicks: ClickEvent[];
   interactions: InteractionEvent[];
   cursorTrajectory: import("@domolens/core").CursorTrajectoryPoint[];
+  isProcessing: boolean;
+  processingProgress: number;
+  processingStep: string;
 
   // Actions
   setSource: (source: RecordingSource) => void;
@@ -184,6 +187,9 @@ export const useRecorder = create<RecorderStore>((set, get) => ({
   clicks: [],
   interactions: [],
   cursorTrajectory: [],
+  isProcessing: false,
+  processingProgress: 0,
+  processingStep: "",
 
   setSource: (source) => set({ source }),
   setRecordingMode: (recordingMode) => set({ recordingMode }),
@@ -1023,6 +1029,12 @@ export const useRecorder = create<RecorderStore>((set, get) => ({
   },
 
   stopRecording: async () => {
+    set({
+      isProcessing: true,
+      processingProgress: 12,
+      processingStep: "Finalizing stream and capturing recorded media...",
+    });
+
     if (elapsedTimer) clearInterval(elapsedTimer);
     elapsedTimer = null;
 
@@ -1113,7 +1125,12 @@ export const useRecorder = create<RecorderStore>((set, get) => ({
     const rawInteractions = get().interactions.filter((i) => !isFinishOrStopClick(i));
     void platform.setAlwaysOnTop?.(false);
     void platform.hideRecordingHud?.();
-    set({ state: "idle" });
+    set({
+      state: "idle",
+      isProcessing: true,
+      processingProgress: 35,
+      processingStep: "Saving recorded video media...",
+    });
 
     // Strictly preserve real user clicks without synthetic filler
     let finalClicks = rawClicks;
@@ -1147,6 +1164,11 @@ export const useRecorder = create<RecorderStore>((set, get) => ({
         }
       }
     }
+
+    set({
+      processingProgress: 55,
+      processingStep: "Generating frame thumbnail & analyzing activity...",
+    });
 
     // Capture real video frame thumbnail from the recorded video
     let thumbnail: string | null = null;
@@ -1224,6 +1246,11 @@ export const useRecorder = create<RecorderStore>((set, get) => ({
     mergedForPlotting.sort((a, b) => a.timestampMs - b.timestampMs);
     finalInteractions = mergedForPlotting;
 
+    set({
+      processingProgress: 75,
+      processingStep: "Auto-plotting intelligent camera zooms & subtitles...",
+    });
+
     // STRICT INVARIANT:
     // If no user clicks or interactions occurred during recording (excluding stop/finish action),
     // strictly DO NOT apply zoom in! The video remains in full screen (1.0x) only!
@@ -1274,7 +1301,7 @@ export const useRecorder = create<RecorderStore>((set, get) => ({
         durationMs: 2500,
         x: i.x,
         y: Math.max(0.12, i.y - 0.08),
-        fontSize: 16,
+        fontSize: 13,
         color: "#ffffff",
         bgColor: "rgba(15, 17, 23, 0.88)",
       }));
@@ -1299,7 +1326,7 @@ export const useRecorder = create<RecorderStore>((set, get) => ({
           durationMs,
           x: 0.5,
           y: 0.88,
-          fontSize: 18,
+          fontSize: 14,
           color: "#ffffff",
           bgColor: "rgba(0, 0, 0, 0.75)",
           cardStyle: "glass",
@@ -1406,6 +1433,11 @@ export const useRecorder = create<RecorderStore>((set, get) => ({
     });
     await platform.saveProject?.(summary);
 
+    set({
+      processingProgress: 92,
+      processingStep: "Saving project data & preparing editor workspace...",
+    });
+
     // Save full project data permanently on disk and storage across app restarts
     await platform.saveFullProject?.(projectData);
     if (typeof localStorage !== "undefined") {
@@ -1417,6 +1449,13 @@ export const useRecorder = create<RecorderStore>((set, get) => ({
       sessionStorage.setItem(`domolens_project_${id}`, JSON.stringify(projectData));
     }
 
+    set({
+      processingProgress: 100,
+      processingStep: "Ready! Opening Studio Workspace...",
+    });
+    await new Promise((r) => setTimeout(r, 350));
+    set({ isProcessing: false, processingProgress: 0, processingStep: "" });
+
     toast.success("Recording complete! Let's edit it.");
 
     // Navigate straight to the editor screen
@@ -1426,6 +1465,7 @@ export const useRecorder = create<RecorderStore>((set, get) => ({
   },
 
   cancelRecording: () => {
+    set({ isProcessing: false, processingProgress: 0, processingStep: "" });
     if (countdownTimer) clearInterval(countdownTimer);
     if (elapsedTimer) clearInterval(elapsedTimer);
     if (recorderCleanupFn) {

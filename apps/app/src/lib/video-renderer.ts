@@ -888,7 +888,7 @@ export function renderActiveTextOverlays(
 
     const posX = winX + (overlay.x ?? 0.5) * winW + motion.translateX * baseScale;
     const posY = winY + (overlay.y ?? 0.85) * winH + motion.translateY * baseScale;
-    const fontSize = Math.max(14, (overlay.fontSize || 22) * baseScale);
+    const fontSize = Math.max(10, (overlay.fontSize || 14) * baseScale);
     const fontFamily = overlay.typography?.fontFamily || cardDef.fontFamily || "sans-serif";
     const fontWeight = overlay.typography?.fontWeight || "700";
 
@@ -928,13 +928,13 @@ export function renderActiveTextOverlays(
     const contentW = Math.max(headlineWidth, kickerWidth);
     const contentH = kickerHeight + gapBetween + headlineHeight;
 
-    const padX = isMinimal ? 6 * baseScale : 18 * baseScale;
-    const padY = isMinimal ? 4 * baseScale : 10 * baseScale;
+    const padX = isMinimal ? 6 * baseScale : 14 * baseScale;
+    const padY = isMinimal ? 3 * baseScale : 6 * baseScale;
     const cardW = contentW + padX * 2;
     const cardH = contentH + padY * 2;
     const cardX = -cardW / 2;
     const cardY = -cardH / 2;
-    const cardRadius = isTerminal ? 8 * baseScale : 14 * baseScale;
+    const cardRadius = isTerminal ? 6 * baseScale : 10 * baseScale;
 
     // 4. Draw Card Background & Shadow (unless minimal without custom bgColor)
     if (!isMinimal || overlay.bgColor) {

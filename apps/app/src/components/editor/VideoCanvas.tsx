@@ -1173,8 +1173,8 @@ export function VideoCanvas({ project, currentTimeMs: propTimeMs }: VideoCanvasP
                   boxShadow: cardDef.boxShadow,
                   backdropFilter: cardDef.backdropBlurPx > 0 ? `blur(${cardDef.backdropBlurPx}px)` : undefined,
                   WebkitBackdropFilter: cardDef.backdropBlurPx > 0 ? `blur(${cardDef.backdropBlurPx}px)` : undefined,
-                  padding: isMinimal ? "4px 8px" : "10px 18px",
-                  borderRadius: isTerminal ? "8px" : "14px",
+                  padding: isMinimal ? "3px 6px" : "6px 14px",
+                  borderRadius: isTerminal ? "6px" : "10px",
                   fontFamily,
                   maxWidth: "85vw",
                 }}
@@ -1183,7 +1183,7 @@ export function VideoCanvas({ project, currentTimeMs: propTimeMs }: VideoCanvasP
                 {kickerText && (
                   <div
                     data-testid={`text-kicker-${textOverlay.id}`}
-                    className="text-[11px] font-bold tracking-wider leading-none select-none mb-1.5 opacity-90"
+                    className="text-[10px] font-bold tracking-wider leading-none select-none mb-1 opacity-90"
                     style={{
                       color: looks.brandAccentColor || (isTerminal ? "#4ade80" : "#a5b4fc"),
                       letterSpacing: textOverlay.typography?.letterSpacing || "0.08em",
@@ -1200,7 +1200,7 @@ export function VideoCanvas({ project, currentTimeMs: propTimeMs }: VideoCanvasP
                   data-testid={`text-headline-${textOverlay.id}`}
                   className="font-bold leading-tight select-none tracking-tight whitespace-pre-wrap"
                   style={{
-                    fontSize: `${textOverlay.fontSize || 22}px`,
+                    fontSize: `${textOverlay.fontSize || 14}px`,
                     color: textColor,
                     fontWeight: textOverlay.typography?.fontWeight || "700",
                     letterSpacing: textOverlay.typography?.letterSpacing || "-0.015em",

@@ -1105,7 +1105,7 @@ export function ToolsSidebar() {
                   </button>
                   <button
                     type="button"
-                    onClick={() => updateTextOverlay(selectedText.id, { y: 0.85 })}
+                    onClick={() => updateTextOverlay(selectedText.id, { y: 0.88, fontSize: 14, cardStyle: "glass" })}
                     className="flex-1 rounded bg-ink-800 py-1 text-[10px] font-medium text-fg-muted hover:text-fg"
                   >
                     Bottom Subtitle

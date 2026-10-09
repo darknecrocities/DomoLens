@@ -60,23 +60,33 @@ export function LlmSidebar() {
 
   const quickChips = [
     {
-      label: "Auto-Plot Zooms",
-      prompt: "Auto-plot camera zooms on all clicks and typing with 2.4s hold",
+      label: "Describe Video",
+      prompt: "Describe my video timeline and captured interactions",
+      icon: <HelpCircle className="size-3 text-white shrink-0" />,
+    },
+    {
+      label: "AI Recommendations",
+      prompt: "Audit this video and give me recommendations to improve it",
       icon: <Sparkles className="size-3 text-white shrink-0" />,
     },
     {
-      label: "Camera Shift Tour",
-      prompt: "Create a cinematic camera shift tour gliding across all UI actions",
+      label: "Auto-Plot Zooms",
+      prompt: "Auto-plot camera zooms on all clicks and typing with 2.4s hold",
+      icon: <Wand2 className="size-3 text-white shrink-0" />,
+    },
+    {
+      label: "3D Frame Tilt",
+      prompt: "Apply a modern 3D frame tilt for Keynote polish",
       icon: <Crosshair className="size-3 text-white shrink-0" />,
     },
     {
-      label: "Suggest Chapters",
-      prompt: "Suggest video chapters and title based on recording interactions",
+      label: "Studio Obsidian",
+      prompt: "Change canvas backdrop to Studio Obsidian",
       icon: <Bookmark className="size-3 text-white shrink-0" />,
     },
     {
       label: "Add Subtitle",
-      prompt: "Add a stylish subtitle overlay at current playhead",
+      prompt: "Add a compact subtitle overlay at current playhead",
       icon: <MessageSquare className="size-3 text-white shrink-0" />,
     },
     {

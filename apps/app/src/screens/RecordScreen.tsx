@@ -38,6 +38,7 @@ export function RecordScreen() {
     resumeRecording,
     stopRecording,
     cancelRecording,
+    isProcessing,
   } = useRecorder();
 
   const sources: Array<{ id: RecordingSource; label: string; desc: string; icon: typeof Monitor }> = [
@@ -207,15 +208,17 @@ export function RecordScreen() {
                 <Button
                   variant="primary"
                   size="sm"
+                  disabled={isProcessing}
                   icon={<CheckCircle2 className="size-4 text-ink-950" />}
                   onClick={() => void stopRecording()}
                 >
-                  {copy.record.finishBtn}
+                  {isProcessing ? "Preparing..." : copy.record.finishBtn}
                 </Button>
 
                 <Button
                   variant="ghost"
                   size="sm"
+                  disabled={isProcessing}
                   onClick={cancelRecording}
                 >
                   {copy.record.discardBtn}
