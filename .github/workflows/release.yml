@@ -50,9 +50,10 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           TAG="${{ steps.tag.outputs.val }}"
-          echo "Ensuring release $TAG exists..."
+          echo "Ensuring release $TAG exists (as draft while building)..."
           gh release view "$TAG" >/dev/null 2>&1 || \
           gh release create "$TAG" \
+            --draft \
             --title "DomoLens $TAG" \
             --notes "DomoLens Automated Release $TAG
           - macOS (.dmg, .app)
@@ -201,3 +202,20 @@ jobs:
             gh release upload "$TAG" DomoLens-Linux.deb "$DEB_FILE" --clobber
             echo "Successfully published DomoLens-Linux.deb to release."
           fi
+
+  publish-release:
+    name: Publish Release
+    needs: [create-release, release]
+    permissions:
+      contents: write
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Publish Release Atomically as Latest
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="${{ needs.create-release.outputs.tag }}"
+          echo "Publishing release $TAG as latest public release..."
+          gh release edit "$TAG" --draft=false --latest
+          echo "Release $TAG published across all platforms."
+

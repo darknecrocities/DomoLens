@@ -172,21 +172,12 @@ export function FinalCtaFooter() {
                   <motion.a
                     whileHover={{ scale: 1.02 }}
                     whileTap={{ scale: 0.98 }}
-                    href="https://github.com/darknecrocities/DomoLens/releases/latest/download/DomoLens-Windows.msi"
-                    className="inline-flex items-center gap-2 rounded-xl border border-white/[0.08] bg-white/[0.05] px-5 py-2.5 font-mono text-xs font-bold text-neutral-200 uppercase hover:bg-white/[0.1] hover:text-white transition-colors"
-                  >
-                    <Download className="size-4" />
-                    <span>Download Windows (.MSI)</span>
-                  </motion.a>
-                  <motion.a
-                    whileHover={{ scale: 1.02 }}
-                    whileTap={{ scale: 0.98 }}
                     href="https://github.com/darknecrocities/DomoLens/releases/latest"
                     target="_blank"
                     rel="noreferrer"
                     className="flex items-center gap-1.5 rounded-xl border border-white/[0.08] bg-white/[0.05] px-4 py-2 font-mono text-xs text-neutral-300 hover:text-white hover:bg-white/[0.1] transition-colors"
                   >
-                    <span>GitHub Release</span>
+                    <span>All GitHub Releases</span>
                     <ExternalLink className="size-3 text-neutral-400" />
                   </motion.a>
                 </div>
