@@ -1691,7 +1691,18 @@ export async function renderProjectVideo(options: RenderOptions): Promise<Render
           ctx.font = `500 ${10 * baseScale}px monospace`;
           ctx.fillStyle = "rgba(255, 255, 255, 0.75)";
           ctx.textAlign = "center";
-          ctx.fillText(looks.mockupUrl || "app.domolens.dev", omniX + omniW / 2, omniY + 11 * baseScale);
+        }
+
+        // Terminal Title
+        if (looks.windowFrame === "terminal") {
+          const terminalTitle =
+            looks.mockupUrl && looks.mockupUrl !== "app.domolens.dev"
+              ? looks.mockupUrl
+              : "terminal — zsh — 80x24";
+          ctx.font = `500 ${10 * baseScale}px monospace`;
+          ctx.fillStyle = "rgba(255, 255, 255, 0.70)";
+          ctx.textAlign = "center";
+          ctx.fillText(terminalTitle, winX + winW / 2, winY + headerH / 2 + 3.5 * baseScale);
         }
 
         ctx.restore();

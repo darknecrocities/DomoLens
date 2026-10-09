@@ -883,8 +883,10 @@ export function VideoCanvas({ project, currentTimeMs: propTimeMs }: VideoCanvasP
 
             {/* Terminal Title */}
             {looks.windowFrame === "terminal" && (
-              <div className="mx-auto text-[10px] font-mono text-neutral-400">
-                {looks.mockupUrl || "terminal — zsh — 80x24"}
+              <div className="mx-auto text-[10px] font-mono text-neutral-300 font-medium">
+                {looks.mockupUrl && looks.mockupUrl !== "app.domolens.dev"
+                  ? looks.mockupUrl
+                  : "terminal — zsh — 80x24"}
               </div>
             )}
 

@@ -310,15 +310,14 @@ describe("useRecorder store", () => {
     // Subtitles generated
     expect(project.textOverlays.length).toBeGreaterThanOrEqual(1);
 
-    // Full screen presentation by default with no edge cutoffs
-    expect(project.looks.aspectRatio).toBe("auto");
+    // MacBook terminal frame with studio styling and fit contain (no edge cutoffs)
     expect(project.looks.fit).toBe("contain");
-    expect(project.looks.windowFrame).toBe("none");
-    expect(project.looks.padding).toBe(0);
-    expect(project.looks.borderRadius).toBe(0);
-    expect(project.looks.shadow).toBe("none");
+    expect(project.looks.windowFrame).toBe("terminal");
+    expect(project.looks.padding).toBe(32);
+    expect(project.looks.borderRadius).toBe(16);
+    expect(project.looks.shadow).toBe("lift");
 
-    // Video starts full screen at timeMs 0
+    // Video starts full screen unzoomed at timeMs 0
     expect(project.keyframes[0].timeMs).toBe(0);
     expect(project.keyframes[0].scale).toBe(1.0);
 

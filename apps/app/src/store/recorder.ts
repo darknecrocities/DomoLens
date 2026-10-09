@@ -1351,12 +1351,11 @@ export const useRecorder = create<RecorderStore>((set, get) => ({
       ],
       looks: {
         ...DEFAULT_LOOKS,
-        aspectRatio: "auto" as const,
+        windowFrame: "terminal" as const,
         fit: "contain" as const,
-        windowFrame: "none" as const,
-        padding: 0,
-        borderRadius: 0,
-        shadow: "none" as const,
+        padding: 32,
+        borderRadius: 16,
+        shadow: "lift" as const,
       },
       audioSettings: {
         ...DEFAULT_AUDIO_SETTINGS,

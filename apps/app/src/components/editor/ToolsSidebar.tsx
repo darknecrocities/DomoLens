@@ -1469,27 +1469,27 @@ export function ToolsSidebar() {
                 </div>
               </div>
 
-              {/* Quick Framing Presets: Whole Screen vs Studio Frame */}
-              <div className="grid grid-cols-2 gap-1.5 pt-1">
+              {/* Quick Framing Presets: MacBook Terminal vs macOS Window vs Full Screen */}
+              <div className="grid grid-cols-3 gap-1 pt-1">
                 <button
                   type="button"
                   onClick={() =>
                     updateLooks({
-                      padding: 0,
-                      borderRadius: 0,
-                      windowFrame: "none",
-                      aspectRatio: "auto",
+                      padding: 32,
+                      borderRadius: 16,
+                      shadow: "lift",
+                      windowFrame: "terminal",
                       fit: "contain",
                     })
                   }
-                  className={`rounded-lg py-1.5 px-2 text-[10px] font-semibold border transition-all ${
-                    (project?.looks.padding ?? 0) === 0 && project?.looks.windowFrame === "none"
+                  className={`rounded-lg py-1.5 px-1.5 text-[9.5px] font-semibold border transition-all truncate text-center ${
+                    project?.looks.windowFrame === "terminal"
                       ? "border-emerald-400 bg-emerald-500/15 text-emerald-300 font-bold"
                       : "border-ink-800 bg-ink-900/60 text-fg-muted hover:text-white hover:border-ink-700"
                   }`}
-                  title="Make recording fill the whole screen edge-to-edge without margins or cutoffs"
+                  title="MacBook Terminal window frame with traffic lights and terminal title"
                 >
-                  Whole Screen (0 Margin)
+                  MacBook Terminal
                 </button>
                 <button
                   type="button"
@@ -1497,18 +1497,40 @@ export function ToolsSidebar() {
                     updateLooks({
                       padding: 32,
                       borderRadius: 16,
+                      shadow: "lift",
                       windowFrame: "macos",
                       fit: "contain",
                     })
                   }
-                  className={`rounded-lg py-1.5 px-2 text-[10px] font-semibold border transition-all ${
-                    (project?.looks.padding ?? 0) > 0 && project?.looks.windowFrame !== "none"
+                  className={`rounded-lg py-1.5 px-1.5 text-[9.5px] font-semibold border transition-all truncate text-center ${
+                    project?.looks.windowFrame === "macos"
                       ? "border-indigo-400 bg-indigo-500/15 text-indigo-300 font-bold"
                       : "border-ink-800 bg-ink-900/60 text-fg-muted hover:text-white hover:border-ink-700"
                   }`}
-                  title="Frame recording inside a centered studio mockup box"
+                  title="macOS studio window mockup frame"
                 >
-                  Studio Frame
+                  macOS Window
+                </button>
+                <button
+                  type="button"
+                  onClick={() =>
+                    updateLooks({
+                      padding: 0,
+                      borderRadius: 0,
+                      shadow: "none",
+                      windowFrame: "none",
+                      aspectRatio: "auto",
+                      fit: "contain",
+                    })
+                  }
+                  className={`rounded-lg py-1.5 px-1.5 text-[9.5px] font-semibold border transition-all truncate text-center ${
+                    (project?.looks.padding ?? 0) === 0 && project?.looks.windowFrame === "none"
+                      ? "border-amber-400 bg-amber-500/15 text-amber-300 font-bold"
+                      : "border-ink-800 bg-ink-900/60 text-fg-muted hover:text-white hover:border-ink-700"
+                  }`}
+                  title="Make recording fill the whole screen edge-to-edge with zero margins"
+                >
+                  Full Screen (0 Margin)
                 </button>
               </div>
 
@@ -1616,7 +1638,11 @@ export function ToolsSidebar() {
                     <input
                       type="text"
                       value={project?.looks.mockupUrl || ""}
-                      placeholder="app.yourdomain.com"
+                      placeholder={
+                        project?.looks.windowFrame === "terminal"
+                          ? "terminal — zsh — 80x24"
+                          : "app.yourdomain.com"
+                      }
                       onChange={(e) => updateLooks({ mockupUrl: e.target.value })}
                       className="w-full rounded-md border border-neutral-700 bg-neutral-900 px-2 py-1 text-[11px] text-white font-mono"
                     />

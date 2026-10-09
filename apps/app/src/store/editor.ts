@@ -322,6 +322,16 @@ export const useEditor = create<EditorState>((set, get) => ({
       if (!parsed.textOverlays) parsed.textOverlays = [];
       if (!parsed.audioTracks) parsed.audioTracks = [];
 
+      if (!parsed.looks) parsed.looks = { ...DEFAULT_LOOKS };
+      // Self-heal: If recording had windowFrame stripped to "none", restore MacBook terminal frame
+      if (parsed.summary.source === "recording" && (parsed.looks.windowFrame === "none" || !parsed.looks.windowFrame)) {
+        parsed.looks.windowFrame = "terminal";
+        if (parsed.looks.padding === 0) parsed.looks.padding = 32;
+        if (parsed.looks.borderRadius === 0) parsed.looks.borderRadius = 16;
+        if (parsed.looks.shadow === "none") parsed.looks.shadow = "lift";
+        parsed.looks.fit = "contain";
+      }
+
       const duration = parsed.summary.durationMs || 10000;
 
       // Self-heal: If project has media and duration, but 0 zoomBlocks and 0 keyframes (e.g. past recording before fix):
@@ -489,12 +499,11 @@ export const useEditor = create<EditorState>((set, get) => ({
         summary.source === "recording"
           ? {
               ...DEFAULT_LOOKS,
-              aspectRatio: "auto" as const,
+              windowFrame: "terminal" as const,
               fit: "contain" as const,
-              windowFrame: "none" as const,
-              padding: 0,
-              borderRadius: 0,
-              shadow: "none" as const,
+              padding: 32,
+              borderRadius: 16,
+              shadow: "lift" as const,
             }
           : DEFAULT_LOOKS,
       audioSettings: { ...DEFAULT_AUDIO_SETTINGS },
