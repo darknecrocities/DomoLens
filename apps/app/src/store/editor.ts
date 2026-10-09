@@ -420,6 +420,11 @@ export const useEditor = create<EditorState>((set, get) => ({
         parsed.looks.fit = "contain";
       }
 
+      // Sanitize legacy mockupUrl
+      if (parsed.looks.mockupUrl === "app.domolens.dev") {
+        parsed.looks.mockupUrl = "";
+      }
+
       const duration = parsed.summary.durationMs || 10000;
 
       // Self-heal: If project has media and duration, but 0 zoomBlocks and 0 keyframes (e.g. past recording before fix):

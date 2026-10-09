@@ -665,6 +665,6 @@ export const DEFAULT_LOOKS: ProjectLooks = {
   motionBlur: 0,
   cameraPhysics: "spring",
   brandAccentColor: "#6366f1",
-  mockupUrl: "app.domolens.dev",
+  mockupUrl: "",
 };
 

@@ -417,9 +417,6 @@ export function TemplateVideoPreview({ template, customFields }: TemplateVideoPr
                   <span className="size-2 rounded-full bg-rose-500/90" />
                   <span className="size-2 rounded-full bg-amber-500/90" />
                   <span className="size-2 rounded-full bg-emerald-500/90" />
-                  <span className="ml-1 text-[8px] font-mono text-neutral-400 truncate max-w-[120px]">
-                    {template.looks.mockupUrl || "DomoLens Studio"}
-                  </span>
                 </div>
               )}
               {windowFrame === "safari" && (
@@ -428,24 +425,16 @@ export function TemplateVideoPreview({ template, customFields }: TemplateVideoPr
                     <span className="size-1.5 rounded-full bg-neutral-600" />
                     <span className="size-1.5 rounded-full bg-neutral-600" />
                   </div>
-                  <div className="mx-auto rounded bg-neutral-900 px-2.5 py-0.5 text-[8px] font-mono text-neutral-400 border border-white/5 truncate max-w-[130px]">
-                    {template.looks.mockupUrl || "domolens.app/pro"}
-                  </div>
+                  <div className="mx-auto rounded bg-neutral-900 h-2 w-14 border border-white/5" />
                 </div>
               )}
               {windowFrame === "terminal" && (
                 <div className="flex items-center gap-1.5">
                   <Terminal className="size-2.5 text-emerald-400" />
-                  <span className="text-[8px] font-mono text-neutral-300">
-                    {template.looks.mockupUrl || "bash — 80x24"}
-                  </span>
                 </div>
               )}
               {windowFrame === "windows" && (
-                <div className="flex items-center justify-between w-full">
-                  <span className="text-[8px] font-mono text-neutral-400 truncate max-w-[130px]">
-                    {template.looks.mockupUrl || "DomoLens Studio"}
-                  </span>
+                <div className="flex items-center justify-end w-full">
                   <div className="flex items-center gap-1 text-[7px] text-neutral-400">
                     <span>—</span>
                     <span>□</span>

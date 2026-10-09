@@ -1678,19 +1678,12 @@ export async function renderProjectVideo(options: RenderOptions): Promise<Render
           ctx.fill();
         }
 
-        // macOS Window Title
-        if (looks.windowFrame === "macos") {
-          const title = looks.mockupUrl || "DomoLens";
-          ctx.font = `500 ${10 * baseScale}px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif`;
-          ctx.fillStyle = "rgba(255, 255, 255, 0.70)";
-          ctx.textAlign = "center";
-          ctx.fillText(title, winX + winW / 2, winY + headerH / 2 + 3.5 * baseScale);
-        }
+        // macOS Window Title - Clean header with no text
 
-        // Windows Terminal (PowerShell tab + authentic Windows controls)
+        // Windows Terminal (Clean tab + authentic Windows controls, no text)
         if (looks.windowFrame === "windows") {
           // Tab on left
-          const tabW = Math.min(160 * baseScale, winW * 0.35);
+          const tabW = Math.min(80 * baseScale, winW * 0.25);
           const tabH = 20 * baseScale;
           const tabX = winX + 8 * baseScale;
           const tabY = winY + headerH - tabH;
@@ -1705,13 +1698,6 @@ export async function renderProjectVideo(options: RenderOptions): Promise<Render
           // Tab active blue indicator top border
           ctx.fillStyle = "#38bdf8";
           ctx.fillRect(tabX, tabY, tabW, 2 * baseScale);
-
-          // Tab title: ">_ PowerShell"
-          const winTitle = looks.mockupUrl || "PowerShell";
-          ctx.font = `600 ${9.5 * baseScale}px monospace`;
-          ctx.fillStyle = "rgba(255, 255, 255, 0.85)";
-          ctx.textAlign = "left";
-          ctx.fillText(`>_ ${winTitle}`, tabX + 8 * baseScale, tabY + tabH / 2 + 3 * baseScale);
 
           // Window Controls on right: Minimize (—), Maximize (□), Close (✕)
           const rightControlsX = winX + winW - 54 * baseScale;
@@ -1729,10 +1715,10 @@ export async function renderProjectVideo(options: RenderOptions): Promise<Render
           ctx.fillText("✕", rightControlsX + 42 * baseScale, ctrlY + 3.5 * baseScale);
         }
 
-        // Safari Omnibar
+        // Safari Omnibar (Clean omnibar pill, no text)
         if (looks.windowFrame === "safari") {
-          const omniW = Math.min(260 * baseScale, winW * 0.45);
-          const omniH = 16 * baseScale;
+          const omniW = Math.min(180 * baseScale, winW * 0.35);
+          const omniH = 14 * baseScale;
           const omniX = winX + (winW - omniW) / 2;
           const omniY = winY + (headerH - omniH) / 2;
           ctx.fillStyle = "rgba(255, 255, 255, 0.12)";
@@ -1743,30 +1729,14 @@ export async function renderProjectVideo(options: RenderOptions): Promise<Render
           } else {
             ctx.fillRect(omniX, omniY, omniW, omniH);
           }
-          const safariUrl = looks.mockupUrl || "domolens.vercel.app";
-          ctx.font = `500 ${9.5 * baseScale}px -apple-system, BlinkMacSystemFont, sans-serif`;
-          ctx.fillStyle = "rgba(255, 255, 255, 0.80)";
-          ctx.textAlign = "center";
-          ctx.fillText(`🔒 ${safariUrl}`, winX + winW / 2, winY + headerH / 2 + 3 * baseScale);
         }
 
-        // Terminal Title
-        if (looks.windowFrame === "terminal") {
-          const terminalTitle =
-            looks.mockupUrl && looks.mockupUrl !== "app.domolens.dev"
-              ? looks.mockupUrl
-              : "terminal — zsh — 80x24";
-          ctx.font = `500 ${10 * baseScale}px monospace`;
-          ctx.fillStyle = "rgba(255, 255, 255, 0.70)";
-          ctx.textAlign = "center";
-          ctx.fillText(terminalTitle, winX + winW / 2, winY + headerH / 2 + 3.5 * baseScale);
-        }
+        // Terminal Title - Clean header with traffic lights, no text
 
-        // Chrome Browser (Tab bar + Omnibox)
+        // Chrome Browser (Tab bar + Omnibox, no text)
         if (looks.windowFrame === "chrome") {
-          const chromeTitle = looks.mockupUrl || "DomoLens Studio";
           // Tab
-          const tabW = Math.min(180 * baseScale, winW * 0.38);
+          const tabW = Math.min(90 * baseScale, winW * 0.22);
           ctx.fillStyle = "rgba(41, 42, 45, 0.95)";
           if (typeof ctx.roundRect === "function") {
             ctx.beginPath();
@@ -1775,14 +1745,10 @@ export async function renderProjectVideo(options: RenderOptions): Promise<Render
           } else {
             ctx.fillRect(winX + 10 * baseScale, winY + 3 * baseScale, tabW, 16 * baseScale);
           }
-          ctx.font = `500 ${9 * baseScale}px sans-serif`;
-          ctx.fillStyle = "rgba(255, 255, 255, 0.85)";
-          ctx.textAlign = "left";
-          ctx.fillText(chromeTitle, winX + 18 * baseScale, winY + 14 * baseScale);
 
           // Omnibox
-          const omniW = Math.min(280 * baseScale, winW * 0.50);
-          const omniH = 13 * baseScale;
+          const omniW = Math.min(220 * baseScale, winW * 0.45);
+          const omniH = 12 * baseScale;
           const omniX = winX + (winW - omniW) / 2;
           const omniY = winY + 20 * baseScale;
           ctx.fillStyle = "rgba(255, 255, 255, 0.10)";
@@ -1793,11 +1759,6 @@ export async function renderProjectVideo(options: RenderOptions): Promise<Render
           } else {
             ctx.fillRect(omniX, omniY, omniW, omniH);
           }
-          const chromeUrl = looks.mockupUrl || "domolens.vercel.app";
-          ctx.font = `400 ${8.5 * baseScale}px sans-serif`;
-          ctx.fillStyle = "rgba(255, 255, 255, 0.75)";
-          ctx.textAlign = "center";
-          ctx.fillText(`🔒 https://${chromeUrl}`, winX + winW / 2, omniY + omniH / 2 + 3 * baseScale);
         }
 
         ctx.restore();

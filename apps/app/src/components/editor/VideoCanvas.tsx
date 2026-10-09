@@ -870,9 +870,6 @@ export function VideoCanvas({ project, currentTimeMs: propTimeMs }: VideoCanvasP
                   <span className="size-2.5 rounded-full bg-[#ffbd2e] border border-black/20" />
                   <span className="size-2.5 rounded-full bg-[#27c93f] border border-black/20" />
                 </div>
-                <div className="text-[11px] font-medium text-white/70 tracking-tight truncate max-w-xs">
-                  {looks.mockupUrl || "DomoLens"}
-                </div>
                 <div className="w-12 shrink-0" />
               </div>
             )}
@@ -883,9 +880,6 @@ export function VideoCanvas({ project, currentTimeMs: propTimeMs }: VideoCanvasP
                 <div className="flex items-center gap-1.5 h-full pt-1">
                   <div className="flex items-center gap-2 bg-[#2d2d2d] text-white px-2.5 py-1 rounded-t text-[11px] font-mono border-t-2 border-sky-400 shadow-sm">
                     <span className="text-sky-400 font-bold text-xs select-none">&gt;_</span>
-                    <span className="truncate max-w-[140px] text-neutral-200">
-                      {looks.mockupUrl || "PowerShell"}
-                    </span>
                     <span className="text-neutral-400 text-[10px] ml-1">✕</span>
                   </div>
                   <span className="text-neutral-400 text-xs px-1 select-none">+</span>
@@ -912,14 +906,6 @@ export function VideoCanvas({ project, currentTimeMs: propTimeMs }: VideoCanvasP
                   <span className="size-2.5 rounded-full bg-[#ffbd2e] border border-black/20" />
                   <span className="size-2.5 rounded-full bg-[#27c93f] border border-black/20" />
                 </div>
-                <div className="flex items-center gap-1.5 text-[10.5px] font-mono text-neutral-300 font-medium truncate max-w-sm">
-                  <span className="text-neutral-500">📁</span>
-                  <span>
-                    {looks.mockupUrl && looks.mockupUrl !== "app.domolens.dev"
-                      ? looks.mockupUrl
-                      : "terminal — zsh — 80×24"}
-                  </span>
-                </div>
                 <div className="w-12 shrink-0" />
               </div>
             )}
@@ -928,16 +914,13 @@ export function VideoCanvas({ project, currentTimeMs: propTimeMs }: VideoCanvasP
             {looks.windowFrame === "chrome" && (
               <div className="absolute top-0 inset-x-0 z-30 bg-[#202124] border-b border-white/10 select-none pointer-events-none">
                 <div className="h-6 flex items-center px-2 pt-1 gap-1">
-                  <div className="flex items-center gap-1.5 bg-[#292a2d] text-white px-2.5 py-0.5 rounded-t-md text-[10px] border-t border-x border-white/10 shadow-sm max-w-[180px]">
+                  <div className="flex items-center gap-1.5 bg-[#292a2d] text-white px-2.5 py-0.5 rounded-t-md text-[10px] border-t border-x border-white/10 shadow-sm w-20">
                     <svg className="size-2.5 text-neutral-400 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                       <circle cx="12" cy="12" r="10" />
                       <line x1="2" y1="12" x2="22" y2="12" />
                       <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
                     </svg>
-                    <span className="truncate text-neutral-200 text-[10px]">
-                      {looks.mockupUrl || "DomoLens Studio"}
-                    </span>
-                    <span className="text-neutral-400 text-[8px] ml-1">✕</span>
+                    <span className="text-neutral-400 text-[8px] ml-auto">✕</span>
                   </div>
                   <span className="text-neutral-400 text-[10px] px-1">+</span>
                 </div>
@@ -947,12 +930,8 @@ export function VideoCanvas({ project, currentTimeMs: propTimeMs }: VideoCanvasP
                     <span>→</span>
                     <span>↻</span>
                   </div>
-                  <div className="flex-1 flex items-center gap-1 bg-[#18181a] rounded-full px-2.5 py-0.5 text-[9.5px] border border-white/10 font-sans max-w-xs">
+                  <div className="flex-1 flex items-center gap-1 bg-[#18181a] rounded-full px-2.5 py-0.5 text-[9.5px] border border-white/10 font-sans max-w-xs h-4">
                     <span className="text-neutral-400 text-[8px]">🔒</span>
-                    <span className="text-neutral-500">https://</span>
-                    <span className="text-neutral-200 truncate">
-                      {looks.mockupUrl || "domolens.vercel.app"}
-                    </span>
                   </div>
                   <div className="flex items-center gap-1.5 text-neutral-400 text-[10px] pr-1">
                     <span>☆</span>
@@ -976,9 +955,8 @@ export function VideoCanvas({ project, currentTimeMs: propTimeMs }: VideoCanvasP
                     <span>›</span>
                   </div>
                 </div>
-                <div className="flex items-center justify-center gap-1 rounded-md bg-white/10 px-2.5 py-0.5 text-[10px] font-sans text-neutral-200 border border-white/10 max-w-xs flex-1 mx-3">
+                <div className="flex items-center justify-between rounded-md bg-white/10 px-2.5 py-0.5 text-[10px] font-sans text-neutral-200 border border-white/10 max-w-xs flex-1 mx-3 h-4">
                   <span className="text-neutral-400 text-[9px]">🔒</span>
-                  <span className="truncate">{looks.mockupUrl || "domolens.vercel.app"}</span>
                   <span className="text-neutral-400 text-[9px] ml-auto">↻</span>
                 </div>
                 <div className="flex items-center gap-2 text-neutral-400 text-xs">
@@ -995,9 +973,6 @@ export function VideoCanvas({ project, currentTimeMs: propTimeMs }: VideoCanvasP
                   <span className="size-2 rounded-full bg-white/40" />
                   <span className="size-2 rounded-full bg-white/25" />
                   <span className="size-2 rounded-full bg-white/20" />
-                </div>
-                <div className="text-[10px] font-medium text-white/50 tracking-wider uppercase">
-                  {looks.mockupUrl || "Glass View"}
                 </div>
                 <div className="w-10 shrink-0" />
               </div>

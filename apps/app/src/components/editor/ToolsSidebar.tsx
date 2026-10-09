@@ -1768,38 +1768,6 @@ export function ToolsSidebar() {
                   })}
                 </div>
 
-                {(project?.looks.windowFrame === "safari" ||
-                  project?.looks.windowFrame === "terminal" ||
-                  project?.looks.windowFrame === "windows" ||
-                  project?.looks.windowFrame === "chrome" ||
-                  project?.looks.windowFrame === "macos") && (
-                  <div className="mt-2">
-                    <span className="text-[10px] text-fg-muted block mb-0.5">
-                      {project?.looks.windowFrame === "windows"
-                        ? "Terminal Tab Title:"
-                        : project?.looks.windowFrame === "terminal"
-                        ? "Terminal Shell Title:"
-                        : project?.looks.windowFrame === "macos"
-                        ? "Window Title:"
-                        : "Mockup URL / Domain:"}
-                    </span>
-                    <input
-                      type="text"
-                      value={project?.looks.mockupUrl || ""}
-                      placeholder={
-                        project?.looks.windowFrame === "windows"
-                          ? "PowerShell"
-                          : project?.looks.windowFrame === "terminal"
-                          ? "terminal — zsh — 80x24"
-                          : project?.looks.windowFrame === "macos"
-                          ? "DomoLens"
-                          : "domolens.vercel.app"
-                      }
-                      onChange={(e) => updateLooks({ mockupUrl: e.target.value })}
-                      className="w-full rounded-md border border-neutral-700 bg-neutral-900 px-2 py-1 text-[11px] text-white font-mono"
-                    />
-                  </div>
-                )}
               </div>
 
               {/* 3D Perspective Tilt Plot Box & Kinetic Motion Engine */}
