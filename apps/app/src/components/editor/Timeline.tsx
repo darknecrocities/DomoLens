@@ -1,7 +1,10 @@
-import { useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
+  ArrowLeftToLine,
+  ArrowRightToLine,
   Diamond,
   Film,
+  Hand,
   Keyboard,
   Maximize2,
   Minimize2,
@@ -20,10 +23,11 @@ import {
   VolumeX,
   Wand2,
 } from "lucide-react";
-import { formatDuration, type ProjectData } from "@domolens/core";
+import { formatDuration, type AudioTrack, type ProjectData } from "@domolens/core";
 import { copy } from "../../copy/en";
 import { IconButton } from "../ui/IconButton";
 import { useEditor } from "../../store/editor";
+import { sfx } from "../../lib/sound-effects";
 
 interface TimelineProps {
   project: ProjectData;
@@ -61,6 +65,8 @@ export function Timeline({ project }: TimelineProps) {
   const selectedTextId = useEditor((s) => s.selectedTextId);
   const selectedAudioId = useEditor((s) => s.selectedAudioId);
   const timelineZoom = useEditor((s) => s.timelineZoom);
+  const activeTimelineTool = useEditor((s) => s.activeTimelineTool ?? "select");
+  const setActiveTimelineTool = useEditor((s) => s.setActiveTimelineTool);
   const history = useEditor((s) => s.history);
   const future = useEditor((s) => s.future);
   const setCurrentTime = useEditor((s) => s.setCurrentTime);
@@ -72,7 +78,13 @@ export function Timeline({ project }: TimelineProps) {
   const selectEffect = useEditor((s) => s.selectEffect);
   const selectText = useEditor((s) => s.selectText);
   const selectAudio = useEditor((s) => s.selectAudio);
-  const splitAtCurrentTime = useEditor((s) => s.splitAtCurrentTime);
+  const splitAtPlayhead = useEditor((s) => s.splitAtPlayhead ?? s.splitAtCurrentTime);
+  const trimLeftAtPlayhead = useEditor((s) => s.trimLeftAtPlayhead ?? s.trimLeftAtCurrentTime);
+  const trimRightAtPlayhead = useEditor((s) => s.trimRightAtPlayhead ?? s.trimRightAtCurrentTime);
+  const addSfxTrackAtCurrentTime = useEditor((s) => s.addSfxTrackAtCurrentTime);
+  const deleteAudioTrack = useEditor((s) => s.deleteAudioTrack);
+  const updateAudioTrack = useEditor((s) => s.updateAudioTrack);
+  const addAudioTrack = useEditor((s) => s.addAudioTrack);
   const deleteSelected = useEditor((s) => s.deleteSelected);
   const addZoomBlockAtCurrentTime = useEditor((s) => s.addZoomBlockAtCurrentTime);
   const updateZoomBlock = useEditor((s) => s.updateZoomBlock);
@@ -83,13 +95,133 @@ export function Timeline({ project }: TimelineProps) {
   const updateEffect = useEditor((s) => s.updateEffect);
   const deleteEffect = useEditor((s) => s.deleteEffect);
   const addTextOverlay = useEditor((s) => s.addTextOverlay);
+  const updateTextOverlay = useEditor((s) => s.updateTextOverlay);
+  const deleteTextOverlay = useEditor((s) => s.deleteTextOverlay);
   const plotInteractions = useEditor((s) => s.plotInteractions);
   const autoZoom = useEditor((s) => s.autoZoom);
   const autoAfx = useEditor((s) => s.autoAfx);
   const undo = useEditor((s) => s.undo);
   const redo = useEditor((s) => s.redo);
 
+  const allAudioTracks = project.audioTracks || [];
+  const sfxTracks = allAudioTracks.filter((t) => t.type === "sfx");
+  const musicTracks = allAudioTracks.filter((t) => t.type !== "sfx");
+
+  const viewportRef = useRef<HTMLDivElement>(null);
   const trackContainerRef = useRef<HTMLDivElement>(null);
+
+  // Pan mode dragging state
+  const [isPanning, setIsPanning] = useState(false);
+  const panStartRef = useRef<{ startX: number; scrollLeft: number } | null>(null);
+
+  // Split mode razor blade hover guide
+  const [hoverTimeMs, setHoverTimeMs] = useState<number | null>(null);
+
+  // Text inline editing state
+  const [editingTextId, setEditingTextId] = useState<string | null>(null);
+  const [editingTextValue, setEditingTextValue] = useState<string>("");
+
+  const commitTextEdit = (id: string) => {
+    const trimmed = editingTextValue.trim();
+    if (trimmed && trimmed.length > 0) {
+      updateTextOverlay(id, { text: trimmed });
+    }
+    setEditingTextId(null);
+    setEditingTextValue("");
+  };
+
+  const cancelTextEdit = () => {
+    setEditingTextId(null);
+    setEditingTextValue("");
+  };
+
+  const handleAddSfx = (preset: "bop" | "mechanical" = "bop", name = "Click Bop") => {
+    if (addSfxTrackAtCurrentTime) {
+      addSfxTrackAtCurrentTime(preset, name);
+    } else {
+      addAudioTrack(name, `/sounds/${preset}.mp3`, "sfx");
+    }
+  };
+
+  const auditionSfx = (track: AudioTrack) => {
+    const nameLower = track.name.toLowerCase();
+    const vol = track.volume ?? 0.7;
+    if (
+      nameLower.includes("typ") ||
+      nameLower.includes("key") ||
+      nameLower.includes("thock") ||
+      nameLower.includes("creamy") ||
+      nameLower.includes("switch")
+    ) {
+      sfx.playKeystroke("creamy", vol);
+    } else {
+      sfx.playClickBop("bop", vol);
+    }
+  };
+
+  const handleSfxPointerDown = (e: React.PointerEvent, sfxItem: AudioTrack) => {
+    if ((e.target as HTMLElement).closest("button")) return;
+    e.stopPropagation();
+    selectAudio(sfxItem.id);
+    setCurrentTime(sfxItem.startTimeMs);
+    auditionSfx(sfxItem);
+
+    const startX = e.clientX;
+    const origStart = sfxItem.startTimeMs;
+    const clipDur = sfxItem.durationMs;
+    const trackW = trackContainerRef.current?.clientWidth || 1;
+
+    const onMove = (me: PointerEvent) => {
+      const deltaRatio = (me.clientX - startX) / trackW;
+      const newStart = Math.max(
+        0,
+        Math.min(durationMs - clipDur, Math.round(origStart + deltaRatio * durationMs)),
+      );
+      updateAudioTrack(sfxItem.id, { startTimeMs: newStart });
+    };
+
+    const onUp = () => {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+    };
+
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+  };
+
+  // Keyboard shortcut listener: V (Select), C/S (Split), H (Pan), Q (Trim Left), W (Trim Right)
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (
+        e.target instanceof HTMLInputElement ||
+        e.target instanceof HTMLTextAreaElement ||
+        (e.target as HTMLElement)?.isContentEditable
+      ) {
+        return;
+      }
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
+
+      const key = e.key.toLowerCase();
+      if (key === "v") {
+        e.preventDefault();
+        setActiveTimelineTool("select");
+      } else if (key === "c" || key === "s") {
+        e.preventDefault();
+        setActiveTimelineTool("split");
+      } else if (key === "h") {
+        e.preventDefault();
+        setActiveTimelineTool("pan");
+      } else if (key === "q") {
+        e.preventDefault();
+        trimLeftAtPlayhead();
+      } else if (key === "w") {
+        e.preventDefault();
+        trimRightAtPlayhead();
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [setActiveTimelineTool, trimLeftAtPlayhead, trimRightAtPlayhead]);
 
   // Convert timeline timestamp to percentage position
   const getPositionPercent = (timeMs: number) => {
@@ -108,37 +240,88 @@ export function Timeline({ project }: TimelineProps) {
     setCurrentTime(Math.round(percent * durationMs));
   };
 
-  const handlePointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
-    if (e.button !== 0) return;
-    isDraggingScrubber.current = true;
-    try {
-      (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
-    } catch {
-      // ignore
+  const handleViewportPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (activeTimelineTool === "pan" || e.button === 1) {
+      if (!viewportRef.current) return;
+      e.preventDefault();
+      setIsPanning(true);
+      panStartRef.current = {
+        startX: e.clientX,
+        scrollLeft: viewportRef.current.scrollLeft,
+      };
+      try {
+        (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+      } catch {}
+      return;
     }
-    seekFromPointer(e.clientX);
+
+    if (e.button === 0) {
+      if (activeTimelineTool === "split") {
+        seekFromPointer(e.clientX);
+        splitAtPlayhead();
+        return;
+      }
+      isDraggingScrubber.current = true;
+      try {
+        (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+      } catch {}
+      seekFromPointer(e.clientX);
+    }
   };
 
-  const handlePointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
-    if (!isDraggingScrubber.current) return;
-    seekFromPointer(e.clientX);
+  const handleViewportPointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (isPanning && panStartRef.current && viewportRef.current) {
+      const deltaX = e.clientX - panStartRef.current.startX;
+      viewportRef.current.scrollLeft = panStartRef.current.scrollLeft - deltaX;
+      return;
+    }
+
+    if (activeTimelineTool === "split") {
+      if (!trackContainerRef.current || durationMs <= 0) return;
+      const rect = trackContainerRef.current.getBoundingClientRect();
+      const clickX = e.clientX - rect.left;
+      const ratio = Math.max(0, Math.min(1, clickX / rect.width));
+      setHoverTimeMs(Math.round(ratio * durationMs));
+      return;
+    }
+
+    if (isDraggingScrubber.current) {
+      seekFromPointer(e.clientX);
+    }
   };
 
-  const handlePointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
+  const handleViewportPointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (isPanning) {
+      setIsPanning(false);
+      panStartRef.current = null;
+      try {
+        (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId);
+      } catch {}
+      return;
+    }
+
     if (isDraggingScrubber.current) {
       isDraggingScrubber.current = false;
       try {
         (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId);
-      } catch {
-        // ignore
+      } catch {}
+    }
+  };
+
+  const handleTrackClick = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (activeTimelineTool === "split") {
+      e.stopPropagation();
+      if (hoverTimeMs !== null) {
+        setCurrentTime(hoverTimeMs);
       }
+      splitAtPlayhead();
     }
   };
 
   return (
     <div className="flex flex-col border-t border-ink-800 bg-ink-900 select-none pb-[max(0.5rem,var(--safe-bottom))]">
-      {/* 1. Timeline Controls Toolbar */}
-      <div className="flex h-12 items-center justify-between border-b border-ink-800 px-3 sm:px-4 gap-2 overflow-x-auto no-scrollbar">
+      {/* 1. Timeline Controls Toolbar (Responsive with flex-wrap) */}
+      <div className="flex flex-wrap items-center justify-between min-h-12 border-b border-ink-800 px-2 sm:px-4 py-1.5 sm:py-0 gap-1.5 sm:gap-2 bg-ink-900/95 overflow-x-auto no-scrollbar">
         {/* Playback Controls & Time */}
         <div className="flex shrink-0 items-center gap-1.5 sm:gap-2">
           <IconButton
@@ -152,7 +335,99 @@ export function Timeline({ project }: TimelineProps) {
           <TimelineTimeDisplay durationMs={durationMs} />
         </div>
 
-        {/* Multi-Track Editing Actions: Auto Zoom, Auto AFX, Keyframe, Split, Text, Music, Undo/Redo */}
+        {/* Feature 12: Tool Switcher (Select, Split, Pan) */}
+        <div
+          role="group"
+          aria-label="Timeline editing tools"
+          data-tutorial-target="timeline-tool-switcher"
+          className="flex items-center rounded-lg border border-ink-700 bg-ink-950 p-0.5 shadow-sm shrink-0"
+        >
+          {/* Select Tool (V) */}
+          <button
+            type="button"
+            onClick={() => setActiveTimelineTool("select")}
+            className={`flex items-center gap-1.5 rounded-md px-2 py-1 text-xs font-medium transition-all ${
+              activeTimelineTool === "select"
+                ? "bg-white text-black font-semibold shadow-sm"
+                : "text-neutral-400 hover:text-white hover:bg-ink-800"
+            }`}
+            data-tutorial-target="tl-select"
+            title="Select Tool (V) - Select and edit clips, keyframes, and handles"
+            aria-label="Select tool (V)"
+            aria-pressed={activeTimelineTool === "select"}
+          >
+            <MousePointer className="size-3.5 shrink-0" />
+            <span className="hidden lg:inline">Select</span>
+            <kbd className="hidden xl:inline text-[9px] font-mono opacity-60">V</kbd>
+          </button>
+
+          {/* Split / Razor Tool (C or S) */}
+          <button
+            type="button"
+            onClick={() => setActiveTimelineTool("split")}
+            className={`flex items-center gap-1.5 rounded-md px-2 py-1 text-xs font-medium transition-all ${
+              activeTimelineTool === "split"
+                ? "bg-rose-500 text-white font-semibold shadow-sm"
+                : "text-neutral-400 hover:text-rose-400 hover:bg-ink-800"
+            }`}
+            data-tutorial-target="tl-razor"
+            title="Razor / Split Tool (C or S) - Click anywhere on timeline tracks to split at playhead"
+            aria-label="Razor split tool (C or S)"
+            aria-pressed={activeTimelineTool === "split"}
+          >
+            <Scissors className="size-3.5 shrink-0" />
+            <span className="hidden lg:inline">Split</span>
+            <kbd className="hidden xl:inline text-[9px] font-mono opacity-60">C</kbd>
+          </button>
+
+          {/* Pan / Hand Tool (H) */}
+          <button
+            type="button"
+            onClick={() => setActiveTimelineTool("pan")}
+            className={`flex items-center gap-1.5 rounded-md px-2 py-1 text-xs font-medium transition-all ${
+              activeTimelineTool === "pan"
+                ? "bg-amber-500 text-black font-semibold shadow-sm"
+                : "text-neutral-400 hover:text-amber-400 hover:bg-ink-800"
+            }`}
+            data-tutorial-target="tl-pan"
+            title="Hand / Pan Tool (H) - Drag to pan horizontally across zoomed timeline"
+            aria-label="Hand pan tool (H)"
+            aria-pressed={activeTimelineTool === "pan"}
+          >
+            <Hand className="size-3.5 shrink-0" />
+            <span className="hidden lg:inline">Pan</span>
+            <kbd className="hidden xl:inline text-[9px] font-mono opacity-60">H</kbd>
+          </button>
+        </div>
+
+        {/* Feature 13: Playhead Trim Tools */}
+        <div data-tutorial-target="timeline-trim-tools" className="flex items-center gap-1 shrink-0">
+          <button
+            type="button"
+            onClick={trimLeftAtPlayhead}
+            className="flex items-center gap-1 rounded-lg border border-ink-700 bg-ink-800 px-2 py-1 text-xs font-medium text-fg hover:border-ink-500 hover:bg-ink-700 transition-colors shadow-sm"
+            data-tutorial-target="tl-trim-left"
+            title="Trim Left (Q) - Trim media start up to current playhead"
+            aria-label="Trim Left at playhead"
+          >
+            <ArrowLeftToLine className="size-3.5 text-neutral-300 shrink-0" />
+            <span className="hidden md:inline">Trim Left</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={trimRightAtPlayhead}
+            className="flex items-center gap-1 rounded-lg border border-ink-700 bg-ink-800 px-2 py-1 text-xs font-medium text-fg hover:border-ink-500 hover:bg-ink-700 transition-colors shadow-sm"
+            data-tutorial-target="tl-trim-right"
+            title="Trim Right (W) - Trim media end down to current playhead"
+            aria-label="Trim Right at playhead"
+          >
+            <ArrowRightToLine className="size-3.5 text-neutral-300 shrink-0" />
+            <span className="hidden md:inline">Trim Right</span>
+          </button>
+        </div>
+
+        {/* Multi-Track Editing Actions: Auto Zoom, Auto AFX, Keyframe, Split, Text, Zoom */}
         <div className="flex shrink-0 items-center gap-1 sm:gap-1.5">
           {/* Auto Zoom Button */}
           <button
@@ -171,6 +446,7 @@ export function Timeline({ project }: TimelineProps) {
             type="button"
             onClick={() => autoAfx()}
             className="flex items-center gap-1.5 rounded-lg border border-neutral-700 bg-neutral-800 px-2 sm:px-2.5 py-1 text-xs font-semibold text-white hover:bg-neutral-700 hover:border-white shadow-sm transition-all"
+            data-tutorial-target="tl-auto-afx"
             title="Auto AFX: Automatically synchronizes tactile click bops and mechanical typing audio"
           >
             <Volume2 className="size-3.5 text-white" />
@@ -179,11 +455,12 @@ export function Timeline({ project }: TimelineProps) {
 
           <div className="mx-0.5 h-4 w-px bg-ink-800" />
 
-          {/* Split */}
+          {/* Split button */}
           <button
             type="button"
-            onClick={splitAtCurrentTime}
+            onClick={splitAtPlayhead}
             className="flex items-center gap-1 rounded-lg border border-ink-700 bg-ink-800 px-2 py-1 text-xs font-medium text-fg hover:border-ink-600 hover:bg-ink-700 transition-colors"
+            data-tutorial-target="tl-split"
             title="Split clip at playhead (S)"
           >
             <Scissors className="size-3.5 text-white" />
@@ -195,6 +472,7 @@ export function Timeline({ project }: TimelineProps) {
             type="button"
             onClick={() => addKeyframeAtCurrentTime()}
             className="flex items-center gap-1.5 rounded-lg border border-ink-700 bg-ink-800 px-2 py-1 text-xs font-medium text-fg hover:border-white hover:text-white transition-colors"
+            data-tutorial-target="tl-add-keyframe"
             title="Add keyframe diamond at current playhead (K)"
           >
             <Diamond className="size-3 text-white fill-white shrink-0" />
@@ -206,6 +484,7 @@ export function Timeline({ project }: TimelineProps) {
             type="button"
             onClick={() => addEffectAtCurrentTime("spotlight")}
             className="flex items-center gap-1.5 rounded-lg border border-neutral-700 bg-neutral-800 px-2 py-1 text-xs font-medium text-neutral-300 hover:border-neutral-500 hover:text-white transition-colors"
+            data-tutorial-target="tl-add-effect"
             title="Add visual effect at playhead (Spotlight, Blur, Vignette, Glow, Filter)"
           >
             <Wand2 className="size-3 text-neutral-300 shrink-0" />
@@ -217,6 +496,7 @@ export function Timeline({ project }: TimelineProps) {
             type="button"
             onClick={() => addTextOverlay("New Caption")}
             className="flex items-center gap-1 rounded-lg border border-neutral-700 bg-neutral-800 px-2 py-1 text-xs font-medium text-neutral-300 hover:border-neutral-500 hover:text-white transition-colors"
+            data-tutorial-target="tl-add-text"
             title="Add text overlay"
           >
             <Type className="size-3.5 text-neutral-300" />
@@ -228,6 +508,7 @@ export function Timeline({ project }: TimelineProps) {
             type="button"
             onClick={addZoomBlockAtCurrentTime}
             className="flex items-center gap-1 rounded-lg border border-neutral-700 bg-neutral-800 px-2 py-1 text-xs font-medium text-white hover:bg-neutral-700 hover:border-white transition-colors"
+            data-tutorial-target="tl-add-zoom"
             title="Add Zoom Block"
           >
             <Plus className="size-3.5" />
@@ -280,6 +561,9 @@ export function Timeline({ project }: TimelineProps) {
             disabled={timelineZoom <= 0.75}
             onClick={() => setTimelineZoom(timelineZoom - 0.25)}
           />
+          <span className="font-mono text-[10px] text-neutral-400 font-semibold px-1 min-w-[2.5rem] text-center select-none">
+            {Math.round(timelineZoom * 100)}%
+          </span>
           <IconButton
             label={copy.editor.zoomInTimeline}
             icon={<Maximize2 className="size-3.5" />}
@@ -314,6 +598,30 @@ export function Timeline({ project }: TimelineProps) {
             </button>
           </div>
 
+          {/* TRACK 1B: DEDICATED SFX HEADER (Directly Below Keyframes) */}
+          <div
+            data-tutorial-target="timeline-sfx-track"
+            className="h-7 flex items-center justify-between px-2 rounded-md bg-ink-900/60 text-[10px] font-semibold uppercase tracking-wider text-fg-muted group"
+          >
+            <div className="flex items-center gap-1.5 min-w-0">
+              <Volume2 className="size-3 text-cyan-400 shrink-0" />
+              <span className="truncate text-cyan-300">SFX</span>
+            </div>
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                handleAddSfx();
+              }}
+              className="flex items-center gap-0.5 px-1 py-0.5 rounded hover:bg-cyan-950/60 text-cyan-400 hover:text-cyan-200 border border-cyan-800/60 hover:border-cyan-500 transition-colors"
+              title="Add sound effect at playhead (+ SFX)"
+              aria-label="Add sound effect at playhead"
+            >
+              <Plus className="size-2.5" />
+              <span className="text-[9px] font-bold">SFX</span>
+            </button>
+          </div>
+
           {/* TRACK 2: ZOOM BLOCKS HEADER */}
           <button
             type="button"
@@ -342,19 +650,35 @@ export function Timeline({ project }: TimelineProps) {
             <span className="truncate">{copy.editor.videoTrack}</span>
           </div>
 
-          {/* TRACK 4: TEXT OVERLAYS TRACK HEADER */}
-          {project.textOverlays && project.textOverlays.length > 0 && (
-            <div className="h-7 flex items-center gap-1.5 px-2 rounded-md bg-ink-900/60 text-[10px] font-semibold uppercase tracking-wider text-neutral-400">
-              <Type className="size-3 text-neutral-300 shrink-0" />
-              <span className="truncate">Captions</span>
+          {/* TRACK 4: DEDICATED TEXT OVERLAYS TRACK HEADER */}
+          <div
+            data-tutorial-target="timeline-text-track"
+            className="h-8 flex items-center justify-between px-2 rounded-md bg-ink-900/60 text-[10px] font-semibold uppercase tracking-wider text-fg-muted group"
+          >
+            <div className="flex items-center gap-1.5 min-w-0">
+              <Type className="size-3 text-purple-400 shrink-0" />
+              <span className="truncate text-purple-300">Text</span>
             </div>
-          )}
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                addTextOverlay("New Caption");
+              }}
+              className="flex items-center gap-0.5 px-1 py-0.5 rounded hover:bg-purple-950/60 text-purple-300 hover:text-white border border-purple-800/60 hover:border-purple-500 transition-colors"
+              title="Add text overlay at playhead (+ Text)"
+              aria-label="Add text overlay at playhead"
+            >
+              <Plus className="size-2.5" />
+              <span className="text-[9px] font-bold">Text</span>
+            </button>
+          </div>
 
-          {/* TRACK 5: AUDIO TRACK HEADER */}
-          {project.audioTracks && project.audioTracks.length > 0 && (
+          {/* TRACK 5: MUSIC TRACK HEADER */}
+          {musicTracks.length > 0 && (
             <div className="h-7 flex items-center gap-1.5 px-2 rounded-md bg-ink-900/60 text-[10px] font-semibold uppercase tracking-wider text-neutral-400">
               <Music className="size-3 text-neutral-300 shrink-0" />
-              <span className="truncate">Music & SFX</span>
+              <span className="truncate">Music</span>
             </div>
           )}
 
@@ -365,14 +689,30 @@ export function Timeline({ project }: TimelineProps) {
           </div>
         </div>
 
-        {/* Right Scrubber and Lanes Container */}
+        {/* Right Scrollable Track Viewport (Feature 14) */}
         <div
-          ref={trackContainerRef}
-          onPointerDown={handlePointerDown}
-          onPointerMove={handlePointerMove}
-          onPointerUp={handlePointerUp}
-          className="relative flex-1 min-w-0 flex flex-col gap-1.5 rounded-xl bg-ink-950 p-2 cursor-pointer shadow-inner touch-none"
+          ref={viewportRef}
+          onPointerDown={handleViewportPointerDown}
+          onPointerMove={handleViewportPointerMove}
+          onPointerUp={handleViewportPointerUp}
+          onMouseLeave={() => setHoverTimeMs(null)}
+          className={`relative flex-1 min-w-0 overflow-x-auto overflow-y-hidden rounded-xl bg-ink-950 shadow-inner no-scrollbar ${
+            activeTimelineTool === "pan"
+              ? isPanning
+                ? "cursor-grabbing select-none"
+                : "cursor-grab select-none"
+              : activeTimelineTool === "split"
+              ? "cursor-crosshair"
+              : "cursor-pointer"
+          }`}
         >
+          {/* Inner Canvas scaling with timelineZoom */}
+          <div
+            ref={trackContainerRef}
+            onClick={handleTrackClick}
+            style={{ width: `${Math.round(timelineZoom * 100)}%` }}
+            className="relative min-w-full flex flex-col gap-1.5 p-2 touch-none"
+          >
           {/* TRACK 1: KEYFRAMES TRACK (Diamond Nodes) */}
           <div
             onDoubleClick={(e) => {
@@ -468,6 +808,91 @@ export function Timeline({ project }: TimelineProps) {
                   </div>
                 );
               })}
+          </div>
+
+          {/* TRACK 1B: DEDICATED SFX TRACK (Directly Below Keyframes) */}
+          <div
+            data-tutorial-target="timeline-sfx-lane"
+            onDoubleClick={(e) => {
+              e.stopPropagation();
+              const rect = e.currentTarget.getBoundingClientRect();
+              const clickX = e.clientX - rect.left;
+              const ratio = Math.max(0, Math.min(1, clickX / (rect.width || 1)));
+              const targetTime = Math.round(ratio * durationMs);
+              setCurrentTime(targetTime);
+              handleAddSfx("bop", "Click Bop");
+            }}
+            title="SFX Track - Double-click or click + SFX to add sound effect"
+            className="relative h-7 rounded-md bg-ink-900/90 border border-ink-800/80 overflow-hidden flex items-center"
+          >
+            {sfxTracks.length === 0 ? (
+              <div className="w-full text-center text-[10px] text-fg-faint/60 italic select-none">
+                Double-click or click + SFX to add sound effect
+              </div>
+            ) : (
+              sfxTracks.map((sfxItem) => {
+                const left = getPositionPercent(sfxItem.startTimeMs);
+                const width = Math.max(2.5, getPositionPercent(sfxItem.startTimeMs + sfxItem.durationMs) - left);
+                const isSelected = selectedAudioId === sfxItem.id;
+                const isTyping =
+                  sfxItem.name.toLowerCase().includes("typ") ||
+                  sfxItem.name.toLowerCase().includes("key") ||
+                  sfxItem.name.toLowerCase().includes("switch");
+                const volPercent = Math.round((sfxItem.volume ?? 0.7) * 100);
+
+                return (
+                  <div
+                    key={sfxItem.id}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      selectAudio(sfxItem.id);
+                      auditionSfx(sfxItem);
+                    }}
+                    onPointerDown={(e) => handleSfxPointerDown(e, sfxItem)}
+                    title={`SFX: ${sfxItem.name} (${formatDuration(sfxItem.durationMs)}) - Volume: ${volPercent}% - Click to audition, drag to reposition`}
+                    className={`absolute top-0.5 bottom-0.5 flex items-center justify-between rounded px-2 text-[10px] cursor-grab active:cursor-grabbing transition-all select-none border shadow-sm group ${
+                      isSelected
+                        ? "border-white bg-white/25 text-white ring-1 ring-white/60 shadow-md z-20 font-bold"
+                        : isTyping
+                        ? "border-amber-500/70 bg-amber-500/20 text-amber-200 hover:border-amber-400"
+                        : "border-cyan-500/70 bg-cyan-500/20 text-cyan-200 hover:border-cyan-400"
+                    }`}
+                    style={{ left: `${left}%`, width: `${width}%` }}
+                  >
+                    {/* Visual 4-bar equalizer icon */}
+                    <div className="flex items-center gap-1 min-w-0 truncate">
+                      <div className="flex items-end gap-0.5 h-2.5 shrink-0" aria-label="Acoustic waveform">
+                        <span className={`w-0.5 h-1.5 rounded-full ${isTyping ? "bg-amber-400" : "bg-cyan-400"}`} />
+                        <span className={`w-0.5 h-2.5 rounded-full ${isTyping ? "bg-amber-300" : "bg-cyan-300"}`} />
+                        <span className={`w-0.5 h-1.5 rounded-full ${isTyping ? "bg-amber-400" : "bg-cyan-400"}`} />
+                        <span className={`w-0.5 h-2 rounded-full ${isTyping ? "bg-amber-300" : "bg-cyan-300"}`} />
+                      </div>
+                      <span className="truncate font-medium">{sfxItem.name}</span>
+                    </div>
+
+                    <div className="flex items-center gap-1 shrink-0 ml-1">
+                      <span className="font-mono text-[9px] px-1 py-0.2 rounded bg-black/50 opacity-80">
+                        {volPercent}%
+                      </span>
+                      {isSelected && (
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            deleteAudioTrack(sfxItem.id);
+                          }}
+                          className="p-0.5 rounded text-neutral-300 hover:text-white hover:bg-black/40 transition-colors"
+                          title="Delete SFX clip (Delete)"
+                          aria-label="Delete sound effect"
+                        >
+                          <Trash2 className="size-2.5 text-danger" />
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                );
+              })
+            )}
           </div>
 
           {/* TRACK 2: ZOOM BLOCKS TRACK */}
@@ -768,13 +1193,27 @@ export function Timeline({ project }: TimelineProps) {
             })}
           </div>
 
-          {/* TRACK 4: TEXT OVERLAYS TRACK */}
-          {project.textOverlays && project.textOverlays.length > 0 && (
-            <div className="relative h-7 rounded-md bg-ink-900/80 border border-ink-800/70 overflow-hidden">
-              {project.textOverlays.map((t) => {
+          {/* TRACK 4: DEDICATED TEXT OVERLAYS TRACK */}
+          <div
+            data-tutorial-target="timeline-text-lane"
+            onDoubleClick={(e) => {
+              if ((e.target as HTMLElement).closest(".group\\/text-chip")) return;
+              e.stopPropagation();
+              addTextOverlay("New Caption");
+            }}
+            title="Text Overlays Track - Double-click or click + Text to add text overlay"
+            className="relative h-8 rounded-lg bg-ink-900 border border-ink-800/80 overflow-hidden flex items-center"
+          >
+            {(!project.textOverlays || project.textOverlays.length === 0) ? (
+              <div className="w-full text-center text-[10px] text-fg-faint/60 italic select-none">
+                Double-click or click + Text to add text overlay
+              </div>
+            ) : (
+              project.textOverlays.map((t) => {
                 const left = getPositionPercent(t.startTimeMs);
-                const width = Math.max(3, getPositionPercent(t.startTimeMs + t.durationMs) - left);
+                const width = Math.max(3.5, getPositionPercent(t.startTimeMs + t.durationMs) - left);
                 const isSelected = selectedTextId === t.id;
+                const isEditing = editingTextId === t.id;
 
                 return (
                   <div
@@ -783,25 +1222,174 @@ export function Timeline({ project }: TimelineProps) {
                       e.stopPropagation();
                       selectText(t.id);
                     }}
-                    className={`absolute top-0.5 bottom-0.5 flex items-center rounded border px-2 text-[10px] truncate cursor-pointer transition-all ${
+                    onDoubleClick={(e) => {
+                      e.stopPropagation();
+                      setEditingTextId(t.id);
+                      setEditingTextValue(t.text);
+                    }}
+                    onPointerDown={(e) => {
+                      if (
+                        isEditing ||
+                        (e.target as HTMLElement).closest(".group\\/handle") ||
+                        (e.target as HTMLElement).closest("button") ||
+                        (e.target as HTMLElement).closest("input")
+                      ) {
+                        return;
+                      }
+                      e.stopPropagation();
+                      selectText(t.id);
+                      const startX = e.clientX;
+                      const origStart = t.startTimeMs;
+                      const origDur = t.durationMs;
+                      const trackW = trackContainerRef.current?.clientWidth || 1;
+
+                      const onMove = (me: PointerEvent) => {
+                        const deltaRatio = (me.clientX - startX) / trackW;
+                        const newStart = Math.max(
+                          0,
+                          Math.min(durationMs - origDur, Math.round(origStart + deltaRatio * durationMs)),
+                        );
+                        updateTextOverlay(t.id, { startTimeMs: newStart });
+                      };
+                      const onUp = () => {
+                        window.removeEventListener("pointermove", onMove);
+                        window.removeEventListener("pointerup", onUp);
+                      };
+                      window.addEventListener("pointermove", onMove);
+                      window.addEventListener("pointerup", onUp);
+                    }}
+                    title={
+                      isEditing
+                        ? "Editing text: Press Enter to commit, Escape to cancel"
+                        : `Text: "${t.text}" (${formatDuration(t.durationMs)}) - Double-click to edit, drag to reposition`
+                    }
+                    className={`group/text-chip absolute top-1 bottom-1 flex items-center justify-between rounded-md border px-2 text-[11px] transition-all overflow-hidden ${
                       isSelected
-                        ? "border-white bg-white/20 text-white z-10"
-                        : "border-neutral-700 bg-neutral-800 text-neutral-300"
-                    }`}
+                        ? "border-purple-400 bg-purple-500/30 text-white ring-1 ring-purple-400 shadow-md z-20 font-bold"
+                        : "border-purple-800/80 bg-purple-950/40 text-purple-200 hover:border-purple-500"
+                    } ${isEditing ? "cursor-text z-30" : "cursor-grab active:cursor-grabbing"}`}
                     style={{ left: `${left}%`, width: `${width}%` }}
                   >
-                    <Type className="size-2.5 mr-1 shrink-0" />
-                    <span className="truncate">{t.text}</span>
+                    {isEditing ? (
+                      <input
+                        // eslint-disable-next-line jsx-a11y/no-autofocus
+                        autoFocus
+                        type="text"
+                        value={editingTextValue}
+                        onChange={(e) => setEditingTextValue(e.target.value)}
+                        onKeyDown={(e) => {
+                          e.stopPropagation();
+                          if (e.key === "Enter") {
+                            e.preventDefault();
+                            commitTextEdit(t.id);
+                          } else if (e.key === "Escape") {
+                            e.preventDefault();
+                            cancelTextEdit();
+                          }
+                        }}
+                        onBlur={() => commitTextEdit(t.id)}
+                        onClick={(e) => e.stopPropagation()}
+                        onPointerDown={(e) => e.stopPropagation()}
+                        className="w-full bg-ink-950 text-white text-[10px] font-medium px-1.5 py-0.5 rounded border border-purple-400 focus:outline-none focus:ring-1 focus:ring-purple-400"
+                        aria-label="Edit text overlay"
+                      />
+                    ) : (
+                      <>
+                        <div className="flex items-center gap-1 min-w-0 truncate select-none">
+                          <Type className="size-3 text-purple-300 shrink-0" />
+                          <span className="truncate">{t.text}</span>
+                        </div>
+
+                        <div className="flex items-center gap-1 shrink-0 ml-1">
+                          <span className="font-mono text-[9px] opacity-75 hidden sm:inline">
+                            {formatDuration(t.durationMs)}
+                          </span>
+                          {isSelected && (
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                deleteTextOverlay(t.id);
+                              }}
+                              className="p-0.5 rounded text-neutral-300 hover:text-white hover:bg-black/40 transition-colors"
+                              title="Delete text overlay (Delete)"
+                              aria-label="Delete text overlay"
+                            >
+                              <Trash2 className="size-2.5 text-danger" />
+                            </button>
+                          )}
+                        </div>
+
+                        {/* Left & Right Drag Handles */}
+                        <div
+                          className="absolute left-0 top-0 bottom-0 w-3 cursor-ew-resize flex items-center justify-center touch-none z-20 group/handle"
+                          onPointerDown={(e) => {
+                            e.stopPropagation();
+                            const startX = e.clientX;
+                            const origStart = t.startTimeMs;
+                            const origDur = t.durationMs;
+                            const trackW = trackContainerRef.current?.clientWidth || 1;
+
+                            const onMove = (me: PointerEvent) => {
+                              const deltaRatio = (me.clientX - startX) / trackW;
+                              const newStart = Math.max(
+                                0,
+                                Math.min(origStart + origDur - 300, origStart + deltaRatio * durationMs),
+                              );
+                              const newDur = origStart + origDur - newStart;
+                              updateTextOverlay(t.id, {
+                                startTimeMs: Math.round(newStart),
+                                durationMs: Math.round(newDur),
+                              });
+                            };
+                            const onUp = () => {
+                              window.removeEventListener("pointermove", onMove);
+                              window.removeEventListener("pointerup", onUp);
+                            };
+                            window.addEventListener("pointermove", onMove);
+                            window.addEventListener("pointerup", onUp);
+                          }}
+                        >
+                          <div className={`w-1 h-3/4 rounded-full transition-colors ${isSelected ? "bg-purple-200" : "bg-purple-300/40 group-hover/handle:bg-purple-200"}`} />
+                        </div>
+                        <div
+                          className="absolute right-0 top-0 bottom-0 w-3 cursor-ew-resize flex items-center justify-center touch-none z-20 group/handle"
+                          onPointerDown={(e) => {
+                            e.stopPropagation();
+                            const startX = e.clientX;
+                            const origDur = t.durationMs;
+                            const trackW = trackContainerRef.current?.clientWidth || 1;
+
+                            const onMove = (me: PointerEvent) => {
+                              const deltaRatio = (me.clientX - startX) / trackW;
+                              const newDur = Math.max(
+                                300,
+                                Math.min(durationMs - t.startTimeMs, origDur + deltaRatio * durationMs),
+                              );
+                              updateTextOverlay(t.id, { durationMs: Math.round(newDur) });
+                            };
+                            const onUp = () => {
+                              window.removeEventListener("pointermove", onMove);
+                              window.removeEventListener("pointerup", onUp);
+                            };
+                            window.addEventListener("pointermove", onMove);
+                            window.addEventListener("pointerup", onUp);
+                          }}
+                        >
+                          <div className={`w-1 h-3/4 rounded-full transition-colors ${isSelected ? "bg-purple-200" : "bg-purple-300/40 group-hover/handle:bg-purple-200"}`} />
+                        </div>
+                      </>
+                    )}
                   </div>
                 );
-              })}
-            </div>
-          )}
+              })
+            )}
+          </div>
 
-          {/* TRACK 5: AUDIO TRACK */}
-          {project.audioTracks && project.audioTracks.length > 0 && (
+          {/* TRACK 5: MUSIC TRACK */}
+          {musicTracks.length > 0 && (
             <div className="relative h-7 rounded-md bg-ink-900/80 border border-ink-800/70 overflow-hidden">
-              {project.audioTracks.map((a) => {
+              {musicTracks.map((a) => {
                 const left = getPositionPercent(a.startTimeMs);
                 const width = Math.max(3, getPositionPercent(a.startTimeMs + a.durationMs) - left);
                 const isSelected = selectedAudioId === a.id;
@@ -813,15 +1401,59 @@ export function Timeline({ project }: TimelineProps) {
                       e.stopPropagation();
                       selectAudio(a.id);
                     }}
-                    className={`absolute top-0.5 bottom-0.5 flex items-center rounded border px-2 text-[10px] truncate cursor-pointer transition-all ${
+                    onPointerDown={(e) => {
+                      if (
+                        (e.target as HTMLElement).closest(".group\\/handle") ||
+                        (e.target as HTMLElement).closest("button")
+                      ) {
+                        return;
+                      }
+                      e.stopPropagation();
+                      selectAudio(a.id);
+                      const startX = e.clientX;
+                      const origStart = a.startTimeMs;
+                      const trackDur = a.durationMs;
+                      const trackW = trackContainerRef.current?.clientWidth || 1;
+
+                      const onMove = (me: PointerEvent) => {
+                        const deltaRatio = (me.clientX - startX) / trackW;
+                        const newStart = Math.max(
+                          0,
+                          Math.min(durationMs - trackDur, Math.round(origStart + deltaRatio * durationMs)),
+                        );
+                        updateAudioTrack(a.id, { startTimeMs: newStart });
+                      };
+                      const onUp = () => {
+                        window.removeEventListener("pointermove", onMove);
+                        window.removeEventListener("pointerup", onUp);
+                      };
+                      window.addEventListener("pointermove", onMove);
+                      window.addEventListener("pointerup", onUp);
+                    }}
+                    className={`absolute top-0.5 bottom-0.5 flex items-center justify-between rounded border px-2 text-[10px] cursor-grab active:cursor-grabbing transition-all ${
                       isSelected
-                        ? "border-white bg-white/20 text-white z-10"
-                        : "border-neutral-700 bg-neutral-800 text-neutral-300"
+                        ? "border-emerald-400 bg-emerald-500/20 text-white z-10 font-bold"
+                        : "border-neutral-700 bg-neutral-800 text-neutral-300 hover:border-neutral-500"
                     }`}
                     style={{ left: `${left}%`, width: `${width}%` }}
                   >
-                    <Music className="size-2.5 mr-1 shrink-0" />
-                    <span className="truncate">{a.name}</span>
+                    <div className="flex items-center gap-1 min-w-0 truncate">
+                      <Music className="size-2.5 mr-1 shrink-0 text-emerald-400" />
+                      <span className="truncate">{a.name}</span>
+                    </div>
+                    {isSelected && (
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          deleteAudioTrack(a.id);
+                        }}
+                        className="p-0.5 rounded text-neutral-300 hover:text-white hover:bg-black/40 transition-colors shrink-0"
+                        title="Delete audio track"
+                      >
+                        <Trash2 className="size-2.5 text-danger" />
+                      </button>
+                    )}
                   </div>
                 );
               })}
@@ -874,8 +1506,23 @@ export function Timeline({ project }: TimelineProps) {
 
           {/* Draggable Playhead Scrubber */}
           <TimelinePlayhead durationMs={durationMs} />
+
+          {/* Split Tool Razor Blade Guideline (Feature 12) */}
+          {activeTimelineTool === "split" && hoverTimeMs !== null && (
+            <div
+              className="pointer-events-none absolute top-0 bottom-0 z-30 flex flex-col items-center -translate-x-1/2"
+              style={{ left: `${getPositionPercent(hoverTimeMs)}%` }}
+            >
+              <div className="flex items-center gap-1 rounded bg-rose-500 px-1.5 py-0.5 text-[9px] font-bold text-white shadow-md">
+                <Scissors className="size-2.5" />
+                <span>{formatDuration(hoverTimeMs)}</span>
+              </div>
+              <div className="w-0.5 flex-1 bg-rose-500/80 shadow-[0_0_8px_rgba(244,63,94,0.6)]" />
+            </div>
+          )}
         </div>
       </div>
+    </div>
     </div>
   );
 }

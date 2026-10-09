@@ -629,9 +629,10 @@ describe("useEditor store", () => {
     expect(proj?.audioSettings?.typingSoundPreset).toBe("creamy");
 
     // Text overlay created from template
-    const tplOverlay = proj?.textOverlays?.find((o) => o.badge === "NEW RELEASE");
+    const tplOverlay = proj?.textOverlays?.find((o) => o.id.startsWith("text-tpl-"));
     expect(tplOverlay).toBeDefined();
     expect(tplOverlay?.text).toContain("DomoLens");
+    expect((tplOverlay as any)?.badge).toBeUndefined();
 
     // Undo reverts back to prior looks
     useEditor.getState().undo();

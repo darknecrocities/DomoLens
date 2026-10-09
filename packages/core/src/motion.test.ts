@@ -3,10 +3,18 @@ import {
   analyzeFrameDifference,
   calculateOpticalCentroid,
   classifyFrameActivity,
+  cubicEaseOut,
   detectActivityEventsFromFrames,
   detectOpticalCursorCandidate,
+  evaluateTextOverlayMotion,
   extractLuminanceBuffer,
+  gaussianBlurRamp,
+  quarticEaseOut,
+  resolveOverlayMotionPreset,
+  smoothstep,
+  springDamped,
 } from "./motion";
+import type { TextOverlay } from "./project";
 
 describe("optical motion analysis and cursor centroid tracking", () => {
   it("extracts luminance buffer accurately from RGBA and grayscale data", () => {
@@ -265,3 +273,287 @@ describe("optical motion analysis and cursor centroid tracking", () => {
     expect(result.clicks[1]?.timestampMs).toBe(2400);
   });
 });
+
+describe("evaluateTextOverlayMotion & Analytical Easing Primitives", () => {
+  describe("analytical easing curves", () => {
+    it("springDamped exhibits genuine damped harmonic oscillation with verified overshoot", () => {
+      expect(springDamped(0)).toBe(0);
+      expect(springDamped(1)).toBe(1);
+
+      // Verify peak overshoot > 1.10 around t = 0.35
+      const peak = springDamped(0.35);
+      expect(peak).toBeGreaterThan(1.10);
+
+      // Verify clamped extremes
+      expect(springDamped(-0.5)).toBe(0);
+      expect(springDamped(1.5)).toBe(1);
+    });
+
+    it("cubicEaseOut follows analytical cubic ease curve", () => {
+      expect(cubicEaseOut(0)).toBe(0);
+      expect(cubicEaseOut(1)).toBe(1);
+      expect(cubicEaseOut(0.5)).toBeCloseTo(0.875, 3);
+    });
+
+    it("quarticEaseOut follows high-velocity quartic curve", () => {
+      expect(quarticEaseOut(0)).toBe(0);
+      expect(quarticEaseOut(1)).toBe(1);
+      expect(quarticEaseOut(0.5)).toBeCloseTo(0.9375, 3);
+    });
+
+    it("smoothstep follows Hermite S-curve", () => {
+      expect(smoothstep(0)).toBe(0);
+      expect(smoothstep(1)).toBe(1);
+      expect(smoothstep(0.5)).toBeCloseTo(0.5, 3);
+    });
+
+    it("gaussianBlurRamp computes quadratic blur decay", () => {
+      expect(gaussianBlurRamp(0, 18)).toBe(18);
+      expect(gaussianBlurRamp(0.5, 18)).toBeCloseTo(4.5, 2);
+      expect(gaussianBlurRamp(1, 18)).toBe(0);
+    });
+  });
+
+  describe("resolveOverlayMotionPreset fallback logic", () => {
+    it("prefers direct motionPreset on overlay", () => {
+      const overlay: TextOverlay = {
+        id: "1",
+        text: "Test",
+        startTimeMs: 1000,
+        durationMs: 3000,
+        x: 0.5,
+        y: 0.5,
+        fontSize: 24,
+        color: "#fff",
+        motionPreset: "whip-slide",
+      };
+      expect(resolveOverlayMotionPreset(overlay)).toBe("whip-slide");
+    });
+
+    it("falls back to typography.animation when motionPreset is undefined", () => {
+      const overlay: TextOverlay = {
+        id: "2",
+        text: "Test",
+        startTimeMs: 1000,
+        durationMs: 3000,
+        x: 0.5,
+        y: 0.5,
+        fontSize: 24,
+        color: "#fff",
+        typography: {
+          fontFamily: "sans-serif",
+          animation: "elastic-pop",
+        },
+      };
+      expect(resolveOverlayMotionPreset(overlay)).toBe("elastic-pop");
+
+      // fade-up maps to fluid-slide
+      const fadeUpOverlay: TextOverlay = {
+        ...overlay,
+        typography: { fontFamily: "sans-serif", animation: "fade-up" },
+      };
+      expect(resolveOverlayMotionPreset(fadeUpOverlay)).toBe("fluid-slide");
+    });
+
+    it("defaults to smooth-fade when unspecified", () => {
+      const overlay: TextOverlay = {
+        id: "3",
+        text: "Test",
+        startTimeMs: 1000,
+        durationMs: 3000,
+        x: 0.5,
+        y: 0.5,
+        fontSize: 24,
+        color: "#fff",
+      };
+      expect(resolveOverlayMotionPreset(overlay)).toBe("smooth-fade");
+    });
+  });
+
+  describe("evaluateTextOverlayMotion lifecycle phases", () => {
+    const baseOverlay: TextOverlay = {
+      id: "txt-test",
+      text: "Product Launch 2026",
+      startTimeMs: 1000,
+      durationMs: 4000,
+      x: 0.5,
+      y: 0.1,
+      fontSize: 28,
+      color: "#ffffff",
+    };
+
+    it("handles invalid or non-finite inputs gracefully", () => {
+      expect(evaluateTextOverlayMotion({ ...baseOverlay, durationMs: 0 }, 1500)).toEqual({
+        opacity: 0,
+        scale: 1,
+        translateX: 0,
+        translateY: 0,
+        blur: 0,
+      });
+
+      expect(evaluateTextOverlayMotion(baseOverlay, NaN)).toEqual({
+        opacity: 0,
+        scale: 1,
+        translateX: 0,
+        translateY: 0,
+        blur: 0,
+      });
+    });
+
+    it("preset 'none' renders instantaneous step bounds", () => {
+      const noneOverlay: TextOverlay = { ...baseOverlay, motionPreset: "none" };
+      // Before start
+      expect(evaluateTextOverlayMotion(noneOverlay, 999).opacity).toBe(0);
+      // Active
+      expect(evaluateTextOverlayMotion(noneOverlay, 1000)).toEqual({
+        opacity: 1,
+        scale: 1,
+        translateX: 0,
+        translateY: 0,
+        blur: 0,
+      });
+      expect(evaluateTextOverlayMotion(noneOverlay, 5000)).toEqual({
+        opacity: 1,
+        scale: 1,
+        translateX: 0,
+        translateY: 0,
+        blur: 0,
+      });
+      // After end
+      expect(evaluateTextOverlayMotion(noneOverlay, 5001).opacity).toBe(0);
+    });
+
+    it("preset 'elastic-pop' produces bouncing entrance with peak overshoot", () => {
+      const popOverlay: TextOverlay = { ...baseOverlay, motionPreset: "elastic-pop" };
+
+      // Pre-start: invisible at rest position
+      const pre = evaluateTextOverlayMotion(popOverlay, 800);
+      expect(pre.opacity).toBe(0);
+      expect(pre.scale).toBe(0.5);
+      expect(pre.translateY).toBe(16);
+
+      // Mid-entrance: scale overshoots > 1.0
+      // Entrance window is 450ms (from 1000 to 1450). Peak overshoot at p ≈ 0.35 => t = 1000 + 0.35 * 450 = 1157.5ms
+      const mid = evaluateTextOverlayMotion(popOverlay, 1158);
+      expect(mid.opacity).toBeGreaterThan(0.5);
+      expect(mid.scale).toBeGreaterThan(1.05); // Spring bounce overshoot!
+
+      // Hold phase: settled at 1.0
+      const hold = evaluateTextOverlayMotion(popOverlay, 3000);
+      expect(hold).toEqual({
+        opacity: 1,
+        scale: 1,
+        translateX: 0,
+        translateY: 0,
+        blur: 0,
+      });
+
+      // Exit phase: contracts and fades
+      const exit = evaluateTextOverlayMotion(popOverlay, 4900);
+      expect(exit.opacity).toBeLessThan(1.0);
+      expect(exit.scale).toBeLessThan(1.0);
+
+      // Post-end: hidden
+      const post = evaluateTextOverlayMotion(popOverlay, 5200);
+      expect(post.opacity).toBe(0);
+    });
+
+    it("preset 'fluid-slide' smoothly slides upward with cubic ease-out", () => {
+      const slideOverlay: TextOverlay = { ...baseOverlay, motionPreset: "fluid-slide" };
+
+      // Pre-start
+      const pre = evaluateTextOverlayMotion(slideOverlay, 500);
+      expect(pre.opacity).toBe(0);
+      expect(pre.translateY).toBe(32);
+
+      // Entrance (400ms duration, from 1000 to 1400)
+      const mid = evaluateTextOverlayMotion(slideOverlay, 1200);
+      expect(mid.opacity).toBeCloseTo(0.875, 2);
+      expect(mid.translateY).toBeLessThan(32);
+      expect(mid.translateY).toBeGreaterThan(0);
+      expect(mid.scale).toBe(1);
+
+      // Hold
+      const hold = evaluateTextOverlayMotion(slideOverlay, 2500);
+      expect(hold.translateY).toBe(0);
+      expect(hold.opacity).toBe(1);
+
+      // Exit: slides up further as it fades
+      const exit = evaluateTextOverlayMotion(slideOverlay, 4900);
+      expect(exit.translateY).toBeLessThan(0);
+      expect(exit.opacity).toBeLessThan(1);
+    });
+
+    it("preset 'whip-slide' applies directional horizontal snap and motion blur", () => {
+      const whipOverlay: TextOverlay = { ...baseOverlay, motionPreset: "whip-slide" };
+
+      // Pre-start: offset left with blur
+      const pre = evaluateTextOverlayMotion(whipOverlay, 800);
+      expect(pre.translateX).toBe(-80);
+      expect(pre.blur).toBe(10);
+
+      // Hold phase: aligned with 0 blur
+      const hold = evaluateTextOverlayMotion(whipOverlay, 2500);
+      expect(hold.translateX).toBe(0);
+      expect(hold.blur).toBe(0);
+
+      // Exit phase: sweeps right with velocity blur
+      const exit = evaluateTextOverlayMotion(whipOverlay, 4950);
+      expect(exit.translateX).toBeGreaterThan(0);
+      expect(exit.blur).toBeGreaterThan(0);
+    });
+
+    it("preset 'blur-reveal' ramps down blur while scaling into focus", () => {
+      const blurOverlay: TextOverlay = { ...baseOverlay, motionPreset: "blur-reveal" };
+
+      // Pre-start: 18px blur, 0.92 scale
+      const pre = evaluateTextOverlayMotion(blurOverlay, 500);
+      expect(pre.blur).toBe(18);
+      expect(pre.scale).toBe(0.92);
+
+      // Entrance: de-blurring
+      const mid = evaluateTextOverlayMotion(blurOverlay, 1225);
+      expect(mid.blur).toBeLessThan(18);
+      expect(mid.blur).toBeGreaterThan(0);
+      expect(mid.scale).toBeGreaterThan(0.92);
+
+      // Hold phase: crystal clear
+      const hold = evaluateTextOverlayMotion(blurOverlay, 2500);
+      expect(hold.blur).toBe(0);
+      expect(hold.scale).toBe(1.0);
+    });
+
+    it("preset 'smooth-fade' applies clean smoothstep alpha transition without geometric distortion", () => {
+      const fadeOverlay: TextOverlay = { ...baseOverlay, motionPreset: "smooth-fade" };
+
+      // Entrance
+      const mid = evaluateTextOverlayMotion(fadeOverlay, 1175);
+      expect(mid.scale).toBe(1);
+      expect(mid.translateX).toBe(0);
+      expect(mid.translateY).toBe(0);
+      expect(mid.blur).toBe(0);
+      expect(mid.opacity).toBeCloseTo(0.5, 1);
+
+      // Hold
+      const hold = evaluateTextOverlayMotion(fadeOverlay, 2500);
+      expect(hold.opacity).toBe(1);
+    });
+
+    it("safely clamps entrance and exit windows for short duration overlays to prevent collision", () => {
+      const shortOverlay: TextOverlay = {
+        ...baseOverlay,
+        startTimeMs: 1000,
+        durationMs: 300, // Very short: 300ms total
+        motionPreset: "elastic-pop",
+      };
+
+      // Entrance is clamped to 300 * 0.45 = 135ms
+      // Exit is clamped to 300 * 0.35 = 105ms
+      // Hold window exists between 1135ms and 1195ms
+      const hold = evaluateTextOverlayMotion(shortOverlay, 1150);
+      expect(hold.opacity).toBe(1);
+      expect(hold.scale).toBe(1);
+    });
+  });
+});
+

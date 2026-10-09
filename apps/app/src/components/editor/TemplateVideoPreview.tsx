@@ -109,7 +109,11 @@ export function TemplateVideoPreview({ template, customFields }: TemplateVideoPr
   };
 
   const accentColor = customFields["accent"] || template.accentColor || "#6366f1";
-  const badgeText = customFields["badge"] || template.badge || "FEATURED";
+  const kickerText =
+    customFields["kicker"] ||
+    (template.defaultTextOverlays[0] as any)?.kicker ||
+    template.visualAccent?.replace(/-/g, " ") ||
+    "";
   const headlineText = customFields["headline"] || template.name;
   const tiltAngle = template.looks.tiltAngle || 0;
   const windowFrame = template.looks.windowFrame || "macos";
@@ -318,39 +322,83 @@ export function TemplateVideoPreview({ template, customFields }: TemplateVideoPr
           />
         )}
 
-        {/* Top Badges & Motion Signature Info Bar */}
+        {/* Top Info Bar */}
         <div className="absolute top-2 inset-x-2.5 flex items-center justify-between z-30 pointer-events-none">
           <div className="flex items-center gap-1.5 rounded-full bg-black/75 backdrop-blur-md px-2.5 py-0.5 border border-white/15 shadow-lg">
             <Sparkles className="size-3 text-amber-400 shrink-0" />
             <span className="text-[10px] font-mono text-neutral-200 uppercase font-semibold truncate max-w-[150px]">
               {template.name}
             </span>
-            {motionSig && (
+            {template.transitionTiming?.transitionStyle && (
               <span
-                className="hidden sm:inline-flex items-center gap-1 rounded-full px-1.5 py-0.2 text-[8px] font-mono font-bold uppercase tracking-wider"
-                style={{
-                  backgroundColor: `${accentColor}30`,
-                  color: accentColor,
-                  border: `1px solid ${accentColor}50`,
-                }}
+                className="hidden sm:inline-flex items-center gap-1 px-1.5 py-0.2 text-[8px] font-mono font-bold uppercase tracking-wider text-indigo-300"
               >
                 <span>✦</span>
-                <span>{motionSig.badge}</span>
+                <span>{template.transitionTiming.transitionStyle}</span>
               </span>
             )}
           </div>
 
           <div className="flex items-center gap-1">
             {tiltAngle > 0 && (
-              <span className="rounded-full bg-indigo-500/25 text-indigo-300 px-1.5 py-0.5 text-[9px] font-mono font-bold border border-indigo-500/30">
+              <span className="rounded bg-indigo-500/25 text-indigo-300 px-1.5 py-0.5 text-[9px] font-mono font-bold border border-indigo-500/30">
                 {tiltAngle}° 3D
               </span>
             )}
-            <span className="rounded-full bg-black/65 text-neutral-200 px-1.5 py-0.5 text-[9px] font-mono font-bold border border-white/10">
+            <span className="rounded bg-black/65 text-neutral-200 px-1.5 py-0.5 text-[9px] font-mono font-bold border border-white/10">
               {template.aspectRatio}
             </span>
           </div>
         </div>
+
+        {/* Multi-Device 3D Parallax Cascade Layer (CapCut & After Effects Style) */}
+        {template.multiDeviceLayout && template.multiDeviceLayout !== "single" && isChoreographyActive && (
+          <div className="absolute inset-0 pointer-events-none flex items-center justify-center z-5">
+            {/* Left Companion Screen in 3D Perspective */}
+            <motion.div
+              animate={{
+                y: [0, -7, 0],
+                rotateZ: [-5, -3, -5],
+                rotateY: [18, 22, 18],
+                scale: [0.75, 0.77, 0.75],
+              }}
+              transition={{ repeat: Infinity, duration: 5.8, ease: "easeInOut" }}
+              className={`absolute -left-2 ${getAspectDimensions()} opacity-40 blur-[0.5px] rounded-lg border border-white/10 bg-neutral-900 shadow-2xl overflow-hidden flex flex-col`}
+              style={{ perspective: 800 }}
+            >
+              <div className="h-3 bg-black/80 border-b border-white/10 w-full" />
+              <div className="flex-1 bg-gradient-to-br from-indigo-950/70 via-black to-neutral-950 flex flex-col justify-end p-2">
+                <div className="space-y-1 opacity-70">
+                  <div className="h-1.5 bg-white/40 rounded w-2/3" />
+                  <div className="h-1 bg-white/20 rounded w-1/2" />
+                </div>
+              </div>
+            </motion.div>
+
+            {/* Right Companion Screen in 3D Perspective */}
+            {(template.multiDeviceLayout === "triple-deck" || template.multiDeviceLayout === "isometric-stack") && (
+              <motion.div
+                animate={{
+                  y: [0, 7, 0],
+                  rotateZ: [5, 3, 5],
+                  rotateY: [-18, -22, -18],
+                  scale: [0.73, 0.75, 0.73],
+                }}
+                transition={{ repeat: Infinity, duration: 6.2, ease: "easeInOut" }}
+                className={`absolute -right-2 ${getAspectDimensions()} opacity-40 blur-[0.5px] rounded-lg border border-white/10 bg-neutral-900 shadow-2xl overflow-hidden flex flex-col`}
+                style={{ perspective: 800 }}
+              >
+                <div className="h-3 bg-black/80 border-b border-white/10 w-full" />
+                <div className="flex-1 bg-gradient-to-br from-purple-950/70 via-black to-neutral-950 flex flex-col justify-end p-2">
+                  <div className="space-y-1 opacity-70">
+                    <div className="h-1.5 bg-white/40 rounded w-3/4" />
+                    <div className="h-1 bg-white/20 rounded w-2/5" />
+                  </div>
+                </div>
+              </motion.div>
+            )}
+          </div>
+        )}
 
         {/* 3D Tilted / Animated Video Stage Container */}
         <motion.div
@@ -473,13 +521,12 @@ export function TemplateVideoPreview({ template, customFields }: TemplateVideoPr
 
             {/* --- ISOMETRIC UPVOTE PARTICLES (Product Hunt Teaser) --- */}
             {activeMotionType === "isometric-upvote" && isChoreographyActive && (
-              <div className="pointer-events-none absolute top-2 right-2 z-25 flex items-center gap-1 rounded-full bg-orange-600/90 text-white px-2 py-0.5 text-[8px] font-bold shadow-lg border border-orange-400/50">
-                <span>▲</span>
-                <span>482</span>
+              <div className="pointer-events-none absolute top-2 right-2 z-25 flex items-center gap-1 font-mono text-[9px] font-bold text-orange-400 drop-shadow">
+                <span>▲ 482</span>
                 <motion.span
-                  animate={{ y: [0, -12], opacity: [1, 0] }}
-                  transition={{ repeat: Infinity, duration: 1.8, ease: "easeOut" }}
-                  className="text-amber-200 text-[8px] font-mono absolute -top-1 right-1"
+                  animate={{ y: [0, -14], opacity: [1, 0], scale: [0.8, 1.2] }}
+                  transition={{ repeat: Infinity, duration: 1.6, ease: "easeOut" }}
+                  className="text-amber-300 text-[9px] font-mono absolute -top-1 right-0"
                 >
                   +1
                 </motion.span>
@@ -513,29 +560,25 @@ export function TemplateVideoPreview({ template, customFields }: TemplateVideoPr
                 className="pointer-events-none absolute z-25 flex items-center gap-1"
               >
                 <MousePointer className="size-3.5 text-pink-400 fill-pink-500 drop-shadow-md" />
-                <span className="rounded bg-pink-900/80 px-1 py-0.2 text-[7px] text-pink-200 border border-pink-500/40 font-mono">
-                  design
-                </span>
               </motion.div>
             )}
 
             {/* --- STEP FOCUS CALLOUT (Micro-Tutorial) --- */}
             {activeMotionType === "step-focus" && isChoreographyActive && (
-              <div className="pointer-events-none absolute top-2 left-2 z-25 flex items-center gap-1 rounded-full bg-sky-600/90 text-white px-2 py-0.5 text-[8px] font-bold shadow-md">
+              <div className="pointer-events-none absolute top-2 left-2 z-25 flex items-center gap-1 text-sky-400 font-mono text-[8.5px] font-bold tracking-wider drop-shadow">
                 <CheckCircle2 className="size-2.5" />
-                <span>STEP 1 OF 3</span>
+                <span>01 // STEP WALKTHROUGH</span>
               </div>
             )}
 
-            {/* --- VIRAL FLAME REACTION (TikTok Short) --- */}
+            {/* --- SPEED-RAMPED KINETIC IMPACT (TikTok Short) --- */}
             {activeMotionType === "kinetic-phone" && isChoreographyActive && (
               <motion.div
-                animate={{ scale: [1, 1.15, 1] }}
-                transition={{ repeat: Infinity, duration: 1.5, ease: "easeInOut" }}
-                className="pointer-events-none absolute top-2 right-2 z-25 flex items-center gap-0.5 rounded-full bg-yellow-500 text-black px-1.5 py-0.5 text-[8px] font-black shadow-lg"
+                animate={{ scale: [1, 1.25, 1], rotate: [-2, 3, -2] }}
+                transition={{ repeat: Infinity, duration: 1.4, ease: "easeInOut" }}
+                className="pointer-events-none absolute top-2 right-2 z-25 text-yellow-400 drop-shadow-[0_0_10px_rgba(250,204,21,0.7)]"
               >
-                <Flame className="size-2.5 fill-black" />
-                <span>VIRAL</span>
+                <Flame className="size-3.5 fill-yellow-400" />
               </motion.div>
             )}
 
@@ -543,26 +586,25 @@ export function TemplateVideoPreview({ template, customFields }: TemplateVideoPr
             <div className="pointer-events-none absolute inset-0 p-2.5 flex flex-col justify-end z-25 bg-gradient-to-t from-black/85 via-transparent to-transparent">
               <AnimatePresence mode="wait">
                 <motion.div
-                  key={`${template.id}-${headlineText}-${badgeText}`}
+                  key={`${template.id}-${headlineText}-${kickerText}`}
                   initial={{ opacity: 0, y: 8, scale: 0.96 }}
                   animate={{ opacity: 1, y: 0, scale: 1 }}
                   exit={{ opacity: 0, y: -5, scale: 0.96 }}
                   transition={{ duration: 0.35, ease: "easeOut" }}
                   className="space-y-0.5"
                 >
-                  {/* Badge Pill with gentle pulse */}
-                  <motion.span
-                    animate={{ scale: [1, 1.04, 1] }}
-                    transition={{ repeat: Infinity, duration: 2.8, ease: "easeInOut" }}
-                    className="inline-block rounded-full px-1.5 py-0.2 text-[8px] font-mono font-bold tracking-wider uppercase shadow-md"
-                    style={{
-                      backgroundColor: `${accentColor}30`,
-                      color: accentColor,
-                      border: `1px solid ${accentColor}60`,
-                    }}
-                  >
-                    {badgeText}
-                  </motion.span>
+                  {/* Clean Kinetic Kicker Micro-Label (Zero Pill Badges) */}
+                  {kickerText && (
+                    <motion.div
+                      initial={{ opacity: 0, x: -4 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      className="flex items-center gap-1.5 text-[8.5px] font-mono font-bold tracking-wider uppercase drop-shadow"
+                      style={{ color: accentColor }}
+                    >
+                      <span className="size-1 rounded-full animate-ping" style={{ backgroundColor: accentColor }} />
+                      <span>{kickerText}</span>
+                    </motion.div>
+                  )}
 
                   {/* Headline overlay */}
                   <h4 className="text-xs font-bold text-white tracking-tight leading-snug drop-shadow-md truncate">

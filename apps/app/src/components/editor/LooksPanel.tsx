@@ -122,7 +122,7 @@ export function LooksPanel() {
               <button
                 key={preset.id}
                 type="button"
-                onClick={() => updateLooks({ cursorStyle: preset.id })}
+                onClick={() => updateLooks({ cursorStyle: preset.id, showCursor: preset.id !== "hidden" })}
                 className={`flex min-h-[44px] items-center justify-center rounded-xl border p-2 text-center text-xs font-medium transition-all touch-manipulation ${
                   isSelected
                     ? "border-white bg-ink-700 text-white font-bold"

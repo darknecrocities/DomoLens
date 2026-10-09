@@ -112,6 +112,113 @@ export type WindowFrameStyle =
 
 export type CameraPhysicsPreset = "smooth" | "snappy" | "spring" | "linear";
 
+/**
+ * 23 distinct cursor design styles plus "hidden" native pass-through.
+ */
+export type CursorStyle =
+  | "hidden"              // Hidden (Native Video cursor preserved)
+  // System & OS
+  | "default"             // Default Pointer (Standard Desktop Arrow)
+  | "mac"                 // macOS Arrow (Modern Cupertino Sculpted Arrow)
+  | "macos-classic"       // macOS Classic (System 7 Monochrome Bevel Arrow)
+  // Minimal & Dots
+  | "dot"                 // Minimal Dot (Solid White Circle with Dark Ring)
+  | "sleek-dot"           // Sleek Dot (High-DPI Focal Bead with Ambient Halo)
+  | "laser-dot"           // Laser Dot (Ruby-Red High-Intensity Presentation Laser)
+  // Precision & Reticles
+  | "ring"                // Target Ring (Concentric Viewfinder Ring)
+  | "minimal-crosshair"   // Minimal Crosshair (1px Hairline Reticle with Open Center)
+  | "focus-reticle"       // Focus Reticle (Four Corner HUD Brackets with Center Dot)
+  | "sonar-pulse"         // Sonar Pulse (Aviation Radar Sweep with Expanding Pulse)
+  // Glow & Luminous
+  | "obsidian-glow"       // Obsidian Glow (Deep OLED Black with Radiant Violet Aura)
+  | "neon-laser"          // Neon Laser (Electric Cyan & Magenta Laser Dart)
+  | "spotlight-glow"      // Spotlight Glow (Soft Radial Luminescent Focus Disc)
+  | "aurora-trail"        // Aurora Trail (Teal/Emerald/Violet Northern Lights Comet)
+  | "gradient-beam"       // Gradient Beam (Sunset-to-Indigo Vibrant Gradient Flow)
+  // Creative & Tools
+  | "precision-pen"       // Precision Pen (Vector Calligraphy Nib with Brass Collar)
+  | "highlighter"         // Highlighter (Fluorescent Chisel-Tip Markup Marker)
+  | "tactile-pointer"     // Tactile Pointer (Skeuomorphic Hand Pointing Finger)
+  // Tech & Developer
+  | "cyber-arrow"         // Cyber Arrow (Sci-Fi Angular Arrow with Emerald Insets)
+  | "terminal-caret"      // Terminal Caret (Hacker Phosphor CRT Green Beam & Bracket)
+  | "retro-pixel"         // Retro Pixel (8-Bit Pixel-Art Stepped Staircase Arrow)
+  // Playful & Modern
+  | "glass-orb"           // Glass Orb (Translucent Frosted Glass Sphere with Specular)
+  | "smooth-chubby";      // Smooth Chubby (Friendly Pillowy Rounded Contour Arrow)
+
+/**
+ * Avatar content type attached to the cursor pointer.
+ */
+export type CursorAvatarType = "initials" | "icon" | "image" | "text";
+
+/**
+ * Preset vector icons supported for cursor avatar badges.
+ */
+export type CursorAvatarIconPreset =
+  | "sparkles"
+  | "star"
+  | "zap"
+  | "flame"
+  | "shield"
+  | "crown"
+  | "check"
+  | "heart"
+  | "user";
+
+/**
+ * Configuration for the user avatar / presenter badge attached to the tracked cursor.
+ */
+export interface CursorAvatar {
+  /** Whether the cursor avatar badge is rendered. */
+  enabled: boolean;
+  /** Content type of the badge (initials, icon preset, image URL, or text). */
+  type: CursorAvatarType;
+  /**
+   * Primary display value:
+   * - type 'initials': 1-3 letters (e.g. "AK", "DL", "JD")
+   * - type 'icon': icon identifier (e.g. "sparkles", "star", "zap")
+   * - type 'image': URL to image (https://... or data:...)
+   * - type 'text': short text or emoji (e.g. "Host", "🚀")
+   */
+  value: string;
+  /** Custom badge background / accent color (e.g. "#6366f1", "#ec4899", "#10b981"). */
+  color?: string;
+  /** Optional subtitle or role pill rendered next to the avatar (e.g. "Presenter", "Speaker"). */
+  badgeLabel?: string;
+  /** Optional icon identifier for backward/alternative compatibility. */
+  icon?: CursorAvatarIconPreset | string;
+  /** Optional image URL for backward/alternative compatibility. */
+  imageUrl?: string;
+  /** Optional text string for backward/alternative compatibility. */
+  text?: string;
+}
+
+/**
+ * Safe default cursor avatar configuration.
+ */
+export const DEFAULT_CURSOR_AVATAR: CursorAvatar = {
+  enabled: false,
+  type: "initials",
+  value: "DL",
+  color: "#6366f1",
+  badgeLabel: "",
+};
+
+/** User photo inserted into a template's photo placeholder. */
+export interface PhotoOverlay {
+  /** Image data URL or media URL. */
+  src: string;
+  /** Normalized center X (0..1). */
+  x: number;
+  /** Normalized center Y (0..1). */
+  y: number;
+  /** Size as a fraction of the canvas width (0.08..0.6). */
+  size: number;
+  shape: "circle" | "rounded" | "square";
+}
+
 export interface ProjectLooks {
   backgroundType: BackgroundKind;
   /** CSS background value (e.g. solid hex or gradient definition). */
@@ -122,8 +229,8 @@ export interface ProjectLooks {
   borderRadius: number;
   /** Shadow preset. */
   shadow: "none" | "soft" | "lift" | "glow";
-  /** Cursor style to render. */
-  cursorStyle: "default" | "mac" | "dot" | "ring" | "hidden";
+  /** Cursor style to render (23 distinct designs + "hidden"). */
+  cursorStyle: CursorStyle;
   /** Show artificial cursor pointer overlay (defaults to false). */
   showCursor?: boolean;
   /** Show expanding ripple effect on clicks. */
@@ -138,6 +245,10 @@ export interface ProjectLooks {
   autoTrackCursor?: boolean;
   /** Camera zoom scale when auto-tracking cursor (1.2 to 2.5). */
   autoTrackScale?: number;
+  /** Optional user avatar / presenter badge anchored to the cursor pointer. */
+  cursorAvatar?: CursorAvatar;
+  /** Optional user-supplied photo placed on the canvas (template photo placeholder). */
+  photoOverlay?: PhotoOverlay;
   /** Aspect ratio of the canvas (default "16:9"). */
   aspectRatio?: "16:9" | "9:16" | "1:1" | "4:3";
   /** Window mockup frame shell around the recording. */
@@ -148,12 +259,16 @@ export interface ProjectLooks {
   motionBlur?: number;
   /** Camera physics model for zoom transitions. */
   cameraPhysics?: CameraPhysicsPreset;
-  /** Primary brand accent color (e.g. #6366f1) for badges and accents. */
+  /** Primary brand accent color (e.g. #6366f1) for dynamic highlights and visual accents. */
   brandAccentColor?: string;
   /** Browser mockup custom URL string (e.g. "app.domain.com"). */
   mockupUrl?: string;
   /** Enable dynamic video background glow blur. */
   ambientBackdropBlur?: boolean;
+  /** Kinetic visual accent treatment replacing static pill badges. */
+  visualAccent?: KineticVisualAccentType;
+  /** Multi-device layout cascade for 3D perspective depth staging. */
+  multiDeviceLayout?: MultiDeviceLayoutType;
 }
 
 /** Video effect types that can be placed on the timeline or attached to keyframes. */
@@ -197,6 +312,52 @@ export interface KeyframeNode {
   soundVolume?: number;
 }
 
+/**
+ * Kinetic visual accent treatments replacing static pill badges with dynamic,
+ * atmospheric CapCut & After Effects-inspired effects.
+ */
+export type KineticVisualAccentType =
+  | "specular-sweep"     // Diagonal glass reflection light beam
+  | "glass-sheen"         // Ambient frosted glass prismatic sheen
+  | "crt-scanlines"       // Cyberpunk phosphor CRT scanline shimmer with jitter
+  | "laser-radar-sweep"   // High-tech horizontal security laser radar beam
+  | "tactile-shockwave"   // Expanding circular micro-interaction ripple rings
+  | "particle-burst"      // Floating glowing launch/upvote particles
+  | "ambient-pulse"       // Pulsing edge neon glow
+  | "curved-cursor-glide" // Smooth floating animated cursor vector
+  | "kinetic-soundwave";  // Rhythmic audio wave accent
+
+/**
+ * Layout configuration for 3D multi-device and multi-card perspective cascades.
+ */
+export type MultiDeviceLayoutType =
+  | "single"
+  | "dual-cascade"
+  | "triple-deck"
+  | "isometric-stack";
+
+/**
+ * High-impact camera transition styles inspired by CapCut & After Effects choreography.
+ */
+export type CameraTransitionStyle =
+  | "snap-zoom"
+  | "whip-pan"
+  | "speed-ramp"
+  | "perspective-cascade"
+  | "ken-burns"
+  | "kinetic-punch";
+
+/**
+ * Animation entrance and choreography presets for badgeless kinetic typography.
+ */
+export type KineticTypographyAnimation =
+  | "fade-up"
+  | "blur-reveal"
+  | "typewriter"
+  | "elastic-pop"
+  | "whip-slide"
+  | "stagger-chars";
+
 /** Typography styling configuration for text overlays and motion templates. */
 export interface TemplateTypography {
   /** CSS font-family string (e.g. "'Plus Jakarta Sans', sans-serif"). */
@@ -207,9 +368,19 @@ export interface TemplateTypography {
   letterSpacing?: string;
   /** Tailwind or CSS class name for additional headline treatment. */
   headlineClass?: string;
+  /** CSS font-size or text class for kinetic kicker / category micro-labels. */
+  kickerClass?: string;
+  /** Text transformation for kicker (e.g. 'uppercase'). */
+  kickerTransform?: "uppercase" | "capitalize" | "lowercase" | "none";
+  /** Kinetic typography motion animation preset. */
+  animation?: KineticTypographyAnimation;
 }
 
-/** Visual styling for pill badges in templates and overlays. */
+/**
+ * Visual styling for pill badges in templates and overlays.
+ * @deprecated Pill badges are eradicated in favor of badgeless kinetic typography and visual accents.
+ * Retained temporarily for backward compatibility during migration.
+ */
 export interface TemplateBadgeStyle {
   /** CSS background color or gradient (e.g. 'rgba(99, 102, 241, 0.2)'). */
   bg: string;
@@ -218,6 +389,114 @@ export interface TemplateBadgeStyle {
   /** Border stroke color (e.g. 'rgba(99, 102, 241, 0.45)'). */
   border?: string;
 }
+
+/**
+ * Kinetic motion presets for text overlays and template title animations.
+ * Provides high-energy, modern choreography inspired by OpenScreen and CapCut.
+ */
+export type TextMotionPreset =
+  | "none"
+  | "elastic-pop"
+  | "fluid-slide"
+  | "whip-slide"
+  | "blur-reveal"
+  | "smooth-fade";
+
+export const TEXT_MOTION_PRESETS: readonly TextMotionPreset[] = [
+  "none",
+  "elastic-pop",
+  "fluid-slide",
+  "whip-slide",
+  "blur-reveal",
+  "smooth-fade",
+] as const;
+
+/**
+ * Modern aesthetic card styling treatments for text overlay backdrops.
+ */
+export type TextCardStyle =
+  | "glass"
+  | "gradient"
+  | "solid"
+  | "minimal"
+  | "terminal";
+
+export const TEXT_CARD_STYLES: readonly TextCardStyle[] = [
+  "glass",
+  "gradient",
+  "solid",
+  "minimal",
+  "terminal",
+] as const;
+
+/**
+ * Styling attributes and design tokens associated with each TextCardStyle.
+ */
+export interface TextCardStyleDefinition {
+  id: TextCardStyle;
+  name: string;
+  description: string;
+  defaultBgColor: string;
+  defaultColor: string;
+  borderStyle: string;
+  backdropBlurPx: number;
+  boxShadow: string;
+  fontFamily?: string;
+}
+
+export const TEXT_CARD_STYLE_DEFINITIONS: Record<TextCardStyle, TextCardStyleDefinition> = {
+  glass: {
+    id: "glass",
+    name: "Frosted Glass",
+    description: "Frosted glassmorphism backdrop with soft translucent border",
+    defaultBgColor: "rgba(15, 23, 42, 0.65)",
+    defaultColor: "#ffffff",
+    borderStyle: "1px solid rgba(255, 255, 255, 0.18)",
+    backdropBlurPx: 12,
+    boxShadow: "0 8px 32px 0 rgba(0, 0, 0, 0.37)",
+  },
+  gradient: {
+    id: "gradient",
+    name: "Vibrant Gradient",
+    description: "Vibrant brand gradient pill with radiant highlight",
+    defaultBgColor: "linear-gradient(135deg, rgba(99, 102, 241, 0.85) 0%, rgba(168, 85, 247, 0.85) 100%)",
+    defaultColor: "#ffffff",
+    borderStyle: "1px solid rgba(255, 255, 255, 0.25)",
+    backdropBlurPx: 8,
+    boxShadow: "0 10px 25px -5px rgba(99, 102, 241, 0.4)",
+  },
+  solid: {
+    id: "solid",
+    name: "Solid Slate",
+    description: "Opaque high-contrast slate card with crisp definition",
+    defaultBgColor: "#0f172a",
+    defaultColor: "#f8fafc",
+    borderStyle: "1px solid rgba(255, 255, 255, 0.10)",
+    backdropBlurPx: 0,
+    boxShadow: "0 10px 15px -3px rgba(0, 0, 0, 0.5)",
+  },
+  minimal: {
+    id: "minimal",
+    name: "Minimalist Floating",
+    description: "Frameless floating typography with pure drop shadow",
+    defaultBgColor: "transparent",
+    defaultColor: "#ffffff",
+    borderStyle: "none",
+    backdropBlurPx: 0,
+    boxShadow: "none",
+  },
+  terminal: {
+    id: "terminal",
+    name: "Cyber Terminal",
+    description: "Retro monospace console card with emerald CRT border",
+    defaultBgColor: "rgba(5, 8, 12, 0.92)",
+    defaultColor: "#4ade80",
+    borderStyle: "1px solid rgba(74, 222, 128, 0.4)",
+    backdropBlurPx: 4,
+    boxShadow: "0 0 15px rgba(74, 222, 128, 0.2)",
+    fontFamily: "'JetBrains Mono', 'Fira Code', monospace",
+  },
+};
 
 /** A text caption or graphic title on the timeline. */
 export interface TextOverlay {
@@ -230,11 +509,29 @@ export interface TextOverlay {
   fontSize: number;
   color: string;
   bgColor?: string;
-  badge?: string; // Optional pill badge e.g. "STEP 1" or "NEW"
-  style?: "headline" | "badge" | "callout" | "subtitle";
+  /**
+   * Optional unboxed kicker / category micro-label rendered above the main headline.
+   * Replaces static pill badges with clean, stylized kinetic typography.
+   */
+  kicker?: string;
+  style?: "headline" | "callout" | "subtitle" | "badge";
   /** Optional typography specification. */
   typography?: TemplateTypography;
-  /** Optional badge pill styling. */
+  /** Kinetic motion animation preset. Default: "smooth-fade". */
+  motionPreset?: TextMotionPreset;
+  /** Backdrop card styling treatment. Default: "glass". */
+  cardStyle?: TextCardStyle;
+  /** Entrance animation duration in milliseconds. Defaults to preset baseline. */
+  entranceDurationMs?: number;
+  /** Exit animation duration in milliseconds. Defaults to preset baseline. */
+  exitDurationMs?: number;
+  /**
+   * @deprecated Pill badges are eradicated in favor of unboxed kinetic kickers and visual accents.
+   */
+  badge?: string;
+  /**
+   * @deprecated Visual styling for pill badges is eradicated.
+   */
   badgeStyle?: TemplateBadgeStyle;
 }
 
@@ -326,6 +623,7 @@ export const DEFAULT_LOOKS: ProjectLooks = {
   cursorSmoothing: "smooth",
   autoTrackCursor: false,
   autoTrackScale: 1.6,
+  cursorAvatar: DEFAULT_CURSOR_AVATAR,
   aspectRatio: "16:9",
   windowFrame: "macos",
   tiltAngle: 0,

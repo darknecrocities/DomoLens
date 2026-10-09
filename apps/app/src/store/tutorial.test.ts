@@ -81,3 +81,11 @@ describe("useTutorial store", () => {
     expect(useTutorial.getState().hasSeenTutorial).toBe(true);
   });
 });
+
+describe("TUTORIAL_STEPS coverage", () => {
+  it("has at least 20 unique steps with targets", () => {
+    expect(TUTORIAL_STEPS.length).toBeGreaterThanOrEqual(20);
+    expect(new Set(TUTORIAL_STEPS.map((s) => s.id)).size).toBe(TUTORIAL_STEPS.length);
+    for (const s of TUTORIAL_STEPS) expect(s.targetKey.length).toBeGreaterThan(0);
+  });
+});

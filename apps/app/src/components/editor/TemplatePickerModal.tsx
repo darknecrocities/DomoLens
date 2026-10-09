@@ -8,11 +8,15 @@ import {
   Square,
   Layout,
   Wand2,
+  ImagePlus,
+  Lock,
+  X,
 } from "lucide-react";
 import {
   STUDIO_MOTION_TEMPLATES,
   type MotionTemplate,
   type TemplateCategory,
+  checkTemplateVideoFit,
 } from "@domolens/core";
 import { Modal } from "../ui/Modal";
 import { Button } from "../ui/Button";
@@ -28,6 +32,18 @@ interface TemplatePickerModalProps {
 export function TemplatePickerModal({ open, onClose }: TemplatePickerModalProps) {
   const applyTemplate = useEditor((s) => s.applyTemplate);
   const activeTemplateId = useEditor((s) => s.activeTemplateId);
+  const videoW = useEditor((s) => s.project?.summary.width);
+  const videoH = useEditor((s) => s.project?.summary.height);
+  const selectedFit = (tpl: MotionTemplate) => checkTemplateVideoFit(tpl, videoW, videoH);
+
+  const handlePhotoFile = (fieldId: string, file: File | undefined) => {
+    if (!file || !file.type.startsWith("image/")) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      setCustomFields((prev) => ({ ...prev, [fieldId]: String(reader.result) }));
+    };
+    reader.readAsDataURL(file);
+  };
 
   const [selectedCategory, setSelectedCategory] = useState<"all" | TemplateCategory>("all");
   const [selectedTemplate, setSelectedTemplate] = useState<MotionTemplate>(
@@ -76,6 +92,7 @@ export function TemplatePickerModal({ open, onClose }: TemplatePickerModalProps)
   };
 
   const handleApply = () => {
+    if (!selectedFit(selectedTemplate).ok) return;
     applyTemplate(selectedTemplate.id, customFields);
     onClose();
   };
@@ -107,6 +124,7 @@ export function TemplatePickerModal({ open, onClose }: TemplatePickerModalProps)
             <Button
               variant="primary"
               size="sm"
+              disabled={!selectedFit(selectedTemplate).ok}
               icon={<Wand2 className="size-4" />}
               onClick={handleApply}
             >
@@ -128,6 +146,7 @@ export function TemplatePickerModal({ open, onClose }: TemplatePickerModalProps)
             { id: "tutorial" as const, label: "Tutorials" },
             { id: "teaser" as const, label: "Product Hunt" },
             { id: "showcase" as const, label: "Design Reels" },
+            { id: "mobile" as const, label: "Mobile App Showcase" },
           ].map((cat) => (
             <button
               key={cat.id}
@@ -151,12 +170,17 @@ export function TemplatePickerModal({ open, onClose }: TemplatePickerModalProps)
             {filteredTemplates.map((tpl) => {
               const isSelected = selectedTemplate.id === tpl.id;
               const isCurrentActive = activeTemplateId === tpl.id;
+              const fit = selectedFit(tpl);
 
               return (
                 <div
                   key={tpl.id}
                   onClick={() => handleSelect(tpl)}
+                  aria-disabled={!fit.ok}
+                  title={fit.ok ? undefined : fit.reason}
                   className={`group relative flex flex-col rounded-xl border p-3.5 transition-all cursor-pointer ${
+                    !fit.ok ? "opacity-50 " : ""
+                  }${
                     isSelected
                       ? "border-white bg-neutral-800/90 shadow-xl ring-1 ring-white/30"
                       : "border-neutral-800/80 bg-neutral-900/60 hover:border-neutral-700 hover:bg-neutral-900"
@@ -189,15 +213,22 @@ export function TemplatePickerModal({ open, onClose }: TemplatePickerModalProps)
                   <p className="mt-1.5 text-xs text-neutral-400 line-clamp-2 leading-relaxed">
                     {tpl.tagline}
                   </p>
+                  {!fit.ok && (
+                    <p className="mt-1.5 flex items-center gap-1 text-[11px] text-amber-400">
+                      <Lock className="size-3" /> Disabled: {fit.reason}
+                    </p>
+                  )}
 
                   <div className="mt-3 flex items-center justify-between pt-2.5 border-t border-neutral-800/80">
                     <div className="flex items-center gap-2 text-[11px] text-neutral-300">
-                      <span className="rounded bg-neutral-800 px-2 py-0.5 text-[10px] font-semibold text-neutral-300 border border-neutral-700/50">
-                        {tpl.badge}
-                      </span>
-                      {tpl.motionSignature && (
-                        <span className="rounded bg-indigo-500/15 px-1.5 py-0.5 text-[9px] font-mono font-bold text-indigo-300 border border-indigo-500/30">
-                          {tpl.motionSignature.badge}
+                      {tpl.transitionTiming?.transitionStyle && (
+                        <span className="rounded bg-indigo-500/15 px-2 py-0.5 text-[9px] font-mono font-bold text-indigo-300 border border-indigo-500/30 uppercase">
+                          {tpl.transitionTiming.transitionStyle}
+                        </span>
+                      )}
+                      {tpl.visualAccent && (
+                        <span className="rounded bg-neutral-800 px-2 py-0.5 text-[10px] font-mono text-neutral-300 border border-neutral-700/50">
+                          {tpl.visualAccent}
                         </span>
                       )}
                       <span className="text-neutral-500">•</span>
@@ -228,10 +259,32 @@ export function TemplatePickerModal({ open, onClose }: TemplatePickerModalProps)
           <div className="lg:col-span-5 h-[550px] flex flex-col rounded-xl border border-white/10 bg-neutral-950/70 p-3.5 gap-3 overflow-hidden">
             {/* Live Dynamic Video Canvas Preview Engine (Pinned at Top - Guaranteed Full Height) */}
             <div className="w-full shrink-0">
-              <TemplateVideoPreview
-                template={selectedTemplate}
-                customFields={customFields}
-              />
+              <div className="relative">
+                <TemplateVideoPreview
+                  template={selectedTemplate}
+                  customFields={customFields}
+                />
+                {customFields.photo && selectedTemplate.photoSlot && (
+                  <img
+                    src={customFields.photo}
+                    alt=""
+                    className="pointer-events-none absolute z-20 object-cover border-2 border-white/90 shadow-xl"
+                    style={{
+                      left: `${selectedTemplate.photoSlot.x * 100}%`,
+                      top: `${selectedTemplate.photoSlot.y * 100}%`,
+                      width: `${selectedTemplate.photoSlot.size * 100}%`,
+                      aspectRatio: "1 / 1",
+                      transform: "translate(-50%, -50%)",
+                      borderRadius:
+                        selectedTemplate.photoSlot.shape === "circle"
+                          ? "9999px"
+                          : selectedTemplate.photoSlot.shape === "rounded"
+                            ? "22%"
+                            : "0",
+                    }}
+                  />
+                )}
+              </div>
             </div>
 
             {/* Scrollable Specs & Live Customizer */}
@@ -248,9 +301,11 @@ export function TemplatePickerModal({ open, onClose }: TemplatePickerModalProps)
                         {selectedTemplate.motionSignature.label}
                       </span>
                     </div>
-                    <span className="shrink-0 rounded bg-indigo-500/25 text-indigo-300 px-2 py-0.5 text-[9px] font-mono font-bold border border-indigo-500/40">
-                      {selectedTemplate.motionSignature.badge}
-                    </span>
+                    {selectedTemplate.transitionTiming?.transitionStyle && (
+                      <span className="shrink-0 rounded bg-indigo-500/25 text-indigo-300 px-2 py-0.5 text-[9px] font-mono font-bold border border-indigo-500/40 uppercase">
+                        {selectedTemplate.transitionTiming.transitionStyle}
+                      </span>
+                    )}
                   </div>
                 )}
 
@@ -319,7 +374,30 @@ export function TemplatePickerModal({ open, onClose }: TemplatePickerModalProps)
                       )}
                     </label>
 
-                    {field.type === "color" ? (
+                    {field.type === "image" ? (
+                      <div className="flex items-center gap-2">
+                        <label className="flex flex-1 cursor-pointer items-center gap-2 rounded-lg border border-dashed border-neutral-600 bg-neutral-800/70 px-3 py-2 text-xs text-neutral-300 hover:border-white hover:text-white transition-colors">
+                          <ImagePlus className="size-4" />
+                          <span>{customFields[field.id] ? "Replace photo" : "Insert your photo"}</span>
+                          <input
+                            type="file"
+                            accept="image/*"
+                            className="hidden"
+                            onChange={(e) => handlePhotoFile(field.id, e.target.files?.[0])}
+                          />
+                        </label>
+                        {customFields[field.id] && (
+                          <button
+                            type="button"
+                            title="Remove photo"
+                            onClick={() => setCustomFields((prev) => ({ ...prev, [field.id]: "" }))}
+                            className="rounded p-1.5 text-neutral-400 hover:bg-neutral-800 hover:text-white"
+                          >
+                            <X className="size-4" />
+                          </button>
+                        )}
+                      </div>
+                    ) : field.type === "color" ? (
                       <div className="flex items-center gap-2">
                         <input
                           type="color"

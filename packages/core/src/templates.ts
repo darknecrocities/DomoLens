@@ -1,17 +1,27 @@
 import type {
   CameraPhysicsPreset,
+  CameraTransitionStyle,
   ClickEvent,
   InteractionEvent,
   KeyframeNode,
+  KineticVisualAccentType,
+  MultiDeviceLayoutType,
   ProjectAudioSettings,
   ProjectLooks,
-  TemplateBadgeStyle,
   TemplateTypography,
   TextOverlay,
   ZoomBlock,
 } from "./project";
 
-export type { TemplateBadgeStyle, TemplateTypography };
+export type {
+  CameraTransitionStyle,
+  KineticVisualAccentType,
+  MultiDeviceLayoutType,
+  TemplateTypography,
+};
+
+/** High-impact camera transition choreography styles. */
+export type { CameraTransitionStyle as TransitionStyle };
 
 /** Transition and choreography timing specifications for a motion template. */
 export interface TemplateTransitionTiming {
@@ -19,6 +29,14 @@ export interface TemplateTransitionTiming {
   cameraLeadInMs?: number;
   /** Duration in milliseconds for text overlay and element entrance animations (defaults to 500ms). */
   entranceDurationMs?: number;
+  /** Signature camera transition choreography style. */
+  transitionStyle?: CameraTransitionStyle;
+  /** Speed ramping multiplier curve during transition peak (e.g. 1.1 - 2.5). */
+  speedRampMultiplier?: number;
+  /** Whip pan sweep direction for whip-pan transitions. */
+  whipPanDirection?: "left" | "right" | "up" | "down";
+  /** Stagger delay in milliseconds between cascade device layers. */
+  cascadeStaggerMs?: number;
 }
 
 export type TemplateCategory =
@@ -28,14 +46,15 @@ export type TemplateCategory =
   | "developer"
   | "tutorial"
   | "teaser"
-  | "showcase";
+  | "showcase"
+  | "mobile";
 
 export interface TemplateCustomizableField {
   id: string;
   label: string;
   placeholder: string;
   defaultValue: string;
-  type: "text" | "color" | "badge";
+  type: "text" | "color" | "image";
 }
 
 export type MotionSignatureType =
@@ -54,11 +73,33 @@ export type MotionSignatureType =
 export interface TemplateMotionSignature {
   type: MotionSignatureType;
   label: string;
-  badge: string;
   description: string;
 }
 
+/** Photo placeholder users can fill with their own image. */
+export interface TemplatePhotoSlot {
+  label: string;
+  shape: "circle" | "rounded" | "square";
+  x: number;
+  y: number;
+  size: number;
+}
+
+/** Source-video size requirement for a template (e.g. mobile portrait recordings). */
+export interface TemplateVideoRequirement {
+  label: string;
+  /** Inclusive width/height ratio range accepted. */
+  minAspect: number;
+  maxAspect: number;
+  minWidth?: number;
+  minHeight?: number;
+}
+
 export interface MotionTemplate {
+  /** Optional photo placeholder (user can insert a photo). */
+  photoSlot?: TemplatePhotoSlot;
+  /** If set, template is disabled when the project's video does not match. */
+  videoRequirement?: TemplateVideoRequirement;
   id: string;
   name: string;
   tagline: string;
@@ -66,9 +107,10 @@ export interface MotionTemplate {
   category: TemplateCategory;
   aspectRatio: "16:9" | "9:16" | "1:1" | "4:3";
   accentColor: string;
-  badge: string;
-  /** Custom badge pill styling (background, text color, and border). */
-  badgeStyle?: TemplateBadgeStyle;
+  /** Kinetic visual atmospheric accent treatment replacing static indicators. */
+  visualAccent?: KineticVisualAccentType;
+  /** Multi-device or layered card 3D staging layout. */
+  multiDeviceLayout?: MultiDeviceLayoutType;
   /** Visual typography styling for headlines and overlays. */
   typography?: TemplateTypography;
   /** Signature motion choreography profile for live preview and canvas simulation. */
@@ -92,16 +134,11 @@ export const STUDIO_MOTION_TEMPLATES: MotionTemplate[] = [
     category: "saas",
     aspectRatio: "16:9",
     accentColor: "#6366f1",
-    badge: "NEW RELEASE",
-    badgeStyle: {
-      bg: "rgba(99, 102, 241, 0.2)",
-      text: "#818cf8",
-      border: "rgba(99, 102, 241, 0.45)",
-    },
+    visualAccent: "specular-sweep",
+    multiDeviceLayout: "dual-cascade",
     motionSignature: {
       type: "3d-gyro-float",
       label: "3D Gyro Float & Specular Sweep",
-      badge: "3D GYRO FLOAT",
       description: "Continuous 3D gyroscopic camera drift with sweeping specular light sheen across the glass",
     },
     typography: {
@@ -113,6 +150,9 @@ export const STUDIO_MOTION_TEMPLATES: MotionTemplate[] = [
     transitionTiming: {
       cameraLeadInMs: 280,
       entranceDurationMs: 450,
+      transitionStyle: "perspective-cascade",
+      speedRampMultiplier: 1.8,
+      cascadeStaggerMs: 140,
     },
     cameraPhysics: "spring",
     looks: {
@@ -145,13 +185,11 @@ export const STUDIO_MOTION_TEMPLATES: MotionTemplate[] = [
     customizableFields: [
       { id: "headline", label: "Hero Title", placeholder: "Introducing DomoLens 2.0", defaultValue: "Introducing DomoLens 2.0", type: "text" },
       { id: "tagline", label: "Tagline", placeholder: "Studio-quality recordings in seconds", defaultValue: "Studio-quality recordings in seconds", type: "text" },
-      { id: "badge", label: "Pill Badge", placeholder: "NEW RELEASE", defaultValue: "NEW RELEASE", type: "badge" },
       { id: "accent", label: "Brand Accent", placeholder: "#6366f1", defaultValue: "#6366f1", type: "color" },
     ],
     defaultTextOverlays: [
       {
         text: "Introducing DomoLens 2.0",
-        badge: "NEW RELEASE",
         startTimeMs: 300,
         durationMs: 4000,
         x: 0.5,
@@ -160,15 +198,12 @@ export const STUDIO_MOTION_TEMPLATES: MotionTemplate[] = [
         color: "#ffffff",
         bgColor: "rgba(15, 23, 42, 0.85)",
         style: "headline",
+        motionPreset: "elastic-pop",
+        cardStyle: "glass",
         typography: {
           fontFamily: "'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
           fontWeight: "800",
           letterSpacing: "-0.03em",
-        },
-        badgeStyle: {
-          bg: "rgba(99, 102, 241, 0.2)",
-          text: "#818cf8",
-          border: "rgba(99, 102, 241, 0.45)",
         },
       },
     ],
@@ -181,16 +216,11 @@ export const STUDIO_MOTION_TEMPLATES: MotionTemplate[] = [
     category: "keynote",
     aspectRatio: "16:9",
     accentColor: "#0071e3",
-    badge: "PRO DEMO",
-    badgeStyle: {
-      bg: "rgba(0, 113, 227, 0.12)",
-      text: "#0071e3",
-      border: "rgba(0, 113, 227, 0.3)",
-    },
+    visualAccent: "glass-sheen",
+    multiDeviceLayout: "single",
     motionSignature: {
       type: "cinematic-push",
       label: "Cinematic Ken Burns Push",
-      badge: "CINEMATIC PUSH",
       description: "Silky-smooth slow camera zoom-in with Safari chrome and pristine silver bloom",
     },
     typography: {
@@ -202,6 +232,8 @@ export const STUDIO_MOTION_TEMPLATES: MotionTemplate[] = [
     transitionTiming: {
       cameraLeadInMs: 300,
       entranceDurationMs: 500,
+      transitionStyle: "ken-burns",
+      speedRampMultiplier: 1.2,
     },
     cameraPhysics: "smooth",
     looks: {
@@ -234,13 +266,11 @@ export const STUDIO_MOTION_TEMPLATES: MotionTemplate[] = [
     customizableFields: [
       { id: "headline", label: "Feature Headline", placeholder: "Simplicity, redefined.", defaultValue: "Simplicity, redefined.", type: "text" },
       { id: "tagline", label: "Omnibar URL", placeholder: "craft.do/workspace", defaultValue: "craft.do/workspace", type: "text" },
-      { id: "badge", label: "Status Badge", placeholder: "DESIGN REEL", defaultValue: "DESIGN REEL", type: "badge" },
       { id: "accent", label: "Accent Color", placeholder: "#0071e3", defaultValue: "#0071e3", type: "color" },
     ],
     defaultTextOverlays: [
       {
         text: "Simplicity, redefined.",
-        badge: "DESIGN REEL",
         startTimeMs: 400,
         durationMs: 3800,
         x: 0.5,
@@ -249,15 +279,12 @@ export const STUDIO_MOTION_TEMPLATES: MotionTemplate[] = [
         color: "#0f172a",
         bgColor: "rgba(255, 255, 255, 0.9)",
         style: "callout",
+        motionPreset: "blur-reveal",
+        cardStyle: "glass",
         typography: {
           fontFamily: "-apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text', 'Helvetica Neue', Helvetica, Arial, sans-serif",
           fontWeight: "600",
           letterSpacing: "-0.015em",
-        },
-        badgeStyle: {
-          bg: "rgba(0, 113, 227, 0.12)",
-          text: "#0071e3",
-          border: "rgba(0, 113, 227, 0.3)",
         },
       },
     ],
@@ -265,22 +292,17 @@ export const STUDIO_MOTION_TEMPLATES: MotionTemplate[] = [
   {
     id: "feature-drop-changelog",
     name: "Feature Drop / Changelog",
-    tagline: "Snappy rhythmic zoom with violet mesh and feature pills",
+    tagline: "Snappy rhythmic punch with violet mesh and spotlight pulses",
     description: "Engineered for weekly shipping updates and release notes. Highlights newly shipped buttons and interactions with energetic clack keystrokes.",
     category: "saas",
     aspectRatio: "16:9",
     accentColor: "#a855f7",
-    badge: "v2.4 UPDATE",
-    badgeStyle: {
-      bg: "rgba(168, 85, 247, 0.2)",
-      text: "#c084fc",
-      border: "rgba(168, 85, 247, 0.45)",
-    },
+    visualAccent: "ambient-pulse",
+    multiDeviceLayout: "single",
     motionSignature: {
       type: "rhythmic-punch",
       label: "Rhythmic Feature Punch-In",
-      badge: "RHYTHMIC PUNCH",
-      description: "Snappy camera punch zooms with elastic bouncy badge pop-ins and violet spotlight",
+      description: "Snappy camera punch zooms with rhythmic spotlight pulses and violet glow",
     },
     typography: {
       fontFamily: "'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif",
@@ -291,6 +313,8 @@ export const STUDIO_MOTION_TEMPLATES: MotionTemplate[] = [
     transitionTiming: {
       cameraLeadInMs: 200,
       entranceDurationMs: 450,
+      transitionStyle: "snap-zoom",
+      speedRampMultiplier: 2.2,
     },
     cameraPhysics: "snappy",
     looks: {
@@ -322,13 +346,11 @@ export const STUDIO_MOTION_TEMPLATES: MotionTemplate[] = [
     },
     customizableFields: [
       { id: "headline", label: "Update Title", placeholder: "Shipped: Instant Auto-Zoom", defaultValue: "Shipped: Instant Auto-Zoom", type: "text" },
-      { id: "badge", label: "Version Tag", placeholder: "v2.4 UPDATE", defaultValue: "v2.4 UPDATE", type: "badge" },
       { id: "accent", label: "Accent Color", placeholder: "#a855f7", defaultValue: "#a855f7", type: "color" },
     ],
     defaultTextOverlays: [
       {
         text: "Shipped: Instant Auto-Zoom",
-        badge: "v2.4 UPDATE",
         startTimeMs: 200,
         durationMs: 3600,
         x: 0.5,
@@ -337,15 +359,12 @@ export const STUDIO_MOTION_TEMPLATES: MotionTemplate[] = [
         color: "#ffffff",
         bgColor: "rgba(30, 10, 60, 0.85)",
         style: "headline",
+        motionPreset: "elastic-pop",
+        cardStyle: "gradient",
         typography: {
           fontFamily: "'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif",
           fontWeight: "700",
           letterSpacing: "-0.02em",
-        },
-        badgeStyle: {
-          bg: "rgba(168, 85, 247, 0.2)",
-          text: "#c084fc",
-          border: "rgba(168, 85, 247, 0.45)",
         },
       },
     ],
@@ -358,16 +377,11 @@ export const STUDIO_MOTION_TEMPLATES: MotionTemplate[] = [
     category: "social",
     aspectRatio: "9:16",
     accentColor: "#facc15",
-    badge: "MUST WATCH",
-    badgeStyle: {
-      bg: "rgba(250, 204, 21, 0.22)",
-      text: "#facc15",
-      border: "rgba(250, 204, 21, 0.6)",
-    },
+    visualAccent: "kinetic-soundwave",
+    multiDeviceLayout: "triple-deck",
     motionSignature: {
       type: "kinetic-phone",
       label: "Floating Phone & Kinetic Captions",
-      badge: "KINETIC SHORT",
       description: "Vertical handheld phone sway with bold bouncing kinetic typography caption sync",
     },
     typography: {
@@ -379,6 +393,10 @@ export const STUDIO_MOTION_TEMPLATES: MotionTemplate[] = [
     transitionTiming: {
       cameraLeadInMs: 150,
       entranceDurationMs: 350,
+      transitionStyle: "whip-pan",
+      whipPanDirection: "right",
+      speedRampMultiplier: 2.5,
+      cascadeStaggerMs: 100,
     },
     cameraPhysics: "snappy",
     looks: {
@@ -410,13 +428,11 @@ export const STUDIO_MOTION_TEMPLATES: MotionTemplate[] = [
     },
     customizableFields: [
       { id: "headline", label: "Hook Caption", placeholder: "Secret Chrome Shortcut 👇", defaultValue: "Secret Chrome Shortcut 👇", type: "text" },
-      { id: "badge", label: "Video Tag", placeholder: "PRO TIP", defaultValue: "PRO TIP", type: "badge" },
       { id: "accent", label: "Highlight Color", placeholder: "#facc15", defaultValue: "#facc15", type: "color" },
     ],
     defaultTextOverlays: [
       {
         text: "Secret Chrome Shortcut 👇",
-        badge: "PRO TIP",
         startTimeMs: 100,
         durationMs: 5000,
         x: 0.5,
@@ -425,15 +441,12 @@ export const STUDIO_MOTION_TEMPLATES: MotionTemplate[] = [
         color: "#ffffff",
         bgColor: "rgba(0, 0, 0, 0.85)",
         style: "headline",
+        motionPreset: "elastic-pop",
+        cardStyle: "gradient",
         typography: {
           fontFamily: "'Inter', system-ui, -apple-system, BlinkMacSystemFont, sans-serif",
           fontWeight: "900",
           letterSpacing: "-0.02em",
-        },
-        badgeStyle: {
-          bg: "rgba(250, 204, 21, 0.22)",
-          text: "#facc15",
-          border: "rgba(250, 204, 21, 0.6)",
         },
       },
     ],
@@ -446,16 +459,11 @@ export const STUDIO_MOTION_TEMPLATES: MotionTemplate[] = [
     category: "developer",
     aspectRatio: "16:9",
     accentColor: "#22c55e",
-    badge: "CLI TOOL",
-    badgeStyle: {
-      bg: "rgba(34, 197, 94, 0.15)",
-      text: "#4ade80",
-      border: "rgba(34, 197, 94, 0.4)",
-    },
+    visualAccent: "crt-scanlines",
+    multiDeviceLayout: "single",
     motionSignature: {
       type: "cli-scanlines",
       label: "CRT Scanlines & Command Prompt",
-      badge: "CRT SCANLINE",
       description: "Retro CRT scanlines, terminal window framing, and blinking command line cursor",
     },
     typography: {
@@ -467,6 +475,8 @@ export const STUDIO_MOTION_TEMPLATES: MotionTemplate[] = [
     transitionTiming: {
       cameraLeadInMs: 200,
       entranceDurationMs: 400,
+      transitionStyle: "snap-zoom",
+      speedRampMultiplier: 1.8,
     },
     cameraPhysics: "snappy",
     looks: {
@@ -498,13 +508,11 @@ export const STUDIO_MOTION_TEMPLATES: MotionTemplate[] = [
     },
     customizableFields: [
       { id: "headline", label: "Command Title", placeholder: "$ npx create-domo-app", defaultValue: "$ npx create-domo-app", type: "text" },
-      { id: "badge", label: "Branch / Tag", placeholder: "v1.0 • Node 22", defaultValue: "v1.0 • Node 22", type: "badge" },
       { id: "accent", label: "Terminal Green", placeholder: "#22c55e", defaultValue: "#22c55e", type: "color" },
     ],
     defaultTextOverlays: [
       {
         text: "$ npx create-domo-app",
-        badge: "v1.0 RELEASE",
         startTimeMs: 300,
         durationMs: 4200,
         x: 0.5,
@@ -513,15 +521,12 @@ export const STUDIO_MOTION_TEMPLATES: MotionTemplate[] = [
         color: "#22c55e",
         bgColor: "rgba(5, 15, 10, 0.9)",
         style: "headline",
+        motionPreset: "smooth-fade",
+        cardStyle: "terminal",
         typography: {
           fontFamily: "'JetBrains Mono', 'Fira Code', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace",
           fontWeight: "700",
           letterSpacing: "-0.01em",
-        },
-        badgeStyle: {
-          bg: "rgba(34, 197, 94, 0.15)",
-          text: "#4ade80",
-          border: "rgba(34, 197, 94, 0.4)",
         },
       },
     ],
@@ -530,20 +535,15 @@ export const STUDIO_MOTION_TEMPLATES: MotionTemplate[] = [
     id: "micro-tutorial",
     name: "30-Second Micro-Tutorial",
     tagline: "Structured step-by-step numbered callouts for documentation",
-    description: "The ideal template for user documentation, knowledge base articles, and onboarding steps. Provides clean numbered step pills that guide viewer focus.",
+    description: "The ideal template for user documentation, knowledge base articles, and onboarding steps. Provides clean numbered step callouts that guide viewer focus.",
     category: "tutorial",
     aspectRatio: "16:9",
     accentColor: "#0ea5e9",
-    badge: "STEP-BY-STEP",
-    badgeStyle: {
-      bg: "rgba(14, 165, 233, 0.2)",
-      text: "#38bdf8",
-      border: "rgba(14, 165, 233, 0.4)",
-    },
+    visualAccent: "specular-sweep",
+    multiDeviceLayout: "single",
     motionSignature: {
       type: "step-focus",
       label: "Step-by-Step Focus Callout",
-      badge: "STEP FOCUS",
       description: "Clean sequential step indicator with focused spotlight ring and tutorial callouts",
     },
     typography: {
@@ -555,6 +555,8 @@ export const STUDIO_MOTION_TEMPLATES: MotionTemplate[] = [
     transitionTiming: {
       cameraLeadInMs: 300,
       entranceDurationMs: 600,
+      transitionStyle: "kinetic-punch",
+      speedRampMultiplier: 1.5,
     },
     cameraPhysics: "smooth",
     looks: {
@@ -586,13 +588,11 @@ export const STUDIO_MOTION_TEMPLATES: MotionTemplate[] = [
     },
     customizableFields: [
       { id: "headline", label: "Step 1 Text", placeholder: "Step 1: Open Settings Panel", defaultValue: "Step 1: Open Settings Panel", type: "text" },
-      { id: "badge", label: "Step Badge", placeholder: "TUTORIAL", defaultValue: "TUTORIAL", type: "badge" },
       { id: "accent", label: "Sky Accent", placeholder: "#0ea5e9", defaultValue: "#0ea5e9", type: "color" },
     ],
     defaultTextOverlays: [
       {
         text: "Step 1: Click Settings to configure audio",
-        badge: "STEP 1 OF 3",
         startTimeMs: 400,
         durationMs: 4500,
         x: 0.5,
@@ -601,15 +601,12 @@ export const STUDIO_MOTION_TEMPLATES: MotionTemplate[] = [
         color: "#ffffff",
         bgColor: "rgba(11, 25, 44, 0.9)",
         style: "callout",
+        motionPreset: "fluid-slide",
+        cardStyle: "solid",
         typography: {
           fontFamily: "'Inter', system-ui, -apple-system, BlinkMacSystemFont, sans-serif",
           fontWeight: "600",
           letterSpacing: "-0.01em",
-        },
-        badgeStyle: {
-          bg: "rgba(14, 165, 233, 0.2)",
-          text: "#38bdf8",
-          border: "rgba(14, 165, 233, 0.4)",
         },
       },
     ],
@@ -622,17 +619,12 @@ export const STUDIO_MOTION_TEMPLATES: MotionTemplate[] = [
     category: "teaser",
     aspectRatio: "1:1",
     accentColor: "#ea580c",
-    badge: "LIVE TODAY",
-    badgeStyle: {
-      bg: "rgba(234, 88, 12, 0.25)",
-      text: "#fb923c",
-      border: "rgba(234, 88, 12, 0.5)",
-    },
+    visualAccent: "particle-burst",
+    multiDeviceLayout: "isometric-stack",
     motionSignature: {
       type: "isometric-upvote",
       label: "Isometric Pitch & Upvote Burst",
-      badge: "ISOMETRIC BURST",
-      description: "12° dynamic 3D isometric pitch with floating, bouncing upvote badge particles",
+      description: "12° dynamic 3D isometric pitch with floating, bouncing upvote particle bursts",
     },
     typography: {
       fontFamily: "'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif",
@@ -643,6 +635,8 @@ export const STUDIO_MOTION_TEMPLATES: MotionTemplate[] = [
     transitionTiming: {
       cameraLeadInMs: 180,
       entranceDurationMs: 450,
+      transitionStyle: "speed-ramp",
+      speedRampMultiplier: 2.4,
     },
     cameraPhysics: "spring",
     looks: {
@@ -674,13 +668,11 @@ export const STUDIO_MOTION_TEMPLATES: MotionTemplate[] = [
     },
     customizableFields: [
       { id: "headline", label: "Launch Tagline", placeholder: "We are live on Product Hunt! 🚀", defaultValue: "We are live on Product Hunt! 🚀", type: "text" },
-      { id: "badge", label: "Badge Tag", placeholder: "FEATURED #1", defaultValue: "FEATURED #1", type: "badge" },
       { id: "accent", label: "Brand Orange", placeholder: "#ea580c", defaultValue: "#ea580c", type: "color" },
     ],
     defaultTextOverlays: [
       {
         text: "We are live on Product Hunt! 🚀",
-        badge: "FEATURED #1",
         startTimeMs: 200,
         durationMs: 4000,
         x: 0.5,
@@ -689,15 +681,12 @@ export const STUDIO_MOTION_TEMPLATES: MotionTemplate[] = [
         color: "#ffffff",
         bgColor: "rgba(40, 15, 5, 0.9)",
         style: "headline",
+        motionPreset: "elastic-pop",
+        cardStyle: "gradient",
         typography: {
           fontFamily: "'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif",
           fontWeight: "800",
           letterSpacing: "-0.03em",
-        },
-        badgeStyle: {
-          bg: "rgba(234, 88, 12, 0.25)",
-          text: "#fb923c",
-          border: "rgba(234, 88, 12, 0.5)",
         },
       },
     ],
@@ -710,16 +699,11 @@ export const STUDIO_MOTION_TEMPLATES: MotionTemplate[] = [
     category: "saas",
     aspectRatio: "16:9",
     accentColor: "#38bdf8",
-    badge: "SOC2 TYPE II",
-    badgeStyle: {
-      bg: "rgba(56, 189, 248, 0.15)",
-      text: "#38bdf8",
-      border: "rgba(56, 189, 248, 0.35)",
-    },
+    visualAccent: "laser-radar-sweep",
+    multiDeviceLayout: "single",
     motionSignature: {
       type: "radar-scan",
       label: "Radar Grid & Laser Scanner",
-      badge: "RADAR SCAN",
       description: "Solid corporate framing with high-tech blue laser scan line and radar pulse",
     },
     typography: {
@@ -731,6 +715,8 @@ export const STUDIO_MOTION_TEMPLATES: MotionTemplate[] = [
     transitionTiming: {
       cameraLeadInMs: 350,
       entranceDurationMs: 750,
+      transitionStyle: "ken-burns",
+      speedRampMultiplier: 1.1,
     },
     cameraPhysics: "smooth",
     looks: {
@@ -762,13 +748,11 @@ export const STUDIO_MOTION_TEMPLATES: MotionTemplate[] = [
     },
     customizableFields: [
       { id: "headline", label: "Compliance Headline", placeholder: "Role-Based Access Control (RBAC)", defaultValue: "Role-Based Access Control (RBAC)", type: "text" },
-      { id: "badge", label: "Security Badge", placeholder: "ENTERPRISE", defaultValue: "ENTERPRISE", type: "badge" },
       { id: "accent", label: "Corporate Blue", placeholder: "#38bdf8", defaultValue: "#38bdf8", type: "color" },
     ],
     defaultTextOverlays: [
       {
         text: "Role-Based Access Control (RBAC)",
-        badge: "SOC2 COMPLIANT",
         startTimeMs: 400,
         durationMs: 4200,
         x: 0.5,
@@ -777,15 +761,12 @@ export const STUDIO_MOTION_TEMPLATES: MotionTemplate[] = [
         color: "#ffffff",
         bgColor: "rgba(15, 23, 42, 0.9)",
         style: "headline",
+        motionPreset: "smooth-fade",
+        cardStyle: "solid",
         typography: {
           fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
           fontWeight: "600",
           letterSpacing: "-0.01em",
-        },
-        badgeStyle: {
-          bg: "rgba(56, 189, 248, 0.15)",
-          text: "#38bdf8",
-          border: "rgba(56, 189, 248, 0.35)",
         },
       },
     ],
@@ -798,16 +779,11 @@ export const STUDIO_MOTION_TEMPLATES: MotionTemplate[] = [
     category: "showcase",
     aspectRatio: "16:9",
     accentColor: "#06b6d4",
-    badge: "INTERACTIONS",
-    badgeStyle: {
-      bg: "rgba(6, 182, 212, 0.2)",
-      text: "#22d3ee",
-      border: "rgba(6, 182, 212, 0.45)",
-    },
+    visualAccent: "tactile-shockwave",
+    multiDeviceLayout: "single",
     motionSignature: {
       type: "click-ripples",
       label: "Tactile Click Shockwaves",
-      badge: "TACTILE RIPPLES",
       description: "Glassmorphic frame with rhythmic simulated cursor taps and expanding ripple rings",
     },
     typography: {
@@ -819,6 +795,8 @@ export const STUDIO_MOTION_TEMPLATES: MotionTemplate[] = [
     transitionTiming: {
       cameraLeadInMs: 240,
       entranceDurationMs: 550,
+      transitionStyle: "snap-zoom",
+      speedRampMultiplier: 2.0,
     },
     cameraPhysics: "spring",
     looks: {
@@ -850,13 +828,11 @@ export const STUDIO_MOTION_TEMPLATES: MotionTemplate[] = [
     },
     customizableFields: [
       { id: "headline", label: "Callout Title", placeholder: "Zero-Latency Micro Interactions", defaultValue: "Zero-Latency Micro Interactions", type: "text" },
-      { id: "badge", label: "Feature Pill", placeholder: "TACTILE UI", defaultValue: "TACTILE UI", type: "badge" },
       { id: "accent", label: "Cyan Tone", placeholder: "#06b6d4", defaultValue: "#06b6d4", type: "color" },
     ],
     defaultTextOverlays: [
       {
         text: "Zero-Latency Micro Interactions",
-        badge: "TACTILE UI",
         startTimeMs: 300,
         durationMs: 3800,
         x: 0.5,
@@ -865,15 +841,12 @@ export const STUDIO_MOTION_TEMPLATES: MotionTemplate[] = [
         color: "#ffffff",
         bgColor: "rgba(8, 47, 73, 0.9)",
         style: "headline",
+        motionPreset: "whip-slide",
+        cardStyle: "minimal",
         typography: {
           fontFamily: "'Inter', system-ui, -apple-system, BlinkMacSystemFont, sans-serif",
           fontWeight: "700",
           letterSpacing: "-0.02em",
-        },
-        badgeStyle: {
-          bg: "rgba(6, 182, 212, 0.2)",
-          text: "#22d3ee",
-          border: "rgba(6, 182, 212, 0.45)",
         },
       },
     ],
@@ -886,16 +859,11 @@ export const STUDIO_MOTION_TEMPLATES: MotionTemplate[] = [
     category: "showcase",
     aspectRatio: "4:3",
     accentColor: "#ec4899",
-    badge: "FIGMA REEL",
-    badgeStyle: {
-      bg: "rgba(236, 72, 153, 0.18)",
-      text: "#db2777",
-      border: "rgba(236, 72, 153, 0.35)",
-    },
+    visualAccent: "curved-cursor-glide",
+    multiDeviceLayout: "triple-deck",
     motionSignature: {
       type: "curved-cursor",
       label: "Curved Cursor Flow & Pastel Mesh",
-      badge: "CURVED CURSOR",
       description: "Fluid pastel morph with animated curved cursor gliding and click ripple",
     },
     typography: {
@@ -907,6 +875,10 @@ export const STUDIO_MOTION_TEMPLATES: MotionTemplate[] = [
     transitionTiming: {
       cameraLeadInMs: 320,
       entranceDurationMs: 700,
+      transitionStyle: "whip-pan",
+      whipPanDirection: "left",
+      speedRampMultiplier: 2.0,
+      cascadeStaggerMs: 150,
     },
     cameraPhysics: "smooth",
     looks: {
@@ -938,13 +910,11 @@ export const STUDIO_MOTION_TEMPLATES: MotionTemplate[] = [
     },
     customizableFields: [
       { id: "headline", label: "Design System Title", placeholder: "Design System v3.0 by Studio", defaultValue: "Design System v3.0 by Studio", type: "text" },
-      { id: "badge", label: "Badge Label", placeholder: "FIGMA PRO", defaultValue: "FIGMA PRO", type: "badge" },
       { id: "accent", label: "Pastel Pink", placeholder: "#ec4899", defaultValue: "#ec4899", type: "color" },
     ],
     defaultTextOverlays: [
       {
         text: "Design System v3.0 by Studio",
-        badge: "FIGMA PRO",
         startTimeMs: 400,
         durationMs: 4200,
         x: 0.5,
@@ -953,20 +923,124 @@ export const STUDIO_MOTION_TEMPLATES: MotionTemplate[] = [
         color: "#831843",
         bgColor: "rgba(255, 255, 255, 0.92)",
         style: "callout",
+        motionPreset: "fluid-slide",
+        cardStyle: "glass",
         typography: {
           fontFamily: "'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif",
           fontWeight: "600",
           letterSpacing: "-0.02em",
         },
-        badgeStyle: {
-          bg: "rgba(236, 72, 153, 0.18)",
-          text: "#db2777",
-          border: "rgba(236, 72, 153, 0.35)",
-        },
       },
     ],
   },
 ];
+
+const viralBase = STUDIO_MOTION_TEMPLATES.find((t) => t.id === "viral-short-tiktok")!;
+const MOBILE_REQUIREMENT: TemplateVideoRequirement = {
+  label: "Needs a portrait phone recording (9:16, about 1080x1920)",
+  minAspect: 0.5,
+  maxAspect: 0.62,
+  minWidth: 540,
+  minHeight: 960,
+};
+
+STUDIO_MOTION_TEMPLATES.push(
+  {
+    ...viralBase,
+    id: "mobile-app-showcase",
+    name: "Mobile App Showcase",
+    tagline: "Phone-shaped hero with floating device and spring captions",
+    description: "Made for app store previews and launch posts. Requires a 9:16 phone screen recording.",
+    category: "mobile",
+    accentColor: "#38bdf8",
+    visualAccent: "specular-sweep",
+    looks: {
+      ...viralBase.looks,
+      backgroundValue: "linear-gradient(160deg, #0b1220 0%, #1e3a5f 55%, #0ea5e9 130%)",
+      brandAccentColor: "#38bdf8",
+      cursorStyle: "dot",
+      cursorSize: 2,
+      tiltAngle: 4,
+    },
+    customizableFields: [
+      { id: "headline", label: "App Headline", placeholder: "Meet your new favorite app", defaultValue: "Meet your new favorite app", type: "text" },
+      { id: "accent", label: "Accent Color", placeholder: "#38bdf8", defaultValue: "#38bdf8", type: "color" },
+    ],
+    defaultTextOverlays: viralBase.defaultTextOverlays.map((o) => ({
+      ...o,
+      text: "Meet your new favorite app",
+      motionPreset: "whip-slide" as typeof o.motionPreset,
+    })),
+    videoRequirement: MOBILE_REQUIREMENT,
+    photoSlot: { label: "App icon / logo photo", shape: "rounded", x: 0.5, y: 0.1, size: 0.16 },
+  },
+  {
+    ...viralBase,
+    id: "mobile-story-reel",
+    name: "Mobile Story Reel",
+    tagline: "Warm editorial gradient with blur-reveal caption for in-app flows",
+    description: "Story-style walkthrough for mobile flows. Requires a 9:16 phone screen recording.",
+    category: "mobile",
+    accentColor: "#fb7185",
+    looks: {
+      ...viralBase.looks,
+      backgroundValue: "linear-gradient(200deg, #fde68a 0%, #fb7185 60%, #7c3aed 120%)",
+      brandAccentColor: "#fb7185",
+      cursorStyle: "dot",
+      cursorSize: 2.1,
+    },
+    customizableFields: [
+      { id: "headline", label: "Story Caption", placeholder: "Swipe through in seconds", defaultValue: "Swipe through in seconds", type: "text" },
+      { id: "accent", label: "Accent Color", placeholder: "#fb7185", defaultValue: "#fb7185", type: "color" },
+    ],
+    defaultTextOverlays: viralBase.defaultTextOverlays.map((o) => ({
+      ...o,
+      text: "Swipe through in seconds",
+      motionPreset: "blur-reveal" as typeof o.motionPreset,
+    })),
+    videoRequirement: MOBILE_REQUIREMENT,
+    photoSlot: { label: "Profile photo", shape: "circle", x: 0.5, y: 0.1, size: 0.18 },
+  },
+);
+
+// Every template gets a user photo placeholder.
+const PHOTO_SLOT_BY_CATEGORY: Record<TemplateCategory, TemplatePhotoSlot> = {
+  saas: { label: "Logo / product photo", shape: "rounded", x: 0.9, y: 0.12, size: 0.1 },
+  keynote: { label: "Presenter photo", shape: "circle", x: 0.1, y: 0.14, size: 0.09 },
+  social: { label: "Creator photo", shape: "circle", x: 0.5, y: 0.1, size: 0.18 },
+  developer: { label: "Avatar photo", shape: "square", x: 0.92, y: 0.12, size: 0.08 },
+  tutorial: { label: "Instructor photo", shape: "circle", x: 0.9, y: 0.14, size: 0.1 },
+  teaser: { label: "Maker photo", shape: "circle", x: 0.12, y: 0.12, size: 0.14 },
+  showcase: { label: "Designer photo", shape: "rounded", x: 0.88, y: 0.14, size: 0.12 },
+  mobile: { label: "App icon / photo", shape: "rounded", x: 0.5, y: 0.1, size: 0.16 },
+};
+for (const t of STUDIO_MOTION_TEMPLATES) {
+  t.photoSlot ??= PHOTO_SLOT_BY_CATEGORY[t.category];
+  if (!t.customizableFields.some((f) => f.type === "image")) {
+    t.customizableFields = [
+      ...t.customizableFields,
+      { id: "photo", label: t.photoSlot.label, placeholder: "Choose a photo", defaultValue: "", type: "image" },
+    ];
+  }
+}
+
+/** Checks whether a project's source video satisfies a template's size requirement. */
+export function checkTemplateVideoFit(
+  template: Pick<MotionTemplate, "videoRequirement">,
+  width?: number | null,
+  height?: number | null,
+): { ok: boolean; reason?: string } {
+  const req = template.videoRequirement;
+  if (!req) return { ok: true };
+  if (!width || !height) return { ok: true };
+  const aspect = width / height;
+  if (aspect < req.minAspect || aspect > req.maxAspect) return { ok: false, reason: req.label };
+  if ((req.minWidth && width < req.minWidth) || (req.minHeight && height < req.minHeight)) {
+    return { ok: false, reason: req.label };
+  }
+  return { ok: true };
+}
+
 
 export interface GenerateTemplateKeyframesOptions {
   existingKeyframes?: KeyframeNode[];
@@ -999,16 +1073,42 @@ export function templatePhysicsToEasing(physics?: CameraPhysicsPreset): "spring"
 /**
  * Generates or harmonizes timeline keyframes and zoom blocks reflecting a motion template's
  * camera lead-in, zoom scale, easing physics, video effects, and tactile keyboard soundscapes.
+ * Upgraded to incorporate high-impact transitions (snap zooms, whip pans, speed ramps, and cascades).
  */
 export function generateTemplateKeyframes(
   template: MotionTemplate,
   videoDurationMs: number,
   options: GenerateTemplateKeyframesOptions = {}
 ): TemplateKeyframeResult {
-  const duration = Math.max(3000, videoDurationMs || 6000);
+  // 1. Sanitize video duration: positive finite number, default 6000ms, minimum 1000ms
+  const safeDuration =
+    typeof videoDurationMs === "number" && Number.isFinite(videoDurationMs) && videoDurationMs > 0
+      ? Math.max(1000, videoDurationMs)
+      : 6000;
+  const duration = safeDuration;
+
   const easing = templatePhysicsToEasing(template.looks.cameraPhysics);
-  const targetScale = template.looks.autoTrackScale || 1.5;
-  const leadIn = Math.min(600, Math.max(100, template.transitionTiming?.cameraLeadInMs || 250));
+  const targetScale =
+    typeof template.looks.autoTrackScale === "number" &&
+    Number.isFinite(template.looks.autoTrackScale) &&
+    template.looks.autoTrackScale >= 1.0
+      ? template.looks.autoTrackScale
+      : 1.5;
+
+  // Camera lead-in: clamped between 100ms and safeDuration * 0.25 (up to 600ms)
+  const rawLeadIn = template.transitionTiming?.cameraLeadInMs;
+  const nominalLeadIn = typeof rawLeadIn === "number" && Number.isFinite(rawLeadIn) ? rawLeadIn : 250;
+  const maxLeadIn = Math.min(600, Math.max(100, Math.round(safeDuration * 0.25)));
+  const leadIn = Math.min(maxLeadIn, Math.max(100, nominalLeadIn));
+
+  // Transition style, speed-ramp multiplier, and whip pan direction
+  const transitionStyle = template.transitionTiming?.transitionStyle;
+  const rawSpeedRamp = template.transitionTiming?.speedRampMultiplier;
+  const speedRamp =
+    typeof rawSpeedRamp === "number" && Number.isFinite(rawSpeedRamp) && rawSpeedRamp > 0
+      ? Math.max(0.5, Math.min(4.0, rawSpeedRamp))
+      : 1.0;
+  const whipPanDir = template.transitionTiming?.whipPanDirection || "right";
 
   // If existing keyframes already exist on the project, harmonize their easing, sound preset, and scale
   if (options.existingKeyframes && options.existingKeyframes.length > 0) {
@@ -1035,17 +1135,46 @@ export function generateTemplateKeyframes(
     return { keyframes: harmonizedKeyframes, zoomBlocks: harmonizedBlocks };
   }
 
-  // Generate signature choreography keyframes tailored to the template's motionSignature
-  const sigType = template.motionSignature?.type || "3d-gyro-float";
+  // Determine motion choreography signature (fall back to transitionStyle if motionSignature is omitted)
+  let sigType = template.motionSignature?.type;
+  if (!sigType) {
+    switch (transitionStyle) {
+      case "ken-burns":
+        sigType = "cinematic-push";
+        break;
+      case "whip-pan":
+        sigType = "kinetic-phone";
+        break;
+      case "snap-zoom":
+        sigType = "rhythmic-punch";
+        break;
+      case "speed-ramp":
+        sigType = "isometric-upvote";
+        break;
+      case "kinetic-punch":
+        sigType = "step-focus";
+        break;
+      case "perspective-cascade":
+      default:
+        sigType = "3d-gyro-float";
+        break;
+    }
+  }
+
   const idPrefix = `kf-${template.id}`;
   const blockId = `zb-${template.id}-${Date.now()}`;
+
+  // Speed ramp pacing ratio: higher speed ramp accelerates attack towards apex
+  const rampPacing = Math.max(0.25, Math.min(0.65, 0.48 / Math.sqrt(speedRamp)));
 
   let signatureNodes: KeyframeNode[] = [];
   let zoomBlock: ZoomBlock | null = null;
 
   switch (sigType) {
     case "3d-gyro-float": {
+      // Perspective cascade transition with 3D gyroscopic drift
       const outMs = Math.min(4800, Math.round(duration * 0.85));
+      const midTime = Math.min(outMs - 200, Math.round(leadIn + (outMs - leadIn) * 0.45));
       signatureNodes = [
         { id: `${idPrefix}-0`, timeMs: 0, scale: 1.0, targetX: 0.5, targetY: 0.5, easing },
         {
@@ -1061,7 +1190,7 @@ export function generateTemplateKeyframes(
         },
         {
           id: `${idPrefix}-2`,
-          timeMs: Math.round(leadIn + (outMs - leadIn) * 0.45),
+          timeMs: midTime,
           scale: Number((targetScale * 1.03).toFixed(2)),
           targetX: 0.52,
           targetY: 0.5,
@@ -1082,7 +1211,9 @@ export function generateTemplateKeyframes(
     }
 
     case "cinematic-push": {
+      // Silky Ken Burns slow camera push with pristine silver spotlight bloom
       const outMs = Math.min(5400, Math.round(duration * 0.9));
+      const midTime = Math.min(outMs - 250, Math.round(leadIn + (outMs - leadIn) * 0.55));
       signatureNodes = [
         { id: `${idPrefix}-0`, timeMs: 0, scale: 1.0, targetX: 0.5, targetY: 0.5, easing: "cubic" },
         {
@@ -1100,7 +1231,7 @@ export function generateTemplateKeyframes(
         },
         {
           id: `${idPrefix}-2`,
-          timeMs: Math.round(leadIn + (outMs - leadIn) * 0.55),
+          timeMs: midTime,
           scale: Number((targetScale * 1.05).toFixed(2)),
           targetX: 0.54,
           targetY: 0.46,
@@ -1121,7 +1252,9 @@ export function generateTemplateKeyframes(
     }
 
     case "rhythmic-punch": {
+      // Snappy snap-zoom punch with dynamic spring overshoot and violet glow
       const outMs = Math.min(3400, Math.round(duration * 0.7));
+      const punchSettle = Math.min(outMs - 200, Math.round(leadIn + (outMs - leadIn) * 0.48));
       signatureNodes = [
         { id: `${idPrefix}-0`, timeMs: 0, scale: 1.0, targetX: 0.5, targetY: 0.5, easing: "spring" },
         {
@@ -1139,7 +1272,7 @@ export function generateTemplateKeyframes(
         },
         {
           id: `${idPrefix}-2`,
-          timeMs: Math.round(leadIn + (outMs - leadIn) * 0.48),
+          timeMs: punchSettle,
           scale: Number((targetScale * 0.96).toFixed(2)),
           targetX: 0.53,
           targetY: 0.56,
@@ -1163,14 +1296,17 @@ export function generateTemplateKeyframes(
     }
 
     case "kinetic-phone": {
+      // High-energy whip pan lateral transition and vertical phone framing
       const outMs = Math.min(3200, Math.round(duration * 0.75));
+      const midTime = Math.min(outMs - 200, Math.round(leadIn + (outMs - leadIn) * 0.48));
+      const whipTargetX = whipPanDir === "right" ? 0.52 : 0.48;
       signatureNodes = [
         { id: `${idPrefix}-0`, timeMs: 0, scale: 1.0, targetX: 0.5, targetY: 0.5, easing: "spring" },
         {
           id: `${idPrefix}-1`,
           timeMs: leadIn,
           scale: targetScale,
-          targetX: 0.5,
+          targetX: whipTargetX,
           targetY: 0.32,
           easing: "spring",
           sound: "click",
@@ -1179,7 +1315,7 @@ export function generateTemplateKeyframes(
         },
         {
           id: `${idPrefix}-2`,
-          timeMs: Math.round(leadIn + (outMs - leadIn) * 0.48),
+          timeMs: midTime,
           scale: Number((targetScale * 0.95).toFixed(2)),
           targetX: 0.5,
           targetY: 0.6,
@@ -1200,7 +1336,9 @@ export function generateTemplateKeyframes(
     }
 
     case "cli-scanlines": {
+      // Terminal scanline snap zoom with typewriter mechanical thocks
       const outMs = Math.min(3800, Math.round(duration * 0.8));
+      const midTime = Math.min(outMs - 250, Math.round(leadIn + (outMs - leadIn) * 0.5));
       signatureNodes = [
         { id: `${idPrefix}-0`, timeMs: 0, scale: 1.0, targetX: 0.5, targetY: 0.5, easing: "linear" },
         {
@@ -1218,7 +1356,7 @@ export function generateTemplateKeyframes(
         },
         {
           id: `${idPrefix}-2`,
-          timeMs: Math.round(leadIn + (outMs - leadIn) * 0.5),
+          timeMs: midTime,
           scale: targetScale,
           targetX: 0.48,
           targetY: 0.45,
@@ -1242,7 +1380,9 @@ export function generateTemplateKeyframes(
     }
 
     case "step-focus": {
+      // Kinetic punch step-by-step sequential spotlight focus
       const outMs = Math.min(4400, Math.round(duration * 0.85));
+      const midTime = Math.min(outMs - 250, Math.round(leadIn + (outMs - leadIn) * 0.5));
       signatureNodes = [
         { id: `${idPrefix}-0`, timeMs: 0, scale: 1.0, targetX: 0.5, targetY: 0.5, easing: "cubic" },
         {
@@ -1260,7 +1400,7 @@ export function generateTemplateKeyframes(
         },
         {
           id: `${idPrefix}-2`,
-          timeMs: Math.round(leadIn + (outMs - leadIn) * 0.5),
+          timeMs: midTime,
           scale: targetScale,
           targetX: 0.65,
           targetY: 0.55,
@@ -1286,7 +1426,12 @@ export function generateTemplateKeyframes(
     }
 
     case "isometric-upvote": {
-      const outMs = Math.min(3800, Math.round(duration * 0.8));
+      // High-octane speed ramp with 3D isometric pitch and upvote particle burst
+      const outMs = Math.min(3800, Math.round(safeDuration * 0.8));
+      const midTime = Math.min(outMs - 200, Math.round(leadIn + (outMs - leadIn) * rampPacing));
+      const rampScaleBoost = Number((1.0 + 0.02 * speedRamp).toFixed(2));
+      const rampGlowIntensity = Math.min(0.8, Number((0.25 * speedRamp).toFixed(2)));
+
       signatureNodes = [
         { id: `${idPrefix}-0`, timeMs: 0, scale: 1.0, targetX: 0.5, targetY: 0.5, easing: "spring" },
         {
@@ -1297,15 +1442,15 @@ export function generateTemplateKeyframes(
           targetY: 0.44,
           easing: "spring",
           effect: "glow",
-          effectIntensity: 0.4,
+          effectIntensity: rampGlowIntensity,
           sound: "click",
           soundPreset: "bop",
           soundVolume: 0.75,
         },
         {
           id: `${idPrefix}-2`,
-          timeMs: Math.round(leadIn + (outMs - leadIn) * 0.48),
-          scale: Number((targetScale * 1.04).toFixed(2)),
+          timeMs: midTime,
+          scale: Number((targetScale * rampScaleBoost).toFixed(2)),
           targetX: 0.5,
           targetY: 0.4,
           easing: "spring",
@@ -1325,7 +1470,9 @@ export function generateTemplateKeyframes(
     }
 
     case "radar-scan": {
+      // Measured enterprise Ken Burns push with laser radar sweep & vignette
       const outMs = Math.min(4200, Math.round(duration * 0.85));
+      const midTime = Math.min(outMs - 250, Math.round(leadIn + (outMs - leadIn) * 0.5));
       signatureNodes = [
         { id: `${idPrefix}-0`, timeMs: 0, scale: 1.0, targetX: 0.5, targetY: 0.5, easing: "cubic" },
         {
@@ -1343,7 +1490,7 @@ export function generateTemplateKeyframes(
         },
         {
           id: `${idPrefix}-2`,
-          timeMs: Math.round(leadIn + (outMs - leadIn) * 0.5),
+          timeMs: midTime,
           scale: targetScale,
           targetX: 0.55,
           targetY: 0.52,
@@ -1364,7 +1511,9 @@ export function generateTemplateKeyframes(
     }
 
     case "click-ripples": {
+      // Zero-latency snap zoom synchronized with expanding tactile shockwaves
       const outMs = Math.min(3200, Math.round(duration * 0.75));
+      const midTime = Math.min(outMs - 200, Math.round(leadIn + (outMs - leadIn) * 0.48));
       signatureNodes = [
         { id: `${idPrefix}-0`, timeMs: 0, scale: 1.0, targetX: 0.5, targetY: 0.5, easing: "spring" },
         {
@@ -1380,7 +1529,7 @@ export function generateTemplateKeyframes(
         },
         {
           id: `${idPrefix}-2`,
-          timeMs: Math.round(leadIn + (outMs - leadIn) * 0.48),
+          timeMs: midTime,
           scale: targetScale,
           targetX: 0.56,
           targetY: 0.6,
@@ -1405,14 +1554,17 @@ export function generateTemplateKeyframes(
 
     case "curved-cursor":
     default: {
+      // Fluid whip-pan into organic curved cursor flow in 4:3 canvas
       const outMs = Math.min(4600, Math.round(duration * 0.85));
+      const midTime = Math.min(outMs - 250, Math.round(leadIn + (outMs - leadIn) * 0.5));
+      const whipTargetX = whipPanDir === "left" ? 0.47 : 0.53;
       signatureNodes = [
         { id: `${idPrefix}-0`, timeMs: 0, scale: 1.0, targetX: 0.5, targetY: 0.5, easing: "cubic" },
         {
           id: `${idPrefix}-1`,
           timeMs: leadIn,
           scale: targetScale,
-          targetX: 0.48,
+          targetX: whipTargetX,
           targetY: 0.46,
           easing: "cubic",
           effect: "blur",
@@ -1423,7 +1575,7 @@ export function generateTemplateKeyframes(
         },
         {
           id: `${idPrefix}-2`,
-          timeMs: Math.round(leadIn + (outMs - leadIn) * 0.5),
+          timeMs: midTime,
           scale: Number((targetScale * 1.02).toFixed(2)),
           targetX: 0.54,
           targetY: 0.5,
@@ -1444,14 +1596,56 @@ export function generateTemplateKeyframes(
     }
   }
 
-  // Ensure timestamps are strictly non-decreasing and within duration
-  signatureNodes.forEach((node, i) => {
-    if (i > 0 && node.timeMs <= signatureNodes[i - 1]!.timeMs) {
-      node.timeMs = signatureNodes[i - 1]!.timeMs + 50;
+  // Ensure zoom block has at least 500ms duration and stays within safeDuration
+  if (zoomBlock) {
+    const minZoomDuration = 500;
+    if (zoomBlock.endTimeMs <= zoomBlock.startTimeMs + minZoomDuration) {
+      zoomBlock.endTimeMs = Math.min(safeDuration, zoomBlock.startTimeMs + minZoomDuration);
     }
-    if (node.timeMs > duration) {
-      node.timeMs = duration;
+    if (zoomBlock.endTimeMs > safeDuration) {
+      zoomBlock.endTimeMs = safeDuration;
     }
+    if (zoomBlock.startTimeMs >= zoomBlock.endTimeMs) {
+      zoomBlock.startTimeMs = Math.max(0, zoomBlock.endTimeMs - minZoomDuration);
+    }
+    // Sync the outro keyframe with zoomBlock.endTimeMs
+    if (signatureNodes.length > 0) {
+      signatureNodes[signatureNodes.length - 1]!.timeMs = zoomBlock.endTimeMs;
+    }
+  }
+
+  // Enforce strictly non-decreasing, non-negative, and forward-spaced timestamps
+  const minSpacing = 50;
+  for (let i = 0; i < signatureNodes.length; i++) {
+    const node = signatureNodes[i]!;
+    if (i === 0) {
+      node.timeMs = 0;
+    } else {
+      if (node.timeMs <= signatureNodes[i - 1]!.timeMs) {
+        node.timeMs = signatureNodes[i - 1]!.timeMs + minSpacing;
+      }
+    }
+  }
+
+  // Backward pass: if any keyframe exceeds safeDuration, cascade backward cleanly
+  const lastIndex = signatureNodes.length - 1;
+  if (lastIndex >= 0 && signatureNodes[lastIndex]!.timeMs > safeDuration) {
+    signatureNodes[lastIndex]!.timeMs = safeDuration;
+    for (let j = lastIndex - 1; j >= 0; j--) {
+      if (signatureNodes[j]!.timeMs >= signatureNodes[j + 1]!.timeMs) {
+        signatureNodes[j]!.timeMs = Math.max(0, signatureNodes[j + 1]!.timeMs - minSpacing);
+      }
+    }
+  }
+
+  // Final check: clamp targetX/targetY, scale >= 1.0, zero NaN/Infinity
+  signatureNodes.forEach((node) => {
+    if (!Number.isFinite(node.timeMs) || node.timeMs < 0) node.timeMs = 0;
+    if (!Number.isFinite(node.scale) || node.scale < 1.0) node.scale = 1.0;
+    if (!Number.isFinite(node.targetX)) node.targetX = 0.5;
+    if (!Number.isFinite(node.targetY)) node.targetY = 0.5;
+    node.targetX = Math.max(0, Math.min(1, node.targetX));
+    node.targetY = Math.max(0, Math.min(1, node.targetY));
   });
 
   return {

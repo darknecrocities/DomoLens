@@ -193,6 +193,7 @@ export function EditorScreen({ id }: EditorScreenProps) {
                 ? "bg-white text-black font-bold shadow-sm"
                 : "border border-ink-700 bg-ink-800 text-fg-muted hover:text-fg hover:border-neutral-500"
             }`}
+            data-tutorial-target="ai-director"
             title="Toggle AI Director Panel"
           >
             <Sparkles className={`size-3.5 ${isLeftSidebarOpen ? "text-black" : "text-white"}`} />
@@ -204,6 +205,7 @@ export function EditorScreen({ id }: EditorScreenProps) {
             type="button"
             onClick={() => setTemplateModalOpen(true)}
             className="flex items-center gap-1.5 rounded-lg border border-indigo-500/30 bg-indigo-950/40 px-2 sm:px-2.5 py-1 text-xs font-semibold text-indigo-300 hover:bg-indigo-900/60 hover:text-white hover:border-indigo-400 transition-all shadow-sm"
+            data-tutorial-target="templates-button"
             title="Browse & Apply Motion Video Templates"
           >
             <Wand2 className="size-3.5 text-indigo-400" />
@@ -219,6 +221,7 @@ export function EditorScreen({ id }: EditorScreenProps) {
                 ? "bg-ink-700 text-fg border border-ink-600"
                 : "border border-ink-700 bg-ink-800 text-fg-muted hover:text-fg"
             }`}
+            data-tutorial-target="tools-toggle"
             title="Toggle Tools Panel"
           >
             <Sliders className="size-3.5" />

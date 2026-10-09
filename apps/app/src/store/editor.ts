@@ -34,6 +34,7 @@ import {
   type ZoomBlock,
   STUDIO_MOTION_TEMPLATES,
   generateTemplateKeyframes,
+  checkTemplateVideoFit,
   enforceNonOverlappingZoomBlocks,
 } from "@domolens/core";
 import { sfx } from "../lib/sound-effects";
@@ -57,6 +58,14 @@ export type ToolTab =
   | "cursor"
   | "export";
 
+/**
+ * Active tool mode in the timeline toolbar.
+ * - "select": Default pointer tool for selecting, dragging, and resizing track elements.
+ * - "split": Razor blade tool for splitting clips or tracks at the playhead or cursor.
+ * - "pan": Hand tool for click-and-drag viewport panning across zoomed-in timelines.
+ */
+export type TimelineToolMode = "select" | "split" | "pan";
+
 export interface LlmMessage {
   id: string;
   role: "user" | "assistant";
@@ -68,7 +77,7 @@ export interface LlmMessage {
   }>;
 }
 
-interface EditorState {
+export interface EditorState {
   project: ProjectData | null;
   currentTimeMs: number;
   durationMs: number;
@@ -82,6 +91,7 @@ interface EditorState {
   activeTab: "timeline" | "looks";
   activeToolTab: ToolTab;
   timelineZoom: number; // 1 to 5
+  activeTimelineTool: TimelineToolMode;
 
   // Sidebars
   isLeftSidebarOpen: boolean; // LLM
@@ -187,7 +197,18 @@ interface EditorState {
 
 
   updateLooks: (updates: Partial<ProjectLooks>) => void;
+  splitAtPlayhead: () => void;
   splitAtCurrentTime: () => void;
+  trimLeftAtPlayhead: () => void;
+  trimRightAtPlayhead: () => void;
+  trimLeftAtCurrentTime: () => void;
+  trimRightAtCurrentTime: () => void;
+  setActiveTimelineTool: (tool: TimelineToolMode) => void;
+  setTimelineTool: (tool: TimelineToolMode) => void;
+  addSfxTrackAtCurrentTime: (
+    preset?: ClickSoundPreset | TypingSoundPreset | string,
+    name?: string,
+  ) => void;
   deleteSelected: () => void;
   deleteVideoClip: (clipId?: string) => void;
   deleteCurrentProject: () => Promise<boolean>;
@@ -237,6 +258,7 @@ export const useEditor = create<EditorState>((set, get) => ({
   activeTab: "timeline",
   activeToolTab: "zoom",
   timelineZoom: 1,
+  activeTimelineTool: "select" as TimelineToolMode,
   isExportModalOpen: false,
   isTemplateModalOpen: false,
   activeTemplateId: null,
@@ -498,6 +520,14 @@ export const useEditor = create<EditorState>((set, get) => ({
   toggleLeftSidebar: () => set((s) => ({ isLeftSidebarOpen: !s.isLeftSidebarOpen })),
   toggleRightSidebar: () => set((s) => ({ isRightSidebarOpen: !s.isRightSidebarOpen })),
   setTimelineZoom: (zoom) => set({ timelineZoom: Math.max(0.5, Math.min(5, zoom)) }),
+  setActiveTimelineTool: (tool: TimelineToolMode) => {
+    const valid: TimelineToolMode[] = ["select", "split", "pan"];
+    const targetTool = valid.includes(tool) ? tool : "select";
+    set({ activeTimelineTool: targetTool });
+  },
+  setTimelineTool: (tool: TimelineToolMode) => {
+    get().setActiveTimelineTool(tool);
+  },
   setExportModalOpen: (open) => set({ isExportModalOpen: open }),
   setTemplateModalOpen: (open) => set({ isTemplateModalOpen: open }),
 
@@ -506,13 +536,19 @@ export const useEditor = create<EditorState>((set, get) => ({
     if (!state.project) return;
     const template = STUDIO_MOTION_TEMPLATES.find((t) => t.id === templateId);
     if (!template) return;
+    const fit = checkTemplateVideoFit(
+      template,
+      state.project.summary.width,
+      state.project.summary.height,
+    );
+    if (!fit.ok) return;
 
     // Generate fresh IDs for template text overlays with user-customized fields merged
     const newTextOverlays: TextOverlay[] = template.defaultTextOverlays.map((to, i) => ({
       ...to,
       id: `text-tpl-${Date.now()}-${i}`,
       text: customFields?.["headline"] || to.text,
-      badge: customFields?.["badge"] || to.badge,
+      kicker: customFields?.["kicker"] || to.kicker,
       color: customFields?.["accent"] ? "#ffffff" : to.color,
     }));
 
@@ -520,6 +556,18 @@ export const useEditor = create<EditorState>((set, get) => ({
       ...state.project.looks,
       ...template.looks,
       brandAccentColor: customFields?.["accent"] || template.looks.brandAccentColor || state.project.looks.brandAccentColor,
+      photoOverlay:
+        customFields?.["photo"] && template.photoSlot
+          ? {
+              src: customFields["photo"],
+              x: template.photoSlot.x,
+              y: template.photoSlot.y,
+              size: template.photoSlot.size,
+              shape: template.photoSlot.shape,
+            }
+          : template.photoSlot
+            ? undefined
+            : state.project.looks.photoOverlay,
     };
 
     const updatedAudio: ProjectAudioSettings = {
@@ -1514,10 +1562,333 @@ export const useEditor = create<EditorState>((set, get) => ({
     });
   },
 
-  splitAtCurrentTime: () => {
+  addSfxTrackAtCurrentTime: (preset = "bop", name) => {
+    const state = get();
+    if (!state.project) return;
+
+    const startTimeMs = Math.max(0, state.currentTimeMs);
+    const durationMs = 600;
+    const resolvedPreset = preset || "bop";
+    const resolvedName = name || (preset ? `SFX (${resolvedPreset})` : "SFX Track");
+
+    const newSfxTrack: AudioTrack = {
+      id: `sfx-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+      name: resolvedName,
+      type: "sfx",
+      url: `sfx://${resolvedPreset}`,
+      startTimeMs,
+      durationMs,
+      volume: 0.7,
+      muted: false,
+    };
+
+    const currentTracks = state.project.audioTracks || [];
+    const updatedTracks = [...currentTracks, newSfxTrack];
+
+    set({
+      ...pushHistory(state),
+      project: {
+        ...state.project,
+        audioTracks: updatedTracks,
+      },
+      selectedAudioId: newSfxTrack.id,
+    });
+
+    toast.success(`Added ${newSfxTrack.name} to timeline.`);
+  },
+
+  trimLeftAtPlayhead: () => {
     const state = get();
     if (!state.project) return;
     const time = state.currentTimeMs;
+
+    // Prioritize explicitly selected item
+    if (state.selectedClipId) {
+      const clip = state.project.clips.find((c) => c.id === state.selectedClipId);
+      if (clip && time > clip.timelineStartMs && time < clip.timelineStartMs + clip.durationMs) {
+        const delta = time - clip.timelineStartMs;
+        const newDuration = clip.durationMs - delta;
+        if (newDuration >= 100) {
+          const newClips = state.project.clips.map((c) =>
+            c.id === clip.id
+              ? {
+                  ...c,
+                  timelineStartMs: time,
+                  durationMs: newDuration,
+                  sourceOffsetMs: c.sourceOffsetMs + delta,
+                }
+              : c,
+          );
+          set({
+            ...pushHistory(state),
+            project: { ...state.project, clips: newClips },
+          });
+          toast.info("Trimmed clip start to playhead.");
+          return;
+        }
+      }
+    }
+
+    if (state.selectedBlockId) {
+      const block = state.project.zoomBlocks.find((b) => b.id === state.selectedBlockId);
+      if (block && time > block.startTimeMs && time < block.endTimeMs) {
+        if (block.endTimeMs - time >= 200) {
+          const newBlocks = state.project.zoomBlocks.map((b) =>
+            b.id === block.id ? { ...b, startTimeMs: time } : b,
+          );
+          set({
+            ...pushHistory(state),
+            project: { ...state.project, zoomBlocks: newBlocks },
+          });
+          toast.info("Trimmed zoom block start to playhead.");
+          return;
+        }
+      }
+    }
+
+    if (state.selectedTextId) {
+      const text = state.project.textOverlays?.find((t) => t.id === state.selectedTextId);
+      if (text && time > text.startTimeMs && time < text.startTimeMs + text.durationMs) {
+        const delta = time - text.startTimeMs;
+        const newDuration = text.durationMs - delta;
+        if (newDuration >= 100) {
+          const newTexts = (state.project.textOverlays || []).map((t) =>
+            t.id === text.id
+              ? {
+                  ...t,
+                  startTimeMs: time,
+                  durationMs: newDuration,
+                }
+              : t,
+          );
+          set({
+            ...pushHistory(state),
+            project: { ...state.project, textOverlays: newTexts },
+          });
+          toast.info("Trimmed text start to playhead.");
+          return;
+        }
+      }
+    }
+
+    if (state.selectedAudioId) {
+      const audio = state.project.audioTracks?.find((a) => a.id === state.selectedAudioId);
+      if (audio && time > audio.startTimeMs && time < audio.startTimeMs + audio.durationMs) {
+        const delta = time - audio.startTimeMs;
+        const newDuration = audio.durationMs - delta;
+        if (newDuration >= 100) {
+          const newAudios = (state.project.audioTracks || []).map((a) =>
+            a.id === audio.id
+              ? {
+                  ...a,
+                  startTimeMs: time,
+                  durationMs: newDuration,
+                }
+              : a,
+          );
+          set({
+            ...pushHistory(state),
+            project: { ...state.project, audioTracks: newAudios },
+          });
+          toast.info("Trimmed audio start to playhead.");
+          return;
+        }
+      }
+    }
+
+    // Default: find video clip intersecting playhead
+    const defaultClip = state.project.clips.find(
+      (c) => time > c.timelineStartMs && time < c.timelineStartMs + c.durationMs,
+    );
+    if (defaultClip) {
+      const delta = time - defaultClip.timelineStartMs;
+      const newDuration = defaultClip.durationMs - delta;
+      if (newDuration >= 100) {
+        const newClips = state.project.clips.map((c) =>
+          c.id === defaultClip.id
+            ? {
+                ...c,
+                timelineStartMs: time,
+                durationMs: newDuration,
+                sourceOffsetMs: c.sourceOffsetMs + delta,
+              }
+            : c,
+        );
+        set({
+          ...pushHistory(state),
+          project: { ...state.project, clips: newClips },
+        });
+        toast.info("Trimmed clip start to playhead.");
+        return;
+      }
+    }
+  },
+
+  trimLeftAtCurrentTime: () => {
+    get().trimLeftAtPlayhead();
+  },
+
+  trimRightAtPlayhead: () => {
+    const state = get();
+    if (!state.project) return;
+    const time = state.currentTimeMs;
+
+    // Prioritize explicitly selected item
+    if (state.selectedClipId) {
+      const clip = state.project.clips.find((c) => c.id === state.selectedClipId);
+      if (clip && time > clip.timelineStartMs && time < clip.timelineStartMs + clip.durationMs) {
+        const newDuration = time - clip.timelineStartMs;
+        if (newDuration >= 100) {
+          const newClips = state.project.clips.map((c) =>
+            c.id === clip.id ? { ...c, durationMs: newDuration } : c,
+          );
+          set({
+            ...pushHistory(state),
+            project: { ...state.project, clips: newClips },
+          });
+          toast.info("Trimmed clip end to playhead.");
+          return;
+        }
+      }
+    }
+
+    if (state.selectedBlockId) {
+      const block = state.project.zoomBlocks.find((b) => b.id === state.selectedBlockId);
+      if (block && time > block.startTimeMs && time < block.endTimeMs) {
+        if (time - block.startTimeMs >= 200) {
+          const newBlocks = state.project.zoomBlocks.map((b) =>
+            b.id === block.id ? { ...b, endTimeMs: time } : b,
+          );
+          set({
+            ...pushHistory(state),
+            project: { ...state.project, zoomBlocks: newBlocks },
+          });
+          toast.info("Trimmed zoom block end to playhead.");
+          return;
+        }
+      }
+    }
+
+    if (state.selectedTextId) {
+      const text = state.project.textOverlays?.find((t) => t.id === state.selectedTextId);
+      if (text && time > text.startTimeMs && time < text.startTimeMs + text.durationMs) {
+        const newDuration = time - text.startTimeMs;
+        if (newDuration >= 100) {
+          const newTexts = (state.project.textOverlays || []).map((t) =>
+            t.id === text.id ? { ...t, durationMs: newDuration } : t,
+          );
+          set({
+            ...pushHistory(state),
+            project: { ...state.project, textOverlays: newTexts },
+          });
+          toast.info("Trimmed text end to playhead.");
+          return;
+        }
+      }
+    }
+
+    if (state.selectedAudioId) {
+      const audio = state.project.audioTracks?.find((a) => a.id === state.selectedAudioId);
+      if (audio && time > audio.startTimeMs && time < audio.startTimeMs + audio.durationMs) {
+        const newDuration = time - audio.startTimeMs;
+        if (newDuration >= 100) {
+          const newAudios = (state.project.audioTracks || []).map((a) =>
+            a.id === audio.id ? { ...a, durationMs: newDuration } : a,
+          );
+          set({
+            ...pushHistory(state),
+            project: { ...state.project, audioTracks: newAudios },
+          });
+          toast.info("Trimmed audio end to playhead.");
+          return;
+        }
+      }
+    }
+
+    // Default: find video clip intersecting playhead
+    const defaultClip = state.project.clips.find(
+      (c) => time > c.timelineStartMs && time < c.timelineStartMs + c.durationMs,
+    );
+    if (defaultClip) {
+      const newDuration = time - defaultClip.timelineStartMs;
+      if (newDuration >= 100) {
+        const newClips = state.project.clips.map((c) =>
+          c.id === defaultClip.id ? { ...c, durationMs: newDuration } : c,
+        );
+        set({
+          ...pushHistory(state),
+          project: { ...state.project, clips: newClips },
+        });
+        toast.info("Trimmed clip end to playhead.");
+        return;
+      }
+    }
+  },
+
+  trimRightAtCurrentTime: () => {
+    get().trimRightAtPlayhead();
+  },
+
+  splitAtPlayhead: () => {
+    const state = get();
+    if (!state.project) return;
+    const time = state.currentTimeMs;
+
+    // Check if user has selected audio track to split
+    if (state.selectedAudioId && state.project.audioTracks) {
+      const audio = state.project.audioTracks.find((a) => a.id === state.selectedAudioId);
+      if (audio && time > audio.startTimeMs && time < audio.startTimeMs + audio.durationMs) {
+        const firstDur = time - audio.startTimeMs;
+        const secondDur = audio.durationMs - firstDur;
+        const firstAudio = { ...audio, durationMs: firstDur };
+        const secondAudio = {
+          ...audio,
+          id: `audio-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+          startTimeMs: time,
+          durationMs: secondDur,
+        };
+        const newAudios = state.project.audioTracks.flatMap((a) =>
+          a.id === audio.id ? [firstAudio, secondAudio] : [a],
+        );
+        set({
+          ...pushHistory(state),
+          project: {
+            ...state.project,
+            audioTracks: newAudios,
+          },
+        });
+        toast.info("Split applied to audio track.");
+        return;
+      }
+    }
+
+    // Check if user has selected text overlay to split
+    if (state.selectedTextId && state.project.textOverlays) {
+      const text = state.project.textOverlays.find((t) => t.id === state.selectedTextId);
+      if (text && time > text.startTimeMs && time < text.startTimeMs + text.durationMs) {
+        const firstDur = time - text.startTimeMs;
+        const secondDur = text.durationMs - firstDur;
+        const firstText = { ...text, durationMs: firstDur };
+        const secondText = {
+          ...text,
+          id: `txt-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+          startTimeMs: time,
+          durationMs: secondDur,
+        };
+        const newTexts = state.project.textOverlays.flatMap((t) =>
+          t.id === text.id ? [firstText, secondText] : [t],
+        );
+        set({
+          ...pushHistory(state),
+          project: {
+            ...state.project,
+            textOverlays: newTexts,
+          },
+        });
+        toast.info("Split applied to text overlay.");
+        return;
+      }
+    }
 
     // Split active clip
     let clipSplit = false;
@@ -1560,6 +1931,10 @@ export const useEditor = create<EditorState>((set, get) => ({
       });
       toast.info("Split applied at playhead.");
     }
+  },
+
+  splitAtCurrentTime: () => {
+    get().splitAtPlayhead();
   },
 
   deleteSelected: () => {

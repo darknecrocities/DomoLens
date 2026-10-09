@@ -1,7 +1,7 @@
 import { useEffect, useState, useRef, useCallback } from "react";
 import { createPortal } from "react-dom";
 import { motion, AnimatePresence } from "framer-motion";
-import { ChevronRight, ChevronLeft, X, Sparkles } from "lucide-react";
+import { ChevronRight, ChevronLeft, X } from "lucide-react";
 import { useTutorial, TUTORIAL_STEPS } from "../../store/tutorial";
 import { useEditor } from "../../store/editor";
 
@@ -18,7 +18,7 @@ export function SpotlightTutorial() {
   const isRightSidebarOpen = useEditor((s) => s.isRightSidebarOpen);
   const toggleRightSidebar = useEditor((s) => s.toggleRightSidebar);
   const [cutoutRect, setCutoutRect] = useState<CutoutRect | null>(null);
-  const [cardPlacement, setCardPlacement] = useState<{ top?: number; bottom?: number; left: number }>({ left: 16 });
+  const [cardPlacement, setCardPlacement] = useState<{ top?: number; bottom?: number; left: number }>({ top: 80, left: 16 });
   const cardRef = useRef<HTMLDivElement>(null);
 
   const step = TUTORIAL_STEPS[currentStepIndex];
@@ -26,8 +26,13 @@ export function SpotlightTutorial() {
   // Prepare UI state for step if needed (e.g. open tools sidebar if targeting tools)
   useEffect(() => {
     if (!isActive || !step) return;
-    if (step.targetKey === "tools-panel" && !isRightSidebarOpen) {
+    const needsPanel =
+      step.targetKey === "tools-panel" || step.targetKey === "tools-collapse" || !!step.tab;
+    if (needsPanel && !isRightSidebarOpen) {
       toggleRightSidebar();
+    }
+    if (step.tab) {
+      useEditor.getState().setActiveToolTab(step.tab as never);
     }
   }, [isActive, step, isRightSidebarOpen, toggleRightSidebar]);
 
@@ -51,28 +56,42 @@ export function SpotlightTutorial() {
 
       setCutoutRect(rect);
 
-      // Compute card position (place below if room, otherwise place above, centered horizontally)
+      // Clamp card fully inside viewport, below the 64px header, never covering the target if avoidable
       const windowW = window.innerWidth;
       const windowH = window.innerHeight;
       const cardW = Math.min(420, windowW - 32);
+      const cardH = Math.min(cardRef.current?.offsetHeight ?? 240, windowH - 80);
+      const minTop = 64;
+      const maxTop = Math.max(minTop, windowH - cardH - 16);
+      const maxLeft = Math.max(16, windowW - cardW - 16);
+      const clampX = (v: number) => Math.max(16, Math.min(maxLeft, v));
+      const clampY = (v: number) => Math.max(minTop, Math.min(maxTop, v));
 
-      let idealX = rect.x + (rect.width - cardW) / 2;
-      idealX = Math.max(16, Math.min(windowW - cardW - 16, idealX));
+      const below = rect.y + rect.height + 16;
+      const above = rect.y - cardH - 16;
+      const rightX = rect.x + rect.width + 16;
+      const leftX = rect.x - cardW - 16;
+      const centerX = rect.x + (rect.width - cardW) / 2;
 
-      const spaceBelow = windowH - (rect.y + rect.height);
-      const spaceAbove = rect.y;
-
-      if (spaceBelow >= 220 || spaceBelow >= spaceAbove) {
-        setCardPlacement({
-          top: Math.min(windowH - 240, rect.y + rect.height + 16),
-          left: idealX,
-        });
+      let top: number;
+      let left: number;
+      if (below <= maxTop) {
+        top = below;
+        left = centerX;
+      } else if (above >= minTop) {
+        top = above;
+        left = centerX;
+      } else if (leftX >= 16) {
+        left = leftX;
+        top = rect.y + (rect.height - cardH) / 2;
+      } else if (rightX <= maxLeft) {
+        left = rightX;
+        top = rect.y + (rect.height - cardH) / 2;
       } else {
-        setCardPlacement({
-          bottom: Math.min(windowH - 120, windowH - rect.y + 16),
-          left: idealX,
-        });
+        top = maxTop;
+        left = centerX;
       }
+      setCardPlacement({ top: clampY(top), left: clampX(left) });
     } else {
       // Fallback center if target is not on screen
       setCutoutRect(null);
@@ -203,10 +222,7 @@ export function SpotlightTutorial() {
           {/* Top Row: Badge, Step Counter & Close */}
           <div className="flex items-center justify-between gap-2">
             <div className="flex items-center gap-2">
-              <span className="flex items-center gap-1 rounded-full border border-white/20 bg-white/10 px-2.5 py-0.5 font-mono text-[10px] font-semibold uppercase tracking-wider text-neutral-200">
-                <Sparkles className="size-3 text-white" />
-                {step.badge}
-              </span>
+              
               <span className="font-mono text-xs text-neutral-400">
                 {currentStepIndex + 1} / {TUTORIAL_STEPS.length}
               </span>

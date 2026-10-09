@@ -19,11 +19,22 @@ import {
   Crosshair,
   SunMedium,
   HelpCircle,
+  Check,
+  Star,
+  Flame,
+  Shield,
+  Crown,
+  Heart,
+  User,
 } from "lucide-react";
 import {
   formatDuration,
+  BACKGROUND_CATEGORIES,
+  BACKGROUND_PRESETS,
+  CURSOR_PRESETS,
+  DEFAULT_CURSOR_AVATAR,
+  type CursorAvatar,
   type ClickSoundPreset,
-  type ProjectLooks,
   type TypingSoundPreset,
 } from "@domolens/core";
 import { useEditor, type ToolTab } from "../../store/editor";
@@ -82,6 +93,7 @@ export function ToolsSidebar() {
 
   const [holdDurationSec, setHoldDurationSec] = useState(1.0);
   const [zoomScale, setZoomScale] = useState(1.85);
+  const [selectedBgCategory, setSelectedBgCategory] = useState<string>("all");
 
   if (!isRightSidebarOpen) {
     return (
@@ -127,6 +139,7 @@ export function ToolsSidebar() {
             type="button"
             onClick={() => useTutorial.getState().startTutorial()}
             className="rounded p-1 text-fg-muted hover:bg-ink-800 hover:text-white transition-colors"
+            data-tutorial-target="tutorial-help"
             title="Studio Walkthrough Tutorial"
           >
             <HelpCircle className="size-4" />
@@ -135,6 +148,7 @@ export function ToolsSidebar() {
             type="button"
             onClick={toggleRightSidebar}
             className="rounded p-1 text-fg-muted hover:bg-ink-800 hover:text-fg transition-colors"
+            data-tutorial-target="tools-collapse"
             title="Collapse Tools Panel"
           >
             <ChevronRight className="size-4" />
@@ -148,6 +162,7 @@ export function ToolsSidebar() {
           <button
             key={tab.id}
             type="button"
+            data-tutorial-target={`tab-${tab.id}`}
             onClick={() => setActiveToolTab(tab.id)}
             className={`flex flex-1 flex-col items-center justify-center rounded-lg py-1.5 px-1 text-[10px] font-semibold transition-all ${
               activeToolTab === tab.id
@@ -1308,29 +1323,113 @@ export function ToolsSidebar() {
         {/* TAB 4: CANVAS & LOOKS */}
         {activeToolTab === "looks" && (
           <div className="space-y-4">
-            <span className="text-[11px] font-semibold uppercase tracking-wider text-fg-faint">
-              Canvas Presets
-            </span>
+            {/* Header */}
+            <div className="flex items-center justify-between">
+              <span className="text-[11px] font-semibold uppercase tracking-wider text-fg-faint">
+                Canvas Presets
+              </span>
+              <span className="text-[10px] text-fg-muted font-mono">
+                {BACKGROUND_PRESETS.length} Presets
+              </span>
+            </div>
 
-            <div className="grid grid-cols-2 gap-2">
-              {[
-                { name: "Obsidian", val: "linear-gradient(135deg, #1e2024 0%, #16171a 100%)" },
-                { name: "Monochrome Silver", val: "linear-gradient(135deg, #71717a 0%, #27272a 100%)" },
-                { name: "Pure Black", val: "linear-gradient(135deg, #09090b 0%, #18181b 100%)" },
-                { name: "Studio Charcoal", val: "linear-gradient(135deg, #27272a 0%, #09090b 100%)" },
-              ].map((bg) => (
-                <button
-                  key={bg.name}
-                  type="button"
-                  onClick={() => updateLooks({ backgroundValue: bg.val })}
-                  className="rounded-lg border border-ink-800 p-2 text-left hover:border-white transition-colors"
-                  style={{ background: bg.val }}
-                >
-                  <span className="block text-[11px] font-bold text-white drop-shadow-sm">
-                    {bg.name}
-                  </span>
-                </button>
-              ))}
+            {/* Category Filter Tabs */}
+            <div className="flex gap-1 overflow-x-auto pb-1 scrollbar-none text-[10px]">
+              <button
+                type="button"
+                onClick={() => setSelectedBgCategory("all")}
+                className={`shrink-0 rounded-md px-2 py-1 font-medium transition-colors ${
+                  selectedBgCategory === "all"
+                    ? "bg-white text-black font-semibold shadow-sm"
+                    : "bg-ink-900 text-fg-muted hover:text-white hover:bg-ink-800 border border-ink-800"
+                }`}
+              >
+                All ({BACKGROUND_PRESETS.length})
+              </button>
+              {BACKGROUND_CATEGORIES.map((cat) => {
+                const count = BACKGROUND_PRESETS.filter((p) => p.category === cat.id).length;
+                const isActive = selectedBgCategory === cat.id;
+                return (
+                  <button
+                    key={cat.id}
+                    type="button"
+                    onClick={() => setSelectedBgCategory(cat.id)}
+                    className={`shrink-0 rounded-md px-2 py-1 font-medium transition-colors whitespace-nowrap ${
+                      isActive
+                        ? "bg-white text-black font-semibold shadow-sm"
+                        : "bg-ink-900 text-fg-muted hover:text-white hover:bg-ink-800 border border-ink-800"
+                    }`}
+                  >
+                    {cat.label} ({count})
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* Categorized Preset Selector Grid */}
+            <div className="max-h-80 overflow-y-auto space-y-3.5 pr-1 scrollbar-thin">
+              {(selectedBgCategory === "all"
+                ? BACKGROUND_CATEGORIES
+                : BACKGROUND_CATEGORIES.filter((c) => c.id === selectedBgCategory)
+              ).map((cat) => {
+                const catPresets = BACKGROUND_PRESETS.filter((p) => p.category === cat.id);
+                if (catPresets.length === 0) return null;
+
+                return (
+                  <div key={cat.id} className="space-y-1.5">
+                    <div className="flex items-center justify-between text-[10px] text-fg-muted font-medium">
+                      <span className="uppercase tracking-wider text-fg-faint font-semibold">
+                        {cat.label}
+                      </span>
+                      <span className="text-[9px] text-fg-faint font-mono">
+                        {catPresets.length}
+                      </span>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-2">
+                      {catPresets.map((preset) => {
+                        const isSelected = project?.looks.backgroundValue === preset.value;
+                        return (
+                          <button
+                            key={preset.id}
+                            type="button"
+                            onClick={() =>
+                              updateLooks({
+                                backgroundType: preset.type,
+                                backgroundValue: preset.value,
+                              })
+                            }
+                            className={`group relative h-16 w-full overflow-hidden rounded-lg border text-left transition-all ${
+                              isSelected
+                                ? "border-white ring-2 ring-white/60 shadow-md scale-[1.02]"
+                                : "border-ink-800 hover:border-neutral-500 hover:scale-[1.01]"
+                            }`}
+                            style={{ background: preset.value }}
+                            title={`${preset.name} (${cat.label})`}
+                          >
+                            {/* Contrast Protection Scrim */}
+                            <div className="absolute inset-0 flex flex-col justify-between p-2 bg-gradient-to-t from-black/80 via-black/25 to-transparent">
+                              <div className="flex items-center justify-between">
+                                <span className="text-[8px] font-semibold uppercase tracking-wider text-white/75 truncate">
+                                  {preset.type}
+                                </span>
+                                {isSelected && (
+                                  <div className="flex size-3.5 items-center justify-center rounded-full bg-white text-black shadow">
+                                    <Check className="size-2.5 stroke-[3]" />
+                                  </div>
+                                )}
+                              </div>
+                              <span className="text-[11px] font-bold text-white drop-shadow-sm truncate">
+                                {preset.name}
+                              </span>
+                            </div>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              })}
             </div>
 
             <div className="space-y-3 pt-2">
@@ -1558,29 +1657,308 @@ export function ToolsSidebar() {
               )}
             </div>
 
-            {/* 2. Cursor Size Multiplier */}
+            {/* 2. Expanded Cursor Size Multiplier & Quick Presets */}
             <div className="rounded-xl border border-ink-800 bg-ink-900/80 p-3 shadow-sm space-y-2">
               <div className="flex justify-between text-[11px]">
                 <span className="text-fg-muted">Cursor Size</span>
                 <span className="font-mono text-white font-semibold">
-                  {Math.round((project?.looks.cursorSize ?? 1.4) * 100)}%
+                  {(project?.looks.cursorSize ?? 1.4).toFixed(2)}x ({Math.round((project?.looks.cursorSize ?? 1.4) * 100)}%)
                 </span>
               </div>
               <input
                 type="range"
-                min="1.0"
-                max="2.5"
-                step="0.1"
+                min="0.6"
+                max="3.0"
+                step="0.05"
                 value={project?.looks.cursorSize ?? 1.4}
                 onChange={(e) => updateLooks({ cursorSize: parseFloat(e.target.value) })}
                 className="w-full accent-white cursor-pointer h-1.5 bg-ink-800 rounded-lg"
               />
+
+              {/* Quick Presets: S, M, L, XL */}
+              <div className="grid grid-cols-4 gap-1.5 pt-1">
+                {[
+                  { label: "S", value: 0.8, tooltip: "Small (0.8x)" },
+                  { label: "M", value: 1.4, tooltip: "Medium (1.4x - Default)" },
+                  { label: "L", value: 2.0, tooltip: "Large (2.0x)" },
+                  { label: "XL", value: 2.8, tooltip: "Extra Large (2.8x)" },
+                ].map((preset) => {
+                  const isPresetActive = Math.abs((project?.looks.cursorSize ?? 1.4) - preset.value) < 0.04;
+                  return (
+                    <button
+                      key={preset.label}
+                      type="button"
+                      onClick={() => updateLooks({ cursorSize: preset.value })}
+                      className={`rounded-md py-1 text-[10px] font-semibold transition-all ${
+                        isPresetActive
+                          ? "bg-white text-black font-bold shadow-sm"
+                          : "bg-ink-800 text-fg-muted hover:text-white hover:bg-ink-700"
+                      }`}
+                      title={preset.tooltip}
+                    >
+                      {preset.label} ({preset.value}x)
+                    </button>
+                  );
+                })}
+              </div>
+
               <p className="text-[10px] text-fg-faint">
-                Scales vector pointer for crisp high-DPI viewing.
+                Smooth vector pointer scale from 0.6x (compact) to 3.0x (presentation).
               </p>
             </div>
 
-            {/* 3. Trajectory Smoothing Presets */}
+            {/* 3. Presenter Avatar Badge Customization Controls */}
+            {(() => {
+              const avatar = project?.looks.cursorAvatar ?? DEFAULT_CURSOR_AVATAR;
+              const updateAvatar = (partial: Partial<CursorAvatar>) => {
+                updateLooks({
+                  cursorAvatar: {
+                    ...DEFAULT_CURSOR_AVATAR,
+                    ...(project?.looks.cursorAvatar ?? {}),
+                    ...partial,
+                  },
+                });
+              };
+
+              return (
+                <div className="rounded-xl border border-ink-800 bg-ink-900/80 p-3 shadow-sm space-y-3">
+                  {/* Avatar Enable Toggle */}
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <span className="block text-xs font-semibold text-white">Presenter Avatar Badge</span>
+                      <span className="block text-[10px] text-fg-faint">
+                        Display user badge / icon pinned to cursor
+                      </span>
+                    </div>
+                    <input
+                      type="checkbox"
+                      checked={Boolean(avatar.enabled)}
+                      onChange={(e) => updateAvatar({ enabled: e.target.checked })}
+                      className="size-4 accent-white rounded cursor-pointer"
+                    />
+                  </div>
+
+                  {avatar.enabled && (
+                    <div className="space-y-3 pt-2 border-t border-ink-800/80">
+                      {/* Badge Type Selector */}
+                      <div>
+                        <label className="text-[10px] font-medium text-fg-muted block mb-1">Badge Type</label>
+                        <div className="grid grid-cols-4 gap-1">
+                          {[
+                            { id: "initials" as const, label: "Initials" },
+                            { id: "icon" as const, label: "Icon" },
+                            { id: "text" as const, label: "Text" },
+                            { id: "image" as const, label: "Photo" },
+                          ].map((t) => {
+                            const isTypeActive = avatar.type === t.id;
+                            return (
+                              <button
+                                key={t.id}
+                                type="button"
+                                onClick={() => {
+                                  let defaultVal = avatar.value;
+                                  if (t.id === "initials" && !defaultVal) defaultVal = "DL";
+                                  if (t.id === "icon" && !defaultVal) defaultVal = "sparkles";
+                                  if (t.id === "text" && !defaultVal) defaultVal = "Host";
+                                  updateAvatar({ type: t.id, value: defaultVal });
+                                }}
+                                className={`rounded-md py-1 text-[10px] font-semibold transition-all ${
+                                  isTypeActive
+                                    ? "bg-white text-black font-bold shadow-sm"
+                                    : "bg-ink-800 text-fg-muted hover:text-white hover:bg-ink-700"
+                                }`}
+                              >
+                                {t.label}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+
+                      {/* Badge Value Input */}
+                      {avatar.type === "initials" && (
+                        <div>
+                          <label className="text-[10px] font-medium text-fg-muted block mb-1">
+                            Initials (1-3 letters)
+                          </label>
+                          <input
+                            type="text"
+                            maxLength={3}
+                            value={avatar.value || ""}
+                            placeholder="DL"
+                            onChange={(e) => updateAvatar({ value: e.target.value.toUpperCase() })}
+                            className="w-full rounded-md border border-neutral-700 bg-neutral-900 px-2 py-1 text-xs text-white font-mono uppercase"
+                          />
+                        </div>
+                      )}
+
+                      {avatar.type === "icon" && (
+                        <div>
+                          <label className="text-[10px] font-medium text-fg-muted block mb-1">
+                            Preset Icon
+                          </label>
+                          <div className="grid grid-cols-5 gap-1.5">
+                            {[
+                              { id: "sparkles", label: "Sparkles", Icon: Sparkles },
+                              { id: "star", label: "Star", Icon: Star },
+                              { id: "zap", label: "Zap", Icon: Zap },
+                              { id: "flame", label: "Flame", Icon: Flame },
+                              { id: "shield", label: "Shield", Icon: Shield },
+                              { id: "crown", label: "Crown", Icon: Crown },
+                              { id: "check", label: "Check", Icon: Check },
+                              { id: "heart", label: "Heart", Icon: Heart },
+                              { id: "user", label: "User", Icon: User },
+                            ].map(({ id, label, Icon }) => {
+                              const isSelectedIcon = (avatar.value || "sparkles") === id;
+                              return (
+                                <button
+                                  key={id}
+                                  type="button"
+                                  onClick={() => updateAvatar({ value: id, icon: id })}
+                                  className={`flex items-center justify-center p-1.5 rounded-md border transition-all ${
+                                    isSelectedIcon
+                                      ? "border-white bg-white/20 text-white"
+                                      : "border-ink-800 bg-ink-950 text-fg-muted hover:text-white hover:border-neutral-600"
+                                  }`}
+                                  title={label}
+                                >
+                                  <Icon className="size-3.5" />
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      )}
+
+                      {avatar.type === "text" && (
+                        <div>
+                          <label className="text-[10px] font-medium text-fg-muted block mb-1">
+                            Text or Emoji
+                          </label>
+                          <input
+                            type="text"
+                            maxLength={10}
+                            value={avatar.value || ""}
+                            placeholder="Host or 🚀"
+                            onChange={(e) => updateAvatar({ value: e.target.value, text: e.target.value })}
+                            className="w-full rounded-md border border-neutral-700 bg-neutral-900 px-2 py-1 text-xs text-white"
+                          />
+                        </div>
+                      )}
+
+                      {avatar.type === "image" && (
+                        <div>
+                          <label className="text-[10px] font-medium text-fg-muted block mb-1">
+                            Photo URL
+                          </label>
+                          <input
+                            type="url"
+                            value={avatar.value || ""}
+                            placeholder="https://example.com/avatar.png"
+                            onChange={(e) => updateAvatar({ value: e.target.value, imageUrl: e.target.value })}
+                            className="w-full rounded-md border border-neutral-700 bg-neutral-900 px-2 py-1 text-xs text-white font-mono"
+                          />
+                        </div>
+                      )}
+
+                      {/* Badge Accent Color */}
+                      <div>
+                        <div className="flex items-center justify-between mb-1">
+                          <label className="text-[10px] font-medium text-fg-muted">Badge Color</label>
+                          <span className="font-mono text-[10px] text-white">{avatar.color || "#6366f1"}</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="color"
+                            value={avatar.color || "#6366f1"}
+                            onChange={(e) => updateAvatar({ color: e.target.value })}
+                            className="size-6 rounded cursor-pointer bg-transparent border-0 p-0"
+                          />
+                          <div className="flex flex-wrap gap-1">
+                            {[
+                              "#6366f1",
+                              "#ec4899",
+                              "#10b981",
+                              "#f59e0b",
+                              "#3b82f6",
+                              "#8b5cf6",
+                              "#ef4444",
+                              "#06b6d4",
+                            ].map((c) => (
+                              <button
+                                key={c}
+                                type="button"
+                                onClick={() => updateAvatar({ color: c })}
+                                className={`size-4 rounded-full border transition-transform ${
+                                  (avatar.color || "#6366f1") === c
+                                    ? "scale-125 border-white ring-1 ring-white"
+                                    : "border-ink-800"
+                                }`}
+                                style={{ backgroundColor: c }}
+                              />
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Role Subtitle Pill */}
+                      <div>
+                        <label className="text-[10px] font-medium text-fg-muted block mb-1">
+                          Role Subtitle Pill (optional)
+                        </label>
+                        <input
+                          type="text"
+                          maxLength={18}
+                          value={avatar.badgeLabel || ""}
+                          placeholder="e.g. Presenter, Speaker, Host"
+                          onChange={(e) => updateAvatar({ badgeLabel: e.target.value })}
+                          className="w-full rounded-md border border-neutral-700 bg-neutral-900 px-2 py-1 text-xs text-white"
+                        />
+                      </div>
+
+                      {/* Live Preview Widget */}
+                      <div className="rounded-lg bg-ink-950 p-2 border border-ink-800/80 flex items-center justify-between">
+                        <span className="text-[10px] text-fg-faint">Live Preview:</span>
+                        <div className="flex items-center gap-1.5">
+                          <div
+                            className="flex size-6 shrink-0 items-center justify-center rounded-full text-[10px] font-bold text-white shadow-sm overflow-hidden"
+                            style={{ backgroundColor: avatar.color || "#6366f1" }}
+                          >
+                            {avatar.type === "initials" && (avatar.value || "DL")}
+                            {avatar.type === "text" && (avatar.value || "Host")}
+                            {avatar.type === "icon" && (
+                              avatar.value === "star" ? <Star className="size-3" /> :
+                              avatar.value === "zap" ? <Zap className="size-3" /> :
+                              avatar.value === "flame" ? <Flame className="size-3" /> :
+                              avatar.value === "shield" ? <Shield className="size-3" /> :
+                              avatar.value === "crown" ? <Crown className="size-3" /> :
+                              avatar.value === "check" ? <Check className="size-3" /> :
+                              avatar.value === "heart" ? <Heart className="size-3" /> :
+                              avatar.value === "user" ? <User className="size-3" /> :
+                              <Sparkles className="size-3" />
+                            )}
+                            {avatar.type === "image" && (
+                              avatar.value ? (
+                                <img src={avatar.value} alt="Avatar" className="size-full object-cover" />
+                              ) : (
+                                <User className="size-3" />
+                              )
+                            )}
+                          </div>
+                          {avatar.badgeLabel && (
+                            <span className="rounded bg-white/10 px-1.5 py-0.5 text-[9px] font-medium text-white tracking-wide">
+                              {avatar.badgeLabel}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
+
+            {/* 4. Trajectory Smoothing Presets */}
             <div className="space-y-2">
               <label className="text-[11px] text-fg-muted block">Cursor Motion Smoothing</label>
               <div className="grid grid-cols-3 gap-1.5">
@@ -1608,30 +1986,32 @@ export function ToolsSidebar() {
               </div>
             </div>
 
-            {/* 4. Pointer Style */}
+            {/* 5. Pointer Style (Catalog of 24 Presets) */}
             <div className="space-y-2">
-              <label className="text-[11px] text-fg-muted block">Cursor Pointer Style</label>
-              <div className="grid grid-cols-2 gap-2">
-                {[
-                  { id: "hidden", label: "Hidden (Native)" },
-                  { id: "mac", label: "Mac Studio" },
-                  { id: "default", label: "Default OS" },
-                  { id: "dot", label: "Focus Dot" },
-                  { id: "ring", label: "Glow Ring" },
-                ].map((cur) => (
-                  <button
-                    key={cur.id}
-                    type="button"
-                    onClick={() => updateLooks({ cursorStyle: cur.id as ProjectLooks["cursorStyle"] })}
-                    className={`rounded-lg border p-2 text-center text-xs font-medium transition-all ${
-                      project?.looks.cursorStyle === cur.id
-                        ? "border-white bg-white/20 text-white font-bold"
-                        : "border-ink-800 bg-ink-900 text-fg-muted hover:text-fg hover:border-neutral-600"
-                    }`}
-                  >
-                    {cur.label}
-                  </button>
-                ))}
+              <div className="flex justify-between items-center">
+                <label className="text-[11px] text-fg-muted block">Cursor Pointer Style</label>
+                <span className="text-[10px] text-fg-faint font-mono">24 Designs</span>
+              </div>
+              <div className="grid grid-cols-2 gap-1.5 max-h-56 overflow-y-auto pr-1 scrollbar-thin">
+                {CURSOR_PRESETS.map((cur) => {
+                  const isActive = project?.looks.cursorStyle === cur.id;
+                  return (
+                    <button
+                      key={cur.id}
+                      type="button"
+                      onClick={() => updateLooks({ cursorStyle: cur.id, showCursor: cur.id !== "hidden" })}
+                      className={`rounded-lg border p-2 text-left text-xs transition-all ${
+                        isActive
+                          ? "border-white bg-white/20 text-white font-bold ring-1 ring-white/50"
+                          : "border-ink-800 bg-ink-900 text-fg-muted hover:text-fg hover:border-neutral-600"
+                      }`}
+                      title={`${cur.name}: ${cur.description}`}
+                    >
+                      <span className="block truncate font-semibold text-[11px] text-fg">{cur.name}</span>
+                      <span className="block text-[9px] text-fg-faint capitalize">{cur.category}</span>
+                    </button>
+                  );
+                })}
               </div>
             </div>
 
