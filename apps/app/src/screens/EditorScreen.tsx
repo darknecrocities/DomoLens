@@ -22,7 +22,15 @@ import { TemplatePickerModal } from "../components/editor/TemplatePickerModal";
 import { SettingsModal } from "../components/settings/SettingsModal";
 import { DeleteModal } from "../components/home/DeleteModal";
 import { SpotlightTutorial } from "../components/editor/SpotlightTutorial";
-import { useEditor } from "../store/editor";
+import { ResizeHandle } from "../components/editor/ResizeHandle";
+import {
+  useEditor,
+  DEFAULT_LLM_SIDEBAR_WIDTH,
+  DEFAULT_TOOLS_SIDEBAR_WIDTH,
+  DEFAULT_TIMELINE_HEIGHT,
+  MAX_TOOLS_SIDEBAR_WIDTH,
+  MAX_TIMELINE_HEIGHT,
+} from "../store/editor";
 import { useNav } from "../store/nav";
 import { useTutorial } from "../store/tutorial";
 
@@ -53,6 +61,37 @@ export function EditorScreen({ id }: EditorScreenProps) {
   const isTemplateModalOpen = useEditor((s) => s.isTemplateModalOpen);
   const setTemplateModalOpen = useEditor((s) => s.setTemplateModalOpen);
   const renameProject = useEditor((s) => s.renameProject);
+
+  // Studio Resizable Layout Dimensions & Setters
+  const llmSidebarWidth = useEditor((s) => s.llmSidebarWidth);
+  const toolsSidebarWidth = useEditor((s) => s.toolsSidebarWidth);
+  const timelineHeight = useEditor((s) => s.timelineHeight);
+  const setLlmSidebarWidth = useEditor((s) => s.setLlmSidebarWidth);
+  const setToolsSidebarWidth = useEditor((s) => s.setToolsSidebarWidth);
+  const setTimelineHeight = useEditor((s) => s.setTimelineHeight);
+
+  // Responsive boundary safety clamping for Windows Snap & display scaling
+  useEffect(() => {
+    const handleWindowResize = () => {
+      if (typeof window === "undefined") return;
+      const maxSidebar = Math.min(MAX_TOOLS_SIDEBAR_WIDTH, Math.floor(window.innerWidth * 0.42));
+      const curTools = useEditor.getState().toolsSidebarWidth;
+      if (curTools > maxSidebar) {
+        useEditor.getState().setToolsSidebarWidth(maxSidebar);
+      }
+      const curLlm = useEditor.getState().llmSidebarWidth;
+      if (curLlm > maxSidebar) {
+        useEditor.getState().setLlmSidebarWidth(maxSidebar);
+      }
+      const maxTimeline = Math.min(MAX_TIMELINE_HEIGHT, Math.floor(window.innerHeight * 0.6));
+      const curTimeline = useEditor.getState().timelineHeight;
+      if (curTimeline > maxTimeline) {
+        useEditor.getState().setTimelineHeight(maxTimeline);
+      }
+    };
+    window.addEventListener("resize", handleWindowResize, { passive: true });
+    return () => window.removeEventListener("resize", handleWindowResize);
+  }, []);
 
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
@@ -296,23 +335,67 @@ export function EditorScreen({ id }: EditorScreenProps) {
         </div>
       </header>
 
-      {/* 2. Main Studio Workspace: Fluidly Responsive across Desktop and Android Mobile */}
+      {/* 2. Main Studio Workspace: Fluidly Responsive with Resizable Line Borders */}
       <div className="flex flex-1 overflow-hidden relative">
-        {/* DESKTOP LAYOUT (>= md): True 3-Panel Studio */}
+        {/* DESKTOP LAYOUT (>= md): True 3-Panel Studio with Interactive Draggable Borders */}
         <div className="hidden md:flex flex-1 overflow-hidden">
           {/* LEFT PANEL: LLM AI DIRECTOR */}
           <LlmSidebar />
 
-          {/* CENTER PANEL: CANVAS + TIMELINE */}
+          {/* Left Vertical Line Border Splitter */}
+          {isLeftSidebarOpen && (
+            <ResizeHandle
+              orientation="vertical"
+              ariaLabel="Resize AI Director sidebar width"
+              onResize={(delta) => {
+                setLlmSidebarWidth(llmSidebarWidth + delta);
+              }}
+              onReset={() => {
+                setLlmSidebarWidth(DEFAULT_LLM_SIDEBAR_WIDTH);
+              }}
+            />
+          )}
+
+          {/* CENTER PANEL: CANVAS + KEYFRAMES TIMELINE */}
           <div className="flex flex-1 flex-col overflow-hidden min-w-0">
             {/* Canvas Player Area with live mouse tracking */}
-            <div className="relative flex flex-1 items-center justify-center overflow-hidden p-2 sm:p-3 min-h-[180px]">
+            <div className="relative flex flex-1 items-center justify-center overflow-hidden p-2 sm:p-3 min-h-[140px]">
               <VideoCanvas project={project} />
             </div>
+
+            {/* Bottom Keyframes Section Resizable Line Border */}
+            <ResizeHandle
+              orientation="horizontal"
+              ariaLabel="Resize keyframes timeline section height"
+              onResize={(delta) => {
+                // Dragging DOWN (positive delta) makes canvas larger and timeline smaller
+                // Dragging UP (negative delta) makes canvas smaller and timeline taller
+                setTimelineHeight(timelineHeight - delta);
+              }}
+              onReset={() => {
+                setTimelineHeight(DEFAULT_TIMELINE_HEIGHT);
+              }}
+            />
 
             {/* Bottom Multi-Track Keyframe Timeline */}
             <Timeline project={project} />
           </div>
+
+          {/* Right Vertical Line Border Splitter */}
+          {isRightSidebarOpen && (
+            <ResizeHandle
+              orientation="vertical"
+              ariaLabel="Resize Tools and Effects sidebar width"
+              onResize={(delta) => {
+                // Dragging LEFT (negative delta) widens the right sidebar
+                // Dragging RIGHT (positive delta) narrows the right sidebar
+                setToolsSidebarWidth(toolsSidebarWidth - delta);
+              }}
+              onReset={() => {
+                setToolsSidebarWidth(DEFAULT_TOOLS_SIDEBAR_WIDTH);
+              }}
+            />
+          )}
 
           {/* RIGHT PANEL: COMPREHENSIVE TOOLS */}
           <ToolsSidebar />
@@ -322,9 +405,19 @@ export function EditorScreen({ id }: EditorScreenProps) {
         <div className="flex md:hidden flex-1 flex-col overflow-hidden">
           {mobileTab === "canvas" && (
             <div className="flex flex-1 flex-col overflow-hidden">
-              <div className="relative flex flex-1 items-center justify-center overflow-hidden p-2 min-h-[160px]">
+              <div className="relative flex flex-1 items-center justify-center overflow-hidden p-2 min-h-[140px]">
                 <VideoCanvas project={project} />
               </div>
+              <ResizeHandle
+                orientation="horizontal"
+                ariaLabel="Resize keyframes timeline section height"
+                onResize={(delta) => {
+                  setTimelineHeight(timelineHeight - delta);
+                }}
+                onReset={() => {
+                  setTimelineHeight(DEFAULT_TIMELINE_HEIGHT);
+                }}
+              />
               <Timeline project={project} />
             </div>
           )}

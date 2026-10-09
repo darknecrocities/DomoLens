@@ -42,6 +42,7 @@ export function LlmSidebar() {
   const ollamaEndpoint = useEditor((s) => s.ollamaEndpoint);
   const checkOllamaStatus = useEditor((s) => s.checkOllamaStatus);
   const setSelectedOllamaModel = useEditor((s) => s.setSelectedOllamaModel);
+  const llmSidebarWidth = useEditor((s) => s.llmSidebarWidth);
 
   const [input, setInput] = useState("");
   const [isOllamaDrawerOpen, setIsOllamaDrawerOpen] = useState(false);
@@ -127,7 +128,13 @@ export function LlmSidebar() {
   ];
 
   return (
-    <aside className="flex h-full w-full md:w-80 lg:w-88 shrink-0 flex-col border-r border-ink-800 bg-ink-950/95 backdrop-blur-md z-10 select-none">
+    <aside
+      style={{
+        width: typeof window !== "undefined" && window.innerWidth >= 768 ? `${llmSidebarWidth}px` : "100%",
+        maxWidth: typeof window !== "undefined" && window.innerWidth >= 768 ? `${llmSidebarWidth}px` : "100%",
+      }}
+      className="flex h-full shrink-0 flex-col border-r border-ink-800 bg-ink-950/95 backdrop-blur-md z-10 select-none overflow-hidden"
+    >
       {/* Sidebar Header */}
       <div className="flex h-12 items-center justify-between border-b border-ink-800 px-3 sm:px-4">
         <div className="flex items-center gap-2">

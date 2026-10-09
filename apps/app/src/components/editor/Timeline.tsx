@@ -26,8 +26,9 @@ import {
 import { formatDuration, type AudioTrack, type ProjectData } from "@domolens/core";
 import { copy } from "../../copy/en";
 import { IconButton } from "../ui/IconButton";
-import { useEditor } from "../../store/editor";
+import { useEditor, DEFAULT_TRACK_HEADER_WIDTH } from "../../store/editor";
 import { sfx } from "../../lib/sound-effects";
+import { ResizeHandle } from "./ResizeHandle";
 
 interface TimelineProps {
   project: ProjectData;
@@ -65,6 +66,8 @@ export function Timeline({ project }: TimelineProps) {
   const selectedTextId = useEditor((s) => s.selectedTextId);
   const selectedAudioId = useEditor((s) => s.selectedAudioId);
   const timelineZoom = useEditor((s) => s.timelineZoom);
+  const timelineHeight = useEditor((s) => s.timelineHeight);
+  const timelineTrackHeaderWidth = useEditor((s) => s.timelineTrackHeaderWidth);
   const activeTimelineTool = useEditor((s) => s.activeTimelineTool ?? "select");
   const setActiveTimelineTool = useEditor((s) => s.setActiveTimelineTool);
   const history = useEditor((s) => s.history);
@@ -319,7 +322,10 @@ export function Timeline({ project }: TimelineProps) {
   };
 
   return (
-    <div className="flex flex-col border-t border-ink-800 bg-ink-900 select-none pb-[max(0.5rem,var(--safe-bottom))]">
+    <div
+      style={{ height: `${timelineHeight}px` }}
+      className="flex flex-col shrink-0 border-t border-ink-800 bg-ink-900 select-none overflow-hidden pb-[max(0.25rem,var(--safe-bottom))]"
+    >
       {/* 1. Timeline Controls Toolbar (Responsive with flex-wrap) */}
       <div className="flex flex-wrap items-center justify-between min-h-12 border-b border-ink-800 px-2 sm:px-4 py-1.5 sm:py-0 gap-1.5 sm:gap-2 bg-ink-900/95 overflow-x-auto no-scrollbar">
         {/* Playback Controls & Time */}
@@ -576,9 +582,12 @@ export function Timeline({ project }: TimelineProps) {
       </div>
 
       {/* 2. Visual Tracks Container */}
-      <div data-tutorial-target="timeline-tracks" className="relative px-3 sm:px-4 py-3 flex gap-2 sm:gap-3 items-stretch">
+      <div data-tutorial-target="timeline-tracks" className="relative px-2 sm:px-3 py-2 flex-1 min-h-0 overflow-y-auto flex gap-1 sm:gap-1.5 items-stretch">
         {/* Left Track Headers Sidebar Column */}
-        <div className="flex flex-col gap-1.5 shrink-0 w-24 sm:w-28 md:w-32 select-none py-2 pr-1 sm:pr-2 border-r border-ink-800/70">
+        <div
+          style={{ width: `${timelineTrackHeaderWidth}px` }}
+          className="flex flex-col gap-1.5 shrink-0 select-none py-1 pr-1"
+        >
           {/* TRACK 1: KEYFRAMES HEADER */}
           <div className="h-7 flex items-center justify-between px-2 rounded-md bg-ink-900/60 text-[10px] font-semibold uppercase tracking-wider text-fg-muted group">
             <div className="flex items-center gap-1.5 min-w-0">
@@ -688,6 +697,20 @@ export function Timeline({ project }: TimelineProps) {
             <span className="truncate">Events</span>
           </div>
         </div>
+
+        {/* Resizable Vertical Line Border between Track Headers and Track Viewport */}
+        <ResizeHandle
+          orientation="vertical"
+          ariaLabel="Resize timeline track headers column width"
+          title="Drag horizontally to resize track headers width • Double-click to reset"
+          onResize={(delta) => {
+            const cur = useEditor.getState().timelineTrackHeaderWidth;
+            useEditor.getState().setTimelineTrackHeaderWidth(cur + delta);
+          }}
+          onReset={() => {
+            useEditor.getState().setTimelineTrackHeaderWidth(DEFAULT_TRACK_HEADER_WIDTH);
+          }}
+        />
 
         {/* Right Scrollable Track Viewport (Feature 14) */}
         <div
