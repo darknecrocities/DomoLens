@@ -136,7 +136,7 @@ export function UpdateModal() {
                 className="gap-2 bg-white hover:bg-neutral-200 text-black font-semibold border-0 shadow-lg"
               >
                 <Download className="size-4" />
-                <span>Download & Install</span>
+                <span>{updateInfo.downloadUrl ? "Download Installer" : "Download & Install"}</span>
               </Button>
             </div>
           </div>

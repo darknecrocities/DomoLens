@@ -167,6 +167,12 @@ jobs:
           gh release upload "$TAG" DomoLens-Universal.dmg DomoLens-macOS.dmg "$DMG_FILE" --clobber
           echo "Successfully published DomoLens-Universal.dmg and DomoLens-macOS.dmg to release."
 
+          echo "Publishing macOS auto-updater bundles and signatures..."
+          for f in $(find apps/app/src-tauri/target/release/bundle/macos -type f \( -name "*.tar.gz" -o -name "*.tar.gz.sig" \) 2>/dev/null); do
+            echo "Uploading macOS updater bundle: $f"
+            gh release upload "$TAG" "$f" --clobber || true
+          done
+
       - name: Publish Windows Canonical Artifact
         if: matrix.platform == 'windows-latest'
         shell: bash
@@ -180,6 +186,12 @@ jobs:
             gh release upload "$TAG" DomoLens-Windows-Setup.exe "$EXE_FILE" --clobber
             echo "Successfully published DomoLens-Windows-Setup.exe to release."
           fi
+
+          echo "Publishing Windows auto-updater bundles and signatures..."
+          for f in $(find apps/app/src-tauri/target/release/bundle/nsis -type f \( -name "*.zip" -o -name "*.sig" \) 2>/dev/null); do
+            echo "Uploading Windows updater bundle: $f"
+            gh release upload "$TAG" "$f" --clobber || true
+          done
 
       - name: Publish Linux Canonical Artifact
         if: matrix.platform == 'ubuntu-22.04'
@@ -203,6 +215,16 @@ jobs:
             echo "Successfully published DomoLens-Linux.deb to release."
           fi
 
+          echo "Publishing Linux auto-updater bundles and signatures..."
+          for f in $(find apps/app/src-tauri/target/release/bundle/appimage -type f \( -name "*.tar.gz" -o -name "*.sig" \) 2>/dev/null); do
+            echo "Uploading Linux AppImage updater bundle: $f"
+            gh release upload "$TAG" "$f" --clobber || true
+          done
+          for f in $(find apps/app/src-tauri/target/release/bundle/deb -type f -name "*.sig" 2>/dev/null); do
+            echo "Uploading Linux DEB signature: $f"
+            gh release upload "$TAG" "$f" --clobber || true
+          done
+
   publish-release:
     name: Publish Release
     needs: [create-release, release]
@@ -212,6 +234,15 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+
+      - name: Generate and Upload Updater Manifest
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          TAG="${{ needs.create-release.outputs.tag }}"
+          echo "Generating and publishing latest.json manifest for $TAG..."
+          node scripts/generate-latest-json.cjs "$TAG"
 
       - name: Publish Release Atomically as Latest
         env:

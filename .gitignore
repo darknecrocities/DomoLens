@@ -58,6 +58,7 @@ coverage/
 .env.*.local
 *.local
 tauri-updater.key*
+latest.json
 *.key
 
 # IDEs and Editors

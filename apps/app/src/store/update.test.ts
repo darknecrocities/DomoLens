@@ -160,4 +160,74 @@ describe("useUpdateStore", () => {
     expect(useUpdateStore.getState().status).toBe("error");
     expect(useUpdateStore.getState().errorMessage).toContain("Network connection lost");
   });
+
+  it("compares SemVer versions accurately across varied tag formats", async () => {
+    const { compareSemVer } = await import("./update");
+    expect(compareSemVer("0.1.46", "0.1.43")).toBeGreaterThan(0);
+    expect(compareSemVer("v0.1.46", "0.1.46")).toBe(0);
+    expect(compareSemVer("0.1.9", "0.1.46")).toBeLessThan(0);
+    expect(compareSemVer("1.0.0", "0.9.9")).toBeGreaterThan(0);
+    expect(compareSemVer("v0.2.0-beta", "0.1.9")).toBeGreaterThan(0);
+  });
+
+  it("resolves up-to-date status via GitHub Releases fallback when version matches", async () => {
+    const { checkGitHubReleasesFallback } = await import("./update");
+
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        tag_name: "v0.1.46",
+        name: "DomoLens v0.1.46",
+        published_at: "2026-10-09T18:00:00Z",
+        html_url: "https://github.com/darknecrocities/DomoLens/releases/tag/v0.1.46",
+        assets: [
+          { name: "DomoLens-Windows-Setup.exe", browser_download_url: "https://github.com/win.exe", size: 100 },
+          { name: "DomoLens-macOS.dmg", browser_download_url: "https://github.com/mac.dmg", size: 100 },
+          { name: "DomoLens-Linux.AppImage", browser_download_url: "https://github.com/linux.appimage", size: 100 },
+        ],
+      }),
+    } as any);
+
+    try {
+      const res = await checkGitHubReleasesFallback("0.1.46");
+      expect(res.isHandled).toBe(true);
+      expect(res.status).toBe("up-to-date");
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  it("detects newer version and identifies appropriate platform installer in fallback mode", async () => {
+    const { checkGitHubReleasesFallback } = await import("./update");
+
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        tag_name: "v0.1.46",
+        name: "DomoLens v0.1.46",
+        body: "Performance overhaul and bug fixes",
+        published_at: "2026-10-09T18:00:00Z",
+        html_url: "https://github.com/darknecrocities/DomoLens/releases/tag/v0.1.46",
+        assets: [
+          { name: "DomoLens-Windows-Setup.exe", browser_download_url: "https://github.com/win.exe", size: 100 },
+          { name: "DomoLens-Universal.dmg", browser_download_url: "https://github.com/mac.dmg", size: 100 },
+          { name: "DomoLens-Linux.AppImage", browser_download_url: "https://github.com/linux.appimage", size: 100 },
+        ],
+      }),
+    } as any);
+
+    try {
+      // User is on older version 0.1.9
+      const res = await checkGitHubReleasesFallback("0.1.9");
+      expect(res.isHandled).toBe(true);
+      expect(res.status).toBe("available");
+      expect(res.updateInfo?.version).toBe("0.1.46");
+      expect(res.updateInfo?.currentVersion).toBe("0.1.9");
+      expect(res.updateInfo?.downloadUrl).toBeDefined();
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
 });
