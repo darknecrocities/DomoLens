@@ -23,7 +23,7 @@ describe("template video fit, photo slots and cursor mapping", () => {
     expect(p.x).toBeCloseTo(0.5);
     expect(p.y).toBeCloseTo(0.3);
     const q = mapVideoPointToViewport(0.75, 0.5, 16 / 9, 1);
-    expect(q.x).toBeCloseTo(0.5 + 0.25 * (16 / 9));
+    expect(q.x).toBeCloseTo(0.5 + 0.25 * (1 / (16 / 9)));
   });
 });
 

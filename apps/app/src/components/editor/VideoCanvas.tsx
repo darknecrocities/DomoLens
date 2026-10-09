@@ -444,6 +444,19 @@ export function VideoCanvas({ project, currentTimeMs: propTimeMs }: VideoCanvasP
     }
   }, [effectsState.playbackRate]);
 
+  // When playback starts, immediately seed the zoom layer transform via DOM so
+  // there is no single-frame blank between React removing the inline style and
+  // the first rAF frame writing the correct value.
+  useEffect(() => {
+    if (!isPlaying) return;
+    const layer = zoomLayerRef.current;
+    if (!layer) return;
+    const cam = computeCameraRef.current(currentTimeMs);
+    const mapped = mapVideoPointToViewport(cam.x, cam.y, videoAspectRef.current, viewAspectRef.current);
+    layer.style.transform = `scale(${cam.scale}) translate3d(${(0.5 - mapped.x) * 100}%, ${(0.5 - mapped.y) * 100}%, 0)`;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isPlaying]);
+
   // Master hardware-locked video clock synchronization:
   // When video is playing, video presentation frames drive currentTimeMs with ZERO latency!
   useEffect(() => {
@@ -843,7 +856,12 @@ export function VideoCanvas({ project, currentTimeMs: propTimeMs }: VideoCanvasP
           ref={zoomLayerRef}
           className="relative size-full origin-center will-change-transform"
           style={{
-            transform: `scale(${camera.scale}) translate3d(${(0.5 - camView.x) * 100}%, ${(0.5 - camView.y) * 100}%, 0)`,
+            // When playing, rAF is the SOLE owner of this transform (60fps via direct DOM write).
+            // Setting undefined here prevents React re-renders (throttled to ~12fps via setCurrentTime)
+            // from overwriting the rAF value with a stale frame → eliminates camera shake/flicker.
+            transform: isPlaying
+              ? undefined
+              : `scale(${camera.scale}) translate3d(${(0.5 - camView.x) * 100}%, ${(0.5 - camView.y) * 100}%, 0)`,
             transition: isPlaying ? "none" : "transform 0.1s ease-out",
           }}
         >

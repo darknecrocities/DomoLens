@@ -473,42 +473,84 @@ export const useRecorder = create<RecorderStore>((set, get) => ({
     // Start live speech-to-text transcription when in sfx-transcribe mode
     transcriptSegments = [];
     if (get().recordingMode === "sfx-transcribe") {
-      try {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const SpeechRecognitionAPI: (new () => any) | undefined =
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const SpeechRecognitionAPI: (new () => any) | undefined =
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-        if (SpeechRecognitionAPI) {
-          const recognition = new SpeechRecognitionAPI();
-          recognition.continuous = true;
-          recognition.interimResults = false;
-          recognition.lang = "en-US";
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          recognition.onresult = (event: any) => {
-            if (get().state !== "recording") return;
-            for (let i = event.resultIndex; i < event.results.length; i++) {
-              const result = event.results[i];
-              if (result && result.isFinal) {
-                const fullText: string = result[0]?.transcript?.trim() ?? "";
-                if (!fullText) continue;
-                const startMs = Math.max(0, Date.now() - recordingStartTimestamp);
-                // Chunk into ≤15 word segments
-                const words = fullText.split(/\s+/);
-                for (let w = 0; w < words.length; w += 15) {
-                  const chunk = words.slice(w, w + 15).join(" ");
-                  if (chunk) {
-                    transcriptSegments.push({ text: chunk, startMs });
+        (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+      if (!SpeechRecognitionAPI) {
+        toast.warning("Speech recognition is not supported in this browser. Transcription disabled.");
+      } else {
+        // Request mic permission explicitly for SpeechRecognition (separate from recording mix)
+        const startRecognition = () => {
+          try {
+            const recognition = new SpeechRecognitionAPI();
+            recognition.continuous = true;
+            recognition.interimResults = true; // interim so we catch time accurately
+            recognition.lang = "en-US";
+            recognition.maxAlternatives = 1;
+
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            recognition.onstart = () => {
+              toast.success("🎤 Live transcription active — speak clearly");
+            };
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            recognition.onresult = (event: any) => {
+              if (get().state !== "recording") return;
+              for (let i = event.resultIndex; i < event.results.length; i++) {
+                const result = event.results[i];
+                if (result && result.isFinal) {
+                  const fullText: string = result[0]?.transcript?.trim() ?? "";
+                  if (!fullText) continue;
+                  const startMs = Math.max(0, Date.now() - recordingStartTimestamp);
+                  // Chunk into ≤15 word segments (max per subtitle card)
+                  const words = fullText.split(/\s+/);
+                  for (let w = 0; w < words.length; w += 15) {
+                    const chunk = words.slice(w, w + 15).join(" ");
+                    if (chunk) {
+                      transcriptSegments.push({ text: chunk, startMs });
+                      console.debug("[transcribe]", startMs, chunk);
+                    }
                   }
                 }
               }
-            }
-          };
-          recognition.onerror = () => { /* silent — recognition may restart */ };
-          recognition.start();
-          recognitionInstance = recognition;
+            };
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            recognition.onerror = (e: any) => {
+              // Auto-restart on recoverable errors (e.g. no-speech timeout)
+              if (e.error === "no-speech" || e.error === "audio-capture") {
+                if (get().state === "recording" && recognitionInstance) {
+                  try { recognitionInstance.start(); } catch { /* ignore */ }
+                }
+              } else if (e.error === "not-allowed") {
+                toast.error("Microphone permission denied — transcription stopped.");
+              } else {
+                console.warn("[transcribe] recognition error:", e.error);
+              }
+            };
+            recognition.onend = () => {
+              // Restart if still recording (continuous recognition can end unexpectedly)
+              if (get().state === "recording" && recognitionInstance) {
+                try { recognitionInstance.start(); } catch { /* ignore */ }
+              }
+            };
+            recognition.start();
+            recognitionInstance = recognition;
+          } catch (recErr) {
+            console.warn("SpeechRecognition start error:", recErr);
+            toast.warning("Could not start transcription: " + String(recErr));
+          }
+        };
+
+        // Ensure mic permission is granted before starting recognition
+        if (navigator.mediaDevices?.getUserMedia) {
+          navigator.mediaDevices.getUserMedia({ audio: true })
+            .then(() => startRecognition())
+            .catch(() => {
+              toast.error("Microphone access denied — transcription requires mic permission.");
+            });
+        } else {
+          startRecognition();
         }
-      } catch (recErr) {
-        console.warn("SpeechRecognition start error:", recErr);
       }
     }
 
