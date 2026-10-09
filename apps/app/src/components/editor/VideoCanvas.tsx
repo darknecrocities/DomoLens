@@ -820,7 +820,7 @@ export function VideoCanvas({ project, currentTimeMs: propTimeMs }: VideoCanvasP
         ref={viewportRef}
         data-tutorial-target="canvas-player"
         onClick={handleCanvasClick}
-        className="relative max-h-full max-w-full overflow-hidden bg-ink-950 cursor-crosshair group select-none transition-transform duration-300"
+        className="relative flex flex-col max-h-full max-w-full overflow-hidden bg-ink-950 cursor-crosshair group select-none transition-transform duration-300"
         style={{
           aspectRatio: viewportAspectRatio,
           borderRadius: `${looks.borderRadius}px`,
@@ -864,7 +864,7 @@ export function VideoCanvas({ project, currentTimeMs: propTimeMs }: VideoCanvasP
           <>
             {/* macOS Window */}
             {looks.windowFrame === "macos" && (
-              <div className="absolute top-0 inset-x-0 h-7 z-30 flex items-center justify-between px-3 bg-[#1e1e20]/90 backdrop-blur-md border-b border-white/10 select-none pointer-events-none">
+              <div className="relative w-full shrink-0 h-7 z-30 flex items-center justify-between px-3 bg-[#1e1e20]/90 backdrop-blur-md border-b border-white/10 select-none pointer-events-none">
                 <div className="flex items-center gap-1.5 shrink-0">
                   <span className="size-2.5 rounded-full bg-[#ff5f56] border border-black/20" />
                   <span className="size-2.5 rounded-full bg-[#ffbd2e] border border-black/20" />
@@ -876,7 +876,7 @@ export function VideoCanvas({ project, currentTimeMs: propTimeMs }: VideoCanvasP
 
             {/* Windows Terminal */}
             {looks.windowFrame === "windows" && (
-              <div className="absolute top-0 inset-x-0 h-8 z-30 flex items-center justify-between px-2 bg-[#1f1f1f] border-b border-white/10 select-none pointer-events-none">
+              <div className="relative w-full shrink-0 h-8 z-30 flex items-center justify-between px-2 bg-[#1f1f1f] border-b border-white/10 select-none pointer-events-none">
                 <div className="flex items-center gap-1.5 h-full pt-1">
                   <div className="flex items-center gap-2 bg-[#2d2d2d] text-white px-2.5 py-1 rounded-t text-[11px] font-mono border-t-2 border-sky-400 shadow-sm">
                     <span className="text-sky-400 font-bold text-xs select-none">&gt;_</span>
@@ -900,7 +900,7 @@ export function VideoCanvas({ project, currentTimeMs: propTimeMs }: VideoCanvasP
 
             {/* macOS Terminal */}
             {looks.windowFrame === "terminal" && (
-              <div className="absolute top-0 inset-x-0 h-7 z-30 flex items-center justify-between px-3 bg-[#18181a] border-b border-white/10 select-none pointer-events-none">
+              <div className="relative w-full shrink-0 h-7 z-30 flex items-center justify-between px-3 bg-[#18181a] border-b border-white/10 select-none pointer-events-none">
                 <div className="flex items-center gap-1.5 shrink-0">
                   <span className="size-2.5 rounded-full bg-[#ff5f56] border border-black/20" />
                   <span className="size-2.5 rounded-full bg-[#ffbd2e] border border-black/20" />
@@ -912,7 +912,7 @@ export function VideoCanvas({ project, currentTimeMs: propTimeMs }: VideoCanvasP
 
             {/* Google Chrome */}
             {looks.windowFrame === "chrome" && (
-              <div className="absolute top-0 inset-x-0 z-30 bg-[#202124] border-b border-white/10 select-none pointer-events-none">
+              <div className="relative w-full shrink-0 z-30 bg-[#202124] border-b border-white/10 select-none pointer-events-none">
                 <div className="h-6 flex items-center px-2 pt-1 gap-1">
                   <div className="flex items-center gap-1.5 bg-[#292a2d] text-white px-2.5 py-0.5 rounded-t-md text-[10px] border-t border-x border-white/10 shadow-sm w-20">
                     <svg className="size-2.5 text-neutral-400 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -943,7 +943,7 @@ export function VideoCanvas({ project, currentTimeMs: propTimeMs }: VideoCanvasP
 
             {/* Apple Safari */}
             {looks.windowFrame === "safari" && (
-              <div className="absolute top-0 inset-x-0 h-7 z-30 flex items-center justify-between px-3 bg-[#242426]/95 backdrop-blur-md border-b border-white/10 select-none pointer-events-none">
+              <div className="relative w-full shrink-0 h-7 z-30 flex items-center justify-between px-3 bg-[#242426]/95 backdrop-blur-md border-b border-white/10 select-none pointer-events-none">
                 <div className="flex items-center gap-2.5">
                   <div className="flex items-center gap-1.5 shrink-0">
                     <span className="size-2.5 rounded-full bg-[#ff5f56] border border-black/20" />
@@ -968,7 +968,7 @@ export function VideoCanvas({ project, currentTimeMs: propTimeMs }: VideoCanvasP
 
             {/* Frosted Glass */}
             {looks.windowFrame === "glass" && (
-              <div className="absolute top-0 inset-x-0 h-7 z-30 flex items-center justify-between px-3 bg-white/5 backdrop-blur-xl border-b border-white/10 select-none pointer-events-none">
+              <div className="relative w-full shrink-0 h-7 z-30 flex items-center justify-between px-3 bg-white/5 backdrop-blur-xl border-b border-white/10 select-none pointer-events-none">
                 <div className="flex items-center gap-1.5 shrink-0">
                   <span className="size-2 rounded-full bg-white/40" />
                   <span className="size-2 rounded-full bg-white/25" />
@@ -983,7 +983,7 @@ export function VideoCanvas({ project, currentTimeMs: propTimeMs }: VideoCanvasP
         {/* Dynamic Zooming Video Container: zero latency with hardware accelerated 3D transform */}
         <div
           ref={zoomLayerRef}
-          className="relative size-full origin-center will-change-transform"
+          className={`relative ${looks.windowFrame && looks.windowFrame !== "none" ? "flex-1 min-h-0 w-full" : "size-full"} origin-center will-change-transform overflow-hidden`}
           style={{
             // When playing, rAF is the SOLE owner of this transform (60fps via direct DOM write).
             // Setting undefined here prevents React re-renders (throttled to ~12fps via setCurrentTime)

@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { useRecorder } from "./recorder";
+import { useRecorder, extractSpeechIntervalsFromBlob } from "./recorder";
 
 describe("useRecorder store", () => {
   beforeEach(() => {
@@ -367,3 +367,53 @@ describe("useRecorder store", () => {
     globalThis.sessionStorage = originalStorage;
   });
 });
+
+describe("extractSpeechIntervalsFromBlob", () => {
+  it("handles empty or invalid audio blobs safely without crashing", async () => {
+    const emptyBlob = new Blob([], { type: "audio/webm" });
+    const res = await extractSpeechIntervalsFromBlob(emptyBlob);
+    expect(res).toEqual([]);
+  });
+
+  it("extracts voice activity intervals with AudioContext decodeAudioData mock", async () => {
+    class MockAudioContext {
+      async decodeAudioData() {
+        const sampleRate = 16000;
+        const totalSamples = sampleRate * 4; // 4 seconds
+        const channelData = new Float32Array(totalSamples);
+        // Add speech energy between 1.0s and 2.5s (16000 to 40000 samples)
+        for (let i = 16000; i < 40000; i++) {
+          channelData[i] = Math.sin(i * 0.1) * 0.25;
+        }
+        return {
+          sampleRate,
+          length: totalSamples,
+          duration: 4,
+          numberOfChannels: 1,
+          getChannelData: () => channelData,
+        };
+      }
+      async close() {}
+    }
+
+    const origAudioContext = typeof window !== "undefined" ? (window as any).AudioContext : undefined;
+    if (typeof window !== "undefined") {
+      (window as any).AudioContext = MockAudioContext;
+    }
+    (globalThis as any).AudioContext = MockAudioContext;
+
+    try {
+      const dummyBlob = new Blob([new Uint8Array(100)], { type: "audio/webm" });
+      const intervals = await extractSpeechIntervalsFromBlob(dummyBlob);
+      expect(intervals.length).toBeGreaterThanOrEqual(1);
+      expect(intervals[0]?.startMs).toBeGreaterThanOrEqual(800);
+      expect(intervals[0]?.durationMs).toBeGreaterThan(500);
+    } finally {
+      if (typeof window !== "undefined") {
+        (window as any).AudioContext = origAudioContext;
+      }
+      (globalThis as any).AudioContext = origAudioContext;
+    }
+  });
+});
+

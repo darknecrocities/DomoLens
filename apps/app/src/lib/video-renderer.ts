@@ -1394,15 +1394,25 @@ export async function renderProjectVideo(options: RenderOptions): Promise<Render
       }
 
       // 5. Apply camera transform (scale and target centering)
+      const hasHeader = Boolean(looks.windowFrame && looks.windowFrame !== "none");
+      const headerH = hasHeader ? (looks.windowFrame === "chrome" ? 36 : 26) * baseScale : 0;
+      const vidY = winY + headerH;
+      const vidH = Math.max(10, winH - headerH);
+
       const exportVideoAspect =
         videoLoaded && video.videoWidth && video.videoHeight ? video.videoWidth / video.videoHeight : null;
       const mapExportPt = (px: number, py: number) =>
-        mapVideoPointToViewport(px, py, exportVideoAspect, winW / winH);
+        mapVideoPointToViewport(px, py, exportVideoAspect, winW / vidH);
       const camView = mapExportPt(camera.x, camera.y);
       ctx.save();
-      ctx.translate(winX + winW / 2, winY + winH / 2);
+      // Clip to video content sub-region (below header) so video does not occlude or get covered by header
+      ctx.beginPath();
+      ctx.rect(winX, vidY, winW, vidH);
+      ctx.clip();
+
+      ctx.translate(winX + winW / 2, vidY + vidH / 2);
       ctx.scale(camera.scale, camera.scale);
-      ctx.translate((0.5 - camView.x) * winW, (0.5 - camView.y) * winH);
+      ctx.translate((0.5 - camView.x) * winW, (0.5 - camView.y) * vidH);
 
       // 6. Draw video source or high-fidelity mockup
       if (videoLoaded && video.readyState >= 2) {
@@ -1410,16 +1420,16 @@ export async function renderProjectVideo(options: RenderOptions): Promise<Render
           ctx.filter = effectsState.filterStyle;
         }
         const vW = video.videoWidth || winW;
-        const vH = video.videoHeight || winH;
+        const vH = video.videoHeight || vidH;
         const vAspect = vW / vH;
-        const winAspect = winW / winH;
+        const winAspect = winW / vidH;
         if (looks.fit === "contain" || looks.aspectRatio === "auto") {
           let dw = winW;
-          let dh = winH;
+          let dh = vidH;
           if (vAspect > winAspect) {
             dh = winW / vAspect;
           } else {
-            dw = winH * vAspect;
+            dw = vidH * vAspect;
           }
           ctx.drawImage(video, 0, 0, vW, vH, -dw / 2, -dh / 2, dw, dh);
         } else {
@@ -1431,48 +1441,48 @@ export async function renderProjectVideo(options: RenderOptions): Promise<Render
             sh = vW / winAspect;
             sy = (vH - sh) / 2;
           }
-          ctx.drawImage(video, sx, sy, sw, sh, -winW / 2, -winH / 2, winW, winH);
+          ctx.drawImage(video, sx, sy, sw, sh, -winW / 2, -vidH / 2, winW, vidH);
         }
         if (looks.tiltGlare) {
           const gx = ((tilt3D.glareX - 50) / 100) * winW;
-          const gy = ((tilt3D.glareY - 50) / 100) * winH;
+          const gy = ((tilt3D.glareY - 50) / 100) * vidH;
           const glareGrad = ctx.createRadialGradient(gx, gy, 0, gx, gy, winW * 0.65);
           glareGrad.addColorStop(0, "rgba(255, 255, 255, 0.16)");
           glareGrad.addColorStop(1, "rgba(255, 255, 255, 0)");
           ctx.fillStyle = glareGrad;
-          ctx.fillRect(-winW / 2, -winH / 2, winW, winH);
+          ctx.fillRect(-winW / 2, -vidH / 2, winW, vidH);
         }
         ctx.filter = "none";
       } else {
         // High quality fallback presentation canvas
         ctx.fillStyle = "#111216";
-        ctx.fillRect(-winW / 2, -winH / 2, winW, winH);
+        ctx.fillRect(-winW / 2, -vidH / 2, winW, vidH);
 
         // Simulated app window bar
         ctx.fillStyle = "#1e2029";
-        ctx.fillRect(-winW / 2, -winH / 2, winW, 44 * baseScale);
+        ctx.fillRect(-winW / 2, -vidH / 2, winW, 44 * baseScale);
 
         // Window controls (strictly monochromatic)
         ctx.fillStyle = "rgba(255, 255, 255, 0.25)";
         ctx.beginPath();
-        ctx.arc(-winW / 2 + 24 * baseScale, -winH / 2 + 22 * baseScale, 6 * baseScale, 0, Math.PI * 2);
+        ctx.arc(-winW / 2 + 24 * baseScale, -vidH / 2 + 22 * baseScale, 6 * baseScale, 0, Math.PI * 2);
         ctx.fill();
 
         ctx.fillStyle = "rgba(255, 255, 255, 0.2)";
         ctx.beginPath();
-        ctx.arc(-winW / 2 + 42 * baseScale, -winH / 2 + 22 * baseScale, 6 * baseScale, 0, Math.PI * 2);
+        ctx.arc(-winW / 2 + 42 * baseScale, -vidH / 2 + 22 * baseScale, 6 * baseScale, 0, Math.PI * 2);
         ctx.fill();
 
         ctx.fillStyle = "rgba(255, 255, 255, 0.15)";
         ctx.beginPath();
-        ctx.arc(-winW / 2 + 60 * baseScale, -winH / 2 + 22 * baseScale, 6 * baseScale, 0, Math.PI * 2);
+        ctx.arc(-winW / 2 + 60 * baseScale, -vidH / 2 + 22 * baseScale, 6 * baseScale, 0, Math.PI * 2);
         ctx.fill();
 
         // Project Title
         ctx.fillStyle = "#ffffff";
         ctx.font = `bold ${16 * baseScale}px sans-serif`;
         ctx.textAlign = "center";
-        ctx.fillText(project.summary.name, 0, -winH / 2 + 28 * baseScale);
+        ctx.fillText(project.summary.name, 0, -vidH / 2 + 28 * baseScale);
       }
 
       // 7. Draw Click Ripple indicator if active
@@ -1488,7 +1498,7 @@ export async function renderProjectVideo(options: RenderOptions): Promise<Render
 
           const clickView = mapExportPt(activeClick.x, activeClick.y);
           const cx = clickView.x * winW - winW / 2;
-          const cy = clickView.y * winH - winH / 2;
+          const cy = clickView.y * vidH - vidH / 2;
 
           ctx.strokeStyle = `rgba(255, 255, 255, ${alpha * 0.9})`;
           ctx.lineWidth = 3 * baseScale;
@@ -1502,7 +1512,7 @@ export async function renderProjectVideo(options: RenderOptions): Promise<Render
       if (looks.showCursor && looks.cursorStyle !== "hidden") {
         const curView = mapExportPt(camera.cursorX, camera.cursorY);
         const curX = curView.x * winW - winW / 2;
-        const curY = curView.y * winH - winH / 2;
+        const curY = curView.y * vidH - vidH / 2;
         const cursorScale = (looks.cursorSize || 1.4) * baseScale;
         const preset = getCursorPreset(looks.cursorStyle) || getCursorPreset("mac")!;
         const [hx, hy] = preset.hotspot;

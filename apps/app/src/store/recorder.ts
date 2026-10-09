@@ -176,11 +176,117 @@ async function captureVideoThumbnail(
   });
 }
 
+/**
+ * Voice Activity Detection (VAD) audio analyzer.
+ * Inspects recorded audio PCM samples using AudioContext to detect natural speech intervals
+ * with exact start timestamps and durations.
+ */
+export async function extractSpeechIntervalsFromBlob(
+  blob: Blob,
+): Promise<Array<{ startMs: number; durationMs: number }>> {
+  if (!blob || blob.size === 0) return [];
+  try {
+    const AudioCtx =
+      (typeof window !== "undefined" &&
+        (window.AudioContext ||
+          (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)) ||
+      (typeof globalThis !== "undefined" && (globalThis as unknown as { AudioContext: typeof AudioContext }).AudioContext);
+    if (!AudioCtx) return [];
+    const arrayBuffer = await blob.arrayBuffer();
+    const audioCtx = new AudioCtx();
+    let audioBuffer: AudioBuffer;
+    try {
+      audioBuffer = await audioCtx.decodeAudioData(arrayBuffer);
+    } catch {
+      await audioCtx.close();
+      return [];
+    }
+
+    const channelData = audioBuffer.getChannelData(0);
+    const sampleRate = audioBuffer.sampleRate;
+    const frameSize = Math.round(sampleRate * 0.05); // 50ms frames
+    const numFrames = Math.floor(channelData.length / frameSize);
+
+    if (numFrames <= 0) {
+      await audioCtx.close();
+      return [];
+    }
+
+    // Compute RMS energy per 50ms frame
+    const energies = new Float32Array(numFrames);
+    let sumEnergy = 0;
+    for (let f = 0; f < numFrames; f++) {
+      let sumSq = 0;
+      const start = f * frameSize;
+      for (let s = 0; s < frameSize; s++) {
+        const val = channelData[start + s] || 0;
+        sumSq += val * val;
+      }
+      const rms = Math.sqrt(sumSq / frameSize);
+      energies[f] = rms;
+      sumEnergy += rms;
+    }
+
+    const avgEnergy = sumEnergy / numFrames;
+    // Calculate noise floor (20th percentile)
+    const sortedEnergies = Array.from(energies).sort((a, b) => a - b);
+    const noiseFloor = sortedEnergies[Math.floor(numFrames * 0.2)] || 0.005;
+    const speechThreshold = Math.max(0.012, noiseFloor * 2.6, avgEnergy * 0.40);
+
+    // Group active frames with hangover
+    const intervals: Array<{ startMs: number; durationMs: number }> = [];
+    let inSpeech = false;
+    let speechStartMs = 0;
+    let silenceFrames = 0;
+    const maxSilenceFrames = 8; // 400ms pause tolerance
+
+    for (let f = 0; f < numFrames; f++) {
+      const timeMs = Math.round((f * frameSize * 1000) / sampleRate);
+      const isVoice = (energies[f] ?? 0) >= speechThreshold;
+
+      if (isVoice) {
+        if (!inSpeech) {
+          inSpeech = true;
+          speechStartMs = Math.max(0, timeMs - 100);
+        }
+        silenceFrames = 0;
+      } else if (inSpeech) {
+        silenceFrames++;
+        if (silenceFrames >= maxSilenceFrames || f === numFrames - 1) {
+          inSpeech = false;
+          const speechEndMs = Math.round(((f - silenceFrames) * frameSize * 1000) / sampleRate);
+          const dur = speechEndMs - speechStartMs;
+          if (dur >= 700) {
+            // Split long sustained speech into natural ~3.5s - 4.5s subtitle chunks
+            const maxChunkMs = 4200;
+            if (dur > maxChunkMs) {
+              for (let cur = speechStartMs; cur < speechEndMs; cur += maxChunkMs) {
+                const chunkDur = Math.min(maxChunkMs, speechEndMs - cur);
+                if (chunkDur >= 700) {
+                  intervals.push({ startMs: cur, durationMs: chunkDur });
+                }
+              }
+            } else {
+              intervals.push({ startMs: speechStartMs, durationMs: dur });
+            }
+          }
+        }
+      }
+    }
+
+    await audioCtx.close();
+    return intervals;
+  } catch (err) {
+    console.warn("Audio speech detection fallback error:", err);
+    return [];
+  }
+}
+
 export const useRecorder = create<RecorderStore>((set, get) => ({
   state: "idle",
   countdown: 3,
   source: "screen",
-  recordingMode: "auto-zoom-sfx" as RecordingMode,
+  recordingMode: "auto-zoom-sfx-transcribe" as RecordingMode,
   micEnabled: true,
   systemAudioEnabled: true,
   elapsedMs: 0,
@@ -649,6 +755,22 @@ export const useRecorder = create<RecorderStore>((set, get) => ({
                     currentInterimStartMs = nowMs;
                   }
                   currentInterimText = transcript;
+
+                  // Proactively commit rolling interim chunks every 6-7 words so long speech is immediately plotted
+                  const words = transcript.split(/\s+/);
+                  if (words.length >= 7) {
+                    const chunk = words.slice(0, 6).join(" ");
+                    const phraseStart = currentInterimStartMs;
+                    if (!transcriptSegments.some((s) => s.text === chunk)) {
+                      transcriptSegments.push({
+                        text: chunk,
+                        startMs: phraseStart,
+                        durationMs: Math.max(1800, Math.min(4800, 6 * 380 + 400)),
+                      });
+                      currentInterimStartMs = nowMs;
+                      currentInterimText = words.slice(6).join(" ");
+                    }
+                  }
                 }
               }
             };
@@ -1269,7 +1391,6 @@ export const useRecorder = create<RecorderStore>((set, get) => ({
               maxGlideGapMs: 1000,
               leadInMs: 1000,
               leadOutMs: 400,
-              scale: 1.85,
               fallbackIfEmpty: false,
               continuousGlide: true,
               centerTyping: true,
@@ -1334,6 +1455,47 @@ export const useRecorder = create<RecorderStore>((set, get) => ({
         } as import("@domolens/core").TextOverlay);
       });
       transcriptSegments = [];
+    } else if (
+      (get().micEnabled || mode === "sfx-transcribe" || mode === "auto-zoom-sfx-transcribe") &&
+      recordedChunks.length > 0
+    ) {
+      // Audio VAD fallback: if microphone was active and user spoke, but SpeechRecognition
+      // didn't return text (e.g. offline, Electron environment, or silent network error),
+      // detect real voice intervals from the recorded audio blob and plot timed subtitle cards!
+      try {
+        const speechIntervals = await extractSpeechIntervalsFromBlob(
+          new Blob(recordedChunks, { type: chosenBlobType }),
+        );
+        if (speechIntervals.length > 0) {
+          let lastEndMs = 0;
+          speechIntervals.forEach((interval, idx) => {
+            const startMs = Math.max(lastEndMs + 40, interval.startMs);
+            const durationMs = interval.durationMs;
+            lastEndMs = startMs + durationMs;
+            const minutes = Math.floor(startMs / 60000);
+            const seconds = Math.floor((startMs % 60000) / 1000)
+              .toString()
+              .padStart(2, "0");
+            const captionText = `Speech Commentary [${minutes}:${seconds}]`;
+
+            textOverlays.push({
+              id: `transcript-${idx + 1}`,
+              text: captionText,
+              startTimeMs: startMs,
+              durationMs,
+              x: 0.5,
+              y: 0.88,
+              fontSize: 14,
+              color: "#ffffff",
+              bgColor: "rgba(0, 0, 0, 0.75)",
+              cardStyle: "glass",
+              motionPreset: "blur-reveal",
+            } as import("@domolens/core").TextOverlay);
+          });
+        }
+      } catch (vadErr) {
+        console.warn("Speech VAD fallback analysis error:", vadErr);
+      }
     }
 
     // Auto-plot chapters for the AI director / video outline
