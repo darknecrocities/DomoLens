@@ -96,10 +96,10 @@ export function Modal({
     };
   }, [open, onClose, initialFocus]);
 
-  return createPortal(
+  const modalContent = (
     <AnimatePresence>
       {open && (
-        <div className="fixed inset-0 z-50 flex items-end justify-center sm:items-center sm:p-6">
+        <div className="fixed inset-0 z-50 flex items-end justify-center sm:items-center p-0 sm:p-4 md:p-6 overflow-hidden">
           <motion.div
             className="absolute inset-0 bg-ink-950/70 backdrop-blur-sm"
             initial={{ opacity: 0 }}
@@ -115,19 +115,20 @@ export function Modal({
             aria-modal="true"
             aria-labelledby={titleId}
             aria-describedby={description ? descId : undefined}
-            className={`relative w-full rounded-t-3xl border border-white/15 bg-neutral-900/95 backdrop-blur-2xl p-6 pb-[calc(1.5rem+var(--safe-bottom))] shadow-[0_20px_60px_rgba(0,0,0,0.8),inset_0_1px_0_rgba(255,255,255,0.15)] ${SIZE_CLASSES[size ?? "md"]} sm:rounded-2xl sm:pb-6 ${className ?? ""}`}
+            className={`relative flex flex-col w-full max-h-[92dvh] sm:max-h-[min(90vh,54rem)] rounded-t-3xl sm:rounded-2xl border border-white/15 bg-neutral-900/95 backdrop-blur-2xl shadow-[0_20px_60px_rgba(0,0,0,0.8),inset_0_1px_0_rgba(255,255,255,0.15)] overflow-hidden ${SIZE_CLASSES[size ?? "md"]} ${className ?? ""}`}
             initial={{ opacity: 0, y: 28, scale: 0.98 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 20, scale: 0.98 }}
             transition={tokens.springSoft}
           >
-            <div className="flex items-start justify-between gap-4">
+            {/* Pinned Dialog Header */}
+            <div className="flex items-start justify-between gap-4 p-5 sm:p-6 pb-2 sm:pb-3 shrink-0">
               <div className="min-w-0 flex-1">
                 <h2 id={titleId} className="text-lg font-semibold tracking-tight text-white">
                   {title}
                 </h2>
                 {description && (
-                  <p id={descId} className="mt-1.5 text-sm leading-relaxed text-fg-muted">
+                  <p id={descId} className="mt-1 text-sm leading-relaxed text-fg-muted">
                     {description}
                   </p>
                 )}
@@ -143,16 +144,35 @@ export function Modal({
                 </button>
               )}
             </div>
-            {children && <div className="mt-5">{children}</div>}
+
+            {/* Scrollable Content Body */}
+            {children && (
+              <div
+                className={`flex-1 min-h-0 overflow-y-auto px-5 sm:px-6 py-2 overscroll-contain ${
+                  !footer ? "pb-[calc(1.5rem+var(--safe-bottom))] sm:pb-6" : ""
+                }`}
+              >
+                {children}
+              </div>
+            )}
+
+            {/* Pinned Dialog Footer */}
             {footer && (
-              <div className="mt-6 flex flex-col-reverse gap-2 sm:flex-row sm:items-center sm:justify-end w-full">
-                {footer}
+              <div className="shrink-0 p-5 sm:p-6 pt-3 sm:pt-4 pb-[calc(1.25rem+var(--safe-bottom))] sm:pb-5 border-t border-white/5 bg-neutral-950/40">
+                <div className="flex flex-col-reverse gap-2 sm:flex-row sm:items-center sm:justify-end w-full [&>div]:w-full">
+                  {footer}
+                </div>
               </div>
             )}
           </motion.div>
         </div>
       )}
-    </AnimatePresence>,
-    document.body,
+    </AnimatePresence>
   );
+
+  if (typeof document === "undefined") {
+    return modalContent;
+  }
+
+  return createPortal(modalContent, document.body);
 }

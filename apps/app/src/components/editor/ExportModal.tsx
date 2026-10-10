@@ -338,6 +338,7 @@ export function ExportModal({ open, project, onClose }: ExportModalProps) {
     <Modal
       open={open}
       onClose={handleCancel}
+      size="2xl"
       title={savedFilePath ? "Export Succeeded" : copy.export.title}
       description={
         savedFilePath
@@ -413,9 +414,9 @@ export function ExportModal({ open, project, onClose }: ExportModalProps) {
             </div>
           </div>
         ) : (
-          <div className="space-y-4">
+          <div className="space-y-3.5">
             {/* Canvas Aspect Ratio Selector (Widescreen Whole Canvas vs Vertical Social) */}
-            <div className="space-y-2">
+            <div className="space-y-1.5">
               <div className="flex items-center justify-between text-xs">
                 <label className="font-semibold uppercase tracking-wider text-fg-muted">
                   Canvas Aspect Ratio
@@ -433,7 +434,7 @@ export function ExportModal({ open, project, onClose }: ExportModalProps) {
                       key={opt.id}
                       type="button"
                       onClick={() => setCanvasAspectRatio(opt.id)}
-                      className={`flex flex-col justify-between rounded-xl border p-2.5 text-left transition-all ${
+                      className={`flex flex-col justify-between rounded-xl border p-2.5 text-left transition-all cursor-pointer ${
                         isSelected
                           ? "border-white bg-white/10 shadow-sm"
                           : "border-ink-700 bg-ink-900/60 hover:border-ink-600"
@@ -446,12 +447,12 @@ export function ExportModal({ open, project, onClose }: ExportModalProps) {
                         </span>
                         {isSelected && <CheckCircle2 className="size-3.5 text-white" />}
                       </div>
-                      <div className="mt-1 flex items-center gap-1.5">
+                      <div className="mt-1 flex items-center gap-1.5 flex-wrap">
                         <span className="font-mono text-[10px] text-neutral-300">
                           {opt.ratio}
                         </span>
                         {opt.badge && (
-                          <span className="font-mono text-[9px] uppercase font-bold px-1.5 py-0.5 rounded bg-white/20 text-white border border-white/30">
+                          <span className="font-mono text-[9px] uppercase font-bold px-1.5 py-0.5 rounded bg-white/20 text-white border border-white/30 whitespace-nowrap">
                             {opt.badge}
                           </span>
                         )}
@@ -467,7 +468,7 @@ export function ExportModal({ open, project, onClose }: ExportModalProps) {
 
             {/* Format Option Selector (Hardware aware) */}
             {resolution !== "gif" && (
-              <div className="space-y-2">
+              <div className="space-y-1.5">
                 <div className="flex items-center justify-between text-xs">
                   <label className="font-semibold uppercase tracking-wider text-fg-muted">
                     Video Format
@@ -484,7 +485,7 @@ export function ExportModal({ open, project, onClose }: ExportModalProps) {
                         key={fmt.id}
                         type="button"
                         onClick={() => handleFormatChange(fmt.id)}
-                        className={`flex flex-col justify-between rounded-xl border p-2.5 text-left transition-all ${
+                        className={`flex flex-col justify-between rounded-xl border p-2.5 text-left transition-all cursor-pointer ${
                           isSelected
                             ? "border-white bg-white/10 shadow-sm"
                             : "border-ink-700 bg-ink-900/60 hover:border-ink-600"
@@ -498,8 +499,8 @@ export function ExportModal({ open, project, onClose }: ExportModalProps) {
                           {isSelected && <CheckCircle2 className="size-3.5 text-white" />}
                         </div>
                         {fmt.badge && (
-                          <div className="mt-1.5">
-                            <span className="font-mono text-[9px] uppercase font-bold px-1.5 py-0.5 rounded bg-neutral-800 text-neutral-200 border border-neutral-700">
+                          <div className="mt-1.5 flex flex-wrap">
+                            <span className="font-mono text-[9px] uppercase font-bold px-1.5 py-0.5 rounded bg-neutral-800 text-neutral-200 border border-neutral-700 whitespace-nowrap">
                               {fmt.badge}
                             </span>
                           </div>
@@ -515,7 +516,7 @@ export function ExportModal({ open, project, onClose }: ExportModalProps) {
             )}
 
             {/* Resolution Options */}
-            <div className="space-y-2">
+            <div className="space-y-1.5">
               <label className="text-xs font-semibold uppercase tracking-wider text-fg-muted">
                 {copy.export.resolution}
               </label>
@@ -527,24 +528,24 @@ export function ExportModal({ open, project, onClose }: ExportModalProps) {
                       key={res.id}
                       type="button"
                       onClick={() => handleResolutionChange(res.id)}
-                      className={`flex items-center justify-between rounded-xl border p-2.5 text-left transition-all ${
+                      className={`flex items-center justify-between rounded-xl border p-2.5 text-left transition-all cursor-pointer ${
                         isSelected
                           ? "border-white bg-white/10 shadow-sm"
                           : "border-ink-700 bg-ink-900/60 hover:border-ink-600"
                       }`}
                     >
                       <div>
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-2 flex-wrap">
                           <span className="text-xs font-semibold text-fg">{res.label}</span>
                           {res.id === "1080p" && (
-                            <span className="font-mono text-[9px] uppercase font-bold px-1.5 py-0.5 rounded bg-white/20 text-white border border-white/30">
+                            <span className="font-mono text-[9px] uppercase font-bold px-1.5 py-0.5 rounded bg-white/20 text-white border border-white/30 whitespace-nowrap">
                               Recommended
                             </span>
                           )}
                         </div>
                         <span className="text-[10px] text-fg-muted">{res.desc}</span>
                       </div>
-                      {isSelected && <CheckCircle2 className="size-4 text-white" />}
+                      {isSelected && <CheckCircle2 className="size-4 text-white shrink-0 ml-2" />}
                     </button>
                   );
                 })}
