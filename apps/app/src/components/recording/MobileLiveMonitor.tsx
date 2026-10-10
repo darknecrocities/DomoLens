@@ -90,11 +90,12 @@ export function MobileLiveMonitor({
     onSimulateTap(x, y);
   };
 
-  const name = deviceInfo?.name || "Mobile Device";
+  const isIos = deviceInfo?.os === "ios";
+  const name = deviceInfo?.name || "Android Device";
   const connectionType = deviceInfo?.connectionType || "wifi";
-  const width = deviceInfo?.width || 1179;
-  const height = deviceInfo?.height || 2556;
-  const aspectRatio = deviceInfo?.aspectRatio || "19.5:9";
+  const width = deviceInfo?.width || 1080;
+  const height = deviceInfo?.height || 2400;
+  const aspectRatio = deviceInfo?.aspectRatio || (width < height ? "20:9" : "16:9");
   const latencyMs = deviceInfo?.latencyMs || 18;
 
   return (
@@ -125,12 +126,20 @@ export function MobileLiveMonitor({
           maxWidth: "100%",
         }}
       >
-        {/* Dynamic Island / Camera Notch */}
-        <div className="absolute top-3.5 z-20 flex items-center justify-center">
-          <div className="h-3.5 w-20 rounded-full bg-neutral-900 border border-neutral-800 flex items-center justify-end px-2">
-            <span className="size-1.5 rounded-full bg-neutral-800" />
+        {/* Camera Cutout: iOS Dynamic Island only if iOS, otherwise Android Center Punch-Hole Camera */}
+        {isIos ? (
+          <div className="absolute top-3.5 z-20 flex items-center justify-center">
+            <div className="h-3.5 w-20 rounded-full bg-neutral-900 border border-neutral-800 flex items-center justify-end px-2">
+              <span className="size-1.5 rounded-full bg-neutral-800" />
+            </div>
           </div>
-        </div>
+        ) : (
+          <div className="absolute top-3 z-20 flex items-center justify-center">
+            <div className="size-2.5 rounded-full bg-neutral-950 border border-neutral-800 flex items-center justify-center shadow-inner">
+              <span className="size-1 rounded-full bg-neutral-800/80" />
+            </div>
+          </div>
+        )}
 
         {/* Live Stream Screen Container */}
         <div
@@ -138,7 +147,7 @@ export function MobileLiveMonitor({
           onClick={handleMonitorClick}
           className="relative w-full overflow-hidden rounded-[28px] bg-ink-950 cursor-pointer border border-neutral-800"
           style={{
-            aspectRatio: aspectRatio === "4:3" ? "4 / 3" : "9 / 19.5",
+            aspectRatio: `${width} / ${height}`,
           }}
           title="Live Phone Screen — Click anywhere to simulate touch interaction"
         >
@@ -152,7 +161,7 @@ export function MobileLiveMonitor({
               </div>
               <span className="text-xs font-bold font-mono text-white tracking-wider">RADAR ACTIVE</span>
               <span className="mt-1 text-[10px] text-neutral-400 max-w-[130px] leading-tight font-sans">
-                Scan QR code on left with your phone camera
+                Scan QR code with your Android or iOS camera
               </span>
             </div>
           )}
@@ -194,16 +203,16 @@ export function MobileLiveMonitor({
             </div>
           )}
 
-          {/* Bottom Home Indicator Bar */}
+          {/* Bottom Navigation Indicator Bar */}
           <div className="pointer-events-none absolute bottom-1.5 left-0 right-0 flex justify-center z-20">
-            <div className="h-1 w-20 rounded-full bg-white/50" />
+            <div className={`h-1 ${isIos ? "w-20 bg-white/50" : "w-16 bg-white/40"} rounded-full`} />
           </div>
         </div>
       </div>
 
       {/* Screen Specs Footer */}
       <div className="mt-2 text-center text-[10px] font-mono text-neutral-400">
-        {deviceInfo ? `${width} × ${height} • ${aspectRatio} • Click to test tap` : "Awaiting Mobile Connection"}
+        {deviceInfo ? `${width} × ${height} (${aspectRatio}) • ${name} • Click to test tap` : "1080 × 2400 (20:9) • Standby (Scan QR Code to Connect)"}
       </div>
     </div>
   );

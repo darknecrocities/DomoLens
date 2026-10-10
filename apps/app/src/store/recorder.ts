@@ -57,7 +57,7 @@ interface RecorderStore {
   // Actions
   setDeviceTarget: (target: DeviceTarget) => void;
   setMobileConnectionType: (type: MobileConnectionType) => void;
-  connectMobileDevice: (type?: MobileConnectionType, preset?: "iphone" | "android" | "ipad") => Promise<MobileDeviceInfo>;
+  connectMobileDevice: (type?: MobileConnectionType, preset?: "android" | "iphone" | "ipad") => Promise<MobileDeviceInfo>;
   disconnectMobileDevice: () => void;
   simulateMobileTap: (x: number, y: number) => void;
   setSource: (source: RecordingSource) => void;
@@ -325,23 +325,15 @@ export const useRecorder = create<RecorderStore>((set, get) => ({
           mobileConnectionStatus: "connected",
         });
       });
-      if (!get().mobileDeviceInfo) {
-        const connType = get().mobileConnectionType === "cloud" ? "wifi" : get().mobileConnectionType;
-        const dev = mobileStreamBridge.connectSimulatedDevice("iphone", connType);
-        set({
-          mobileDeviceInfo: dev,
-          mobileConnectionStatus: "connected",
-        });
-      }
     }
   },
 
   setMobileConnectionType: (mobileConnectionType) => {
     set({ mobileConnectionType });
-    if (get().deviceTarget === "mobile") {
+    if (get().deviceTarget === "mobile" && get().mobileDeviceInfo) {
       const connType = mobileConnectionType === "cloud" ? "wifi" : mobileConnectionType;
       const dev = mobileStreamBridge.connectSimulatedDevice(
-        get().mobileDeviceInfo?.os === "android" ? "android" : "iphone",
+        get().mobileDeviceInfo?.os === "ios" ? "iphone" : "android",
         connType,
       );
       set({
@@ -351,7 +343,7 @@ export const useRecorder = create<RecorderStore>((set, get) => ({
     }
   },
 
-  connectMobileDevice: async (type = get().mobileConnectionType, preset = "iphone") => {
+  connectMobileDevice: async (type = get().mobileConnectionType, preset = "android") => {
     set({ mobileConnectionStatus: "pairing" });
     const connType = type === "cloud" ? "wifi" : type;
     const dev = mobileStreamBridge.connectSimulatedDevice(preset, connType);
@@ -550,7 +542,7 @@ export const useRecorder = create<RecorderStore>((set, get) => ({
       let mobileStream = mobileStreamBridge.getStream();
       if (!mobileStream || mobileStream.getTracks().length === 0) {
         const dev = mobileStreamBridge.connectSimulatedDevice(
-          get().mobileDeviceInfo?.os === "android" ? "android" : "iphone",
+          get().mobileDeviceInfo?.os === "ios" ? "iphone" : "android",
           get().mobileConnectionType,
         );
         set({

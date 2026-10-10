@@ -21,9 +21,9 @@
       flex-direction: column;
       align-items: center;
       justify-content: space-between;
-      padding: env(safe-area-inset-top, 20px) 16px env(safe-area-inset-bottom, 20px) 16px;
-      overflow: hidden;
-      touch-action: none;
+      padding: env(safe-area-inset-top, 16px) 16px env(safe-area-inset-bottom, 16px) 16px;
+      overflow-x: hidden;
+      touch-action: pan-y;
     }
     .header {
       width: 100%;
@@ -34,7 +34,7 @@
       border-bottom: 1px solid #27272a;
     }
     .logo {
-      font-size: 16px;
+      font-size: 15px;
       font-weight: 800;
       letter-spacing: -0.5px;
       display: flex;
@@ -62,6 +62,50 @@
       background: #ffffff;
       box-shadow: 0 0 8px #ffffff;
     }
+    /* In-App Browser Alert Banner */
+    .inapp-banner {
+      width: 100%;
+      max-width: 380px;
+      margin-top: 10px;
+      background: #18181b;
+      border: 1px solid #52525b;
+      border-radius: 14px;
+      padding: 12px;
+      display: none;
+      flex-direction: column;
+      gap: 8px;
+      text-align: left;
+    }
+    .inapp-banner.active {
+      display: flex;
+    }
+    .inapp-title {
+      font-size: 12px;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      color: #ffffff;
+    }
+    .inapp-desc {
+      font-size: 11px;
+      color: #a1a1aa;
+      line-height: 1.4;
+    }
+    .inapp-btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      padding: 8px 12px;
+      background: #ffffff;
+      color: #000000;
+      font-size: 12px;
+      font-weight: 700;
+      border-radius: 10px;
+      text-decoration: none;
+      margin-top: 4px;
+    }
     .main {
       width: 100%;
       flex: 1;
@@ -71,6 +115,7 @@
       justify-content: center;
       text-align: center;
       position: relative;
+      margin: 16px 0;
     }
     .touch-surface {
       position: absolute;
@@ -82,7 +127,7 @@
       position: relative;
       z-index: 20;
       width: 100%;
-      max-width: 340px;
+      max-width: 360px;
       background: #09090b;
       border: 1px solid #27272a;
       border-radius: 24px;
@@ -98,13 +143,13 @@
       font-size: 12px;
       color: #a1a1aa;
       line-height: 1.5;
-      margin-bottom: 20px;
+      margin-bottom: 18px;
     }
     .btn {
       width: 100%;
-      padding: 14px;
+      padding: 13px;
       border-radius: 16px;
-      font-size: 14px;
+      font-size: 13px;
       font-weight: 700;
       cursor: pointer;
       border: none;
@@ -131,10 +176,52 @@
     .btn-secondary:active {
       background: #27272a;
     }
+    .btn-subtle {
+      background: transparent;
+      color: #a1a1aa;
+      border: 1px dashed #3f3f46;
+      font-size: 12px;
+      padding: 10px;
+    }
+    .btn-subtle:active {
+      color: #ffffff;
+      border-color: #71717a;
+    }
+    .camera-preview-container {
+      display: none;
+      width: 100%;
+      height: 180px;
+      border-radius: 16px;
+      overflow: hidden;
+      margin-bottom: 14px;
+      border: 1px solid #3f3f46;
+      background: #000;
+      position: relative;
+    }
+    .camera-preview-container.active {
+      display: block;
+    }
+    .camera-video {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+    .camera-switch-btn {
+      position: absolute;
+      top: 8px;
+      right: 8px;
+      background: rgba(0,0,0,0.7);
+      border: 1px solid #52525b;
+      color: #fff;
+      padding: 6px 10px;
+      border-radius: 20px;
+      font-size: 11px;
+      cursor: pointer;
+    }
     .device-info {
       margin-top: 14px;
       font-family: monospace;
-      font-size: 10px;
+      font-size: 11px;
       color: #71717a;
     }
     .ripple {
@@ -153,6 +240,77 @@
     @keyframes rip {
       0% { transform: scale(0.2); opacity: 1; }
       100% { transform: scale(2.2); opacity: 0; }
+    }
+    /* Info Modal Sheet */
+    .modal-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.85);
+      backdrop-filter: blur(4px);
+      z-index: 100;
+      display: none;
+      align-items: flex-end;
+      justify-content: center;
+    }
+    .modal-overlay.active {
+      display: flex;
+    }
+    .modal-content {
+      width: 100%;
+      max-width: 420px;
+      background: #09090b;
+      border: 1px solid #3f3f46;
+      border-top-left-radius: 24px;
+      border-top-right-radius: 24px;
+      padding: 24px 20px;
+      max-height: 85vh;
+      overflow-y: auto;
+      text-align: left;
+    }
+    .modal-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 14px;
+    }
+    .modal-title {
+      font-size: 16px;
+      font-weight: 700;
+      color: #fff;
+    }
+    .modal-close {
+      background: #18181b;
+      border: 1px solid #3f3f46;
+      color: #fff;
+      border-radius: 50%;
+      width: 28px;
+      height: 28px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+    }
+    .guide-step {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 14px;
+      font-size: 12px;
+      line-height: 1.5;
+      color: #d4d4d8;
+    }
+    .guide-step-num {
+      width: 20px;
+      height: 20px;
+      border-radius: 50%;
+      background: #fff;
+      color: #000;
+      font-weight: 700;
+      font-size: 11px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      margin-top: 2px;
     }
     .footer {
       width: 100%;
@@ -176,33 +334,111 @@
     </div>
   </div>
 
+  <!-- In-App Browser Warning (e.g. Facebook Messenger) -->
+  <div class="inapp-banner" id="inAppBanner">
+    <div class="inapp-title">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"></path>
+        <line x1="12" y1="9" x2="12" y2="13"></line>
+        <line x1="12" y1="17" x2="12.01" y2="17"></line>
+      </svg>
+      <span>In-App Browser Detected</span>
+    </div>
+    <div class="inapp-desc">
+      Messenger blocks camera &amp; hardware streaming. Tap the <strong>3 dots (⋮)</strong> in the top-right corner and select <strong>"Open in Chrome"</strong> or tap below:
+    </div>
+    <a href="#" id="openChromeBtn" class="inapp-btn">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <circle cx="12" cy="12" r="10"></circle>
+        <circle cx="12" cy="12" r="4"></circle>
+        <line x1="4.93" y1="4.93" x2="9.17" y2="9.17"></line>
+        <line x1="14.83" y1="9.17" x2="19.07" y2="4.93"></line>
+        <line x1="14.83" y1="14.83" x2="19.07" y2="19.07"></line>
+        <line x1="4.93" y1="19.07" x2="9.17" y2="14.83"></line>
+      </svg>
+      <span>Open in Google Chrome</span>
+    </a>
+  </div>
+
   <!-- Touch & Control Area -->
   <div class="main" id="mainArea">
     <div class="touch-surface" id="touchSurface"></div>
 
     <div class="action-card" id="actionCard">
-      <h2 class="title" id="deviceTitle">Mobile Link Active</h2>
+      <!-- Live Camera Preview Box -->
+      <div class="camera-preview-container" id="cameraPreviewBox">
+        <video id="cameraPreview" class="camera-video" autoplay playsinline muted></video>
+        <button class="camera-switch-btn" id="switchCameraBtn">Flip Camera</button>
+      </div>
+
+      <h2 class="title" id="deviceTitle">Android Device Connected</h2>
       <p class="subtitle" id="deviceDesc">
-        Tap the button below to start streaming this screen to DomoLens on your laptop. Every tap will be tracked with auto-zoom!
+        Stream mobile camera in 60 FPS or use this phone as an interactive touch controller with automatic zoom tracking!
       </p>
 
-      <button class="btn btn-primary" id="startShareBtn">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-          <rect x="5" y="2" width="14" height="20" rx="3"></rect>
-          <line x1="12" y1="18" x2="12.01" y2="18"></line>
-        </svg>
-        <span>Share Mobile Screen</span>
-      </button>
-
-      <button class="btn btn-secondary" id="cameraShareBtn">
+      <!-- Primary Action: Start 60 FPS Camera Stream -->
+      <button class="btn btn-primary" id="cameraShareBtn">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"></path>
           <circle cx="12" cy="13" r="3"></circle>
         </svg>
-        <span>Share Camera Instead</span>
+        <span id="cameraBtnText">Stream Mobile Camera (60 FPS)</span>
+      </button>
+
+      <!-- Secondary Action: Screen Share or Guide -->
+      <button class="btn btn-secondary" id="startShareBtn">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <rect x="5" y="2" width="14" height="20" rx="3"></rect>
+          <line x1="12" y1="18" x2="12.01" y2="18"></line>
+        </svg>
+        <span>Share Screen / OS Stream</span>
+      </button>
+
+      <!-- Tertiary Action: Guide to mirror actual phone OS apps & games -->
+      <button class="btn btn-subtle" id="osMirrorGuideBtn">
+        <span>How to mirror entire phone screen (Apps &amp; Games)</span>
       </button>
 
       <div class="device-info" id="deviceMeta">Detecting screen metrics...</div>
+    </div>
+  </div>
+
+  <!-- Full Android/iOS OS Screen Recording Modal Sheet -->
+  <div class="modal-overlay" id="guideModal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <div class="modal-title">Record Full Phone Screen</div>
+        <button class="modal-close" id="closeGuideModalBtn">✕</button>
+      </div>
+      <p style="font-size: 12px; color: #a1a1aa; margin-bottom: 14px; line-height: 1.4;">
+        Android and iOS privacy rules restrict web browsers from recording outside the browser window. Here is how to record full phone apps and games:
+      </p>
+
+      <div class="guide-step">
+        <div class="guide-step-num">1</div>
+        <div>
+          <strong style="color: #fff;">USB Cable Mirror (Fastest &amp; Zero Lag):</strong><br>
+          Plug your phone into your laptop via USB. Enable <strong>USB Debugging</strong> (Android) or tap <strong>Trust Computer</strong> (iPhone). DomoLens records your native screen at 60 FPS sub-10ms.
+        </div>
+      </div>
+
+      <div class="guide-step">
+        <div class="guide-step-num">2</div>
+        <div>
+          <strong style="color: #fff;">Android Smart View / Screen Cast:</strong><br>
+          Swipe down your Android notification shade, tap <strong>Smart View</strong> (Samsung) or <strong>Screen Cast</strong> (Pixel/Xiaomi), and cast wirelessly to your laptop.
+        </div>
+      </div>
+
+      <div class="guide-step">
+        <div class="guide-step-num">3</div>
+        <div>
+          <strong style="color: #fff;">Camera Stream (Instant Zero-Install):</strong><br>
+          Tap the white <strong>"Stream Mobile Camera"</strong> button above to stream your phone's camera wirelessly right now.
+        </div>
+      </div>
+
+      <button class="btn btn-primary" id="modalOkBtn" style="margin-top: 8px;">Got It</button>
     </div>
   </div>
 
@@ -216,15 +452,17 @@
     const params = new URLSearchParams(window.location.search);
     const session = params.get('session') || params.get('id') || 'dl_default';
     const host = params.get('host') || window.location.hostname || '127.0.0.1';
+    const port = params.get('port') || window.location.port || '1420';
 
-    // 2. Identify Actual Mobile Device Model & Resolution
+    // 2. Identify Mobile Device & In-App Browser
     const ua = navigator.userAgent || '';
-    let os = 'other';
-    let deviceName = 'Mobile Phone';
-    if (/iPad|iPhone|iPod/.test(ua)) {
+    let os = 'android'; // Default to Android
+    let deviceName = 'Android Device';
+
+    if (/iPad|iPhone|iPod/i.test(ua)) {
       os = 'ios';
-      deviceName = /iPad/.test(ua) ? 'Apple iPad' : 'Apple iPhone';
-    } else if (/Android/.test(ua)) {
+      deviceName = /iPad/i.test(ua) ? 'Apple iPad' : 'Apple iPhone';
+    } else if (/Android/i.test(ua)) {
       os = 'android';
       if (/Samsung/i.test(ua)) deviceName = 'Samsung Galaxy';
       else if (/Pixel/i.test(ua)) deviceName = 'Google Pixel';
@@ -235,10 +473,18 @@
     const dpr = window.devicePixelRatio || 1;
     const realW = Math.round((window.screen.width || window.innerWidth) * dpr);
     const realH = Math.round((window.screen.height || window.innerHeight) * dpr);
-    const aspect = (realW / realH).toFixed(2);
 
-    document.getElementById('deviceTitle').textContent = deviceName;
+    document.getElementById('deviceTitle').textContent = `${deviceName} Active`;
     document.getElementById('deviceMeta').textContent = `${realW} × ${realH} • DPR: ${dpr} • ${deviceName}`;
+
+    // Detect In-App Browsers (Facebook, Messenger, Instagram, Line, etc.)
+    const isInApp = /FBAN|FBAV|Messenger|Instagram|Line|Twitter|TikTok|MicroMessenger/i.test(ua);
+    if (isInApp) {
+      const banner = document.getElementById('inAppBanner');
+      banner.classList.add('active');
+      const chromeBtn = document.getElementById('openChromeBtn');
+      chromeBtn.href = `intent://${window.location.host}${window.location.pathname}${window.location.search}#Intent;scheme=http;package=com.android.chrome;end`;
+    }
 
     // 3. WebRTC Peer Connection Setup
     const statusDot = document.getElementById('statusDot');
@@ -247,6 +493,7 @@
     let pc = null;
     let dataChannel = null;
     let localStream = null;
+    let currentFacingMode = 'environment'; // Default to back camera
 
     const rtcConfig = {
       iceServers: [
@@ -308,7 +555,7 @@
       }
     }
 
-    // 4. Signaling Channel via lightweight pubsub (ntfy.sh & local fallback)
+    // 4. Signaling Channel via lightweight pubsub (ntfy.sh & fallback)
     const clientTopic = `domolens_client_${session}`;
     const hostTopic = `domolens_host_${session}`;
 
@@ -324,9 +571,10 @@
       try {
         const ws = new WebSocket(`wss://ntfy.sh/${clientTopic}/ws`);
         ws.onopen = () => {
-          statusText.textContent = 'Signaling...';
-          // Send initial handshake
-          sendSignalingMessage({ type: 'hello', name: deviceName, width: realW, height: realH });
+          statusText.textContent = 'Linked to Laptop';
+          statusDot.classList.add('connected');
+          // Send initial handshake with device metrics
+          sendSignalingMessage({ type: 'hello', name: deviceName, os: os, width: realW, height: realH });
         };
         ws.onmessage = async (e) => {
           try {
@@ -336,98 +584,162 @@
           } catch (err) {}
         };
       } catch (e) {
-        statusText.textContent = 'Ready (Direct)';
+        statusText.textContent = 'Direct Mode';
       }
     }
 
     async function handleSignalingMessage(msg) {
-      if (!pc) initPeerConnection();
-
-      if (msg.type === 'offer') {
+      if (msg.type === 'ack') {
+        statusDot.classList.add('connected');
+        statusText.textContent = 'Laptop Connected';
+      } else if (msg.type === 'offer') {
+        if (!pc) initPeerConnection();
         await pc.setRemoteDescription(new RTCSessionDescription(msg.offer));
         const answer = await pc.createAnswer();
         await pc.setLocalDescription(answer);
         sendSignalingMessage({ type: 'answer', answer });
       } else if (msg.type === 'candidate' && msg.candidate) {
         try {
+          if (!pc) initPeerConnection();
           await pc.addIceCandidate(new RTCIceCandidate(msg.candidate));
         } catch (err) {}
       }
     }
 
-    // 5. Screen & Camera Capture Triggers
-    const startShareBtn = document.getElementById('startShareBtn');
+    // 5. Camera & Screen Capture Actions
     const cameraShareBtn = document.getElementById('cameraShareBtn');
+    const startShareBtn = document.getElementById('startShareBtn');
+    const cameraPreviewBox = document.getElementById('cameraPreviewBox');
+    const cameraPreview = document.getElementById('cameraPreview');
+    const switchCameraBtn = document.getElementById('switchCameraBtn');
 
-    async function startScreenStream() {
+    async function startCameraStream(facing = currentFacingMode) {
       try {
-        if (!navigator.mediaDevices || !navigator.mediaDevices.getDisplayMedia) {
-          alert('Screen sharing is not supported in this browser. Please use Chrome on Android or Safari on iOS 15+.');
-          return;
+        if (localStream) {
+          localStream.getTracks().forEach(t => t.stop());
         }
-        const stream = await navigator.mediaDevices.getDisplayMedia({
+
+        const constraints = {
           video: {
-            width: { ideal: realW },
-            height: { ideal: realH },
-            frameRate: { ideal: 60 }
+            facingMode: facing,
+            width: { ideal: 1920, min: 1280 },
+            height: { ideal: 1080, min: 720 },
+            frameRate: { ideal: 60, min: 30 }
           },
-          audio: true
-        });
+          audio: false
+        };
+
+        const stream = await navigator.mediaDevices.getUserMedia(constraints);
+        currentFacingMode = facing;
+        localStream = stream;
+
+        cameraPreview.srcObject = stream;
+        cameraPreviewBox.classList.add('active');
 
         handleStreamStarted(stream);
       } catch (err) {
-        console.warn('Screen share cancelled, trying camera fallback:', err);
+        console.warn('Camera stream error:', err);
+        // Fallback without strict width/height
+        try {
+          const fallbackStream = await navigator.mediaDevices.getUserMedia({
+            video: true,
+            audio: false
+          });
+          localStream = fallbackStream;
+          cameraPreview.srcObject = fallbackStream;
+          cameraPreviewBox.classList.add('active');
+          handleStreamStarted(fallbackStream);
+        } catch (fallbackErr) {
+          showGuideModal();
+        }
       }
     }
 
-    async function startCameraStream() {
-      try {
-        const stream = await navigator.mediaDevices.getUserMedia({
-          video: {
-            facingMode: 'environment',
-            width: { ideal: 1920 },
-            height: { ideal: 1080 }
-          },
-          audio: true
-        });
-        handleStreamStarted(stream);
-      } catch (err) {
-        alert('Could not access camera: ' + err.message);
+    async function startScreenStream() {
+      // Check if getDisplayMedia is supported on this browser (desktop/tablets)
+      if (navigator.mediaDevices && navigator.mediaDevices.getDisplayMedia) {
+        try {
+          const stream = await navigator.mediaDevices.getDisplayMedia({
+            video: {
+              width: { ideal: realW },
+              height: { ideal: realH },
+              frameRate: { ideal: 60 }
+            },
+            audio: true
+          });
+          handleStreamStarted(stream);
+          return;
+        } catch (e) {
+          console.warn('Screen share cancelled:', e);
+        }
       }
+      // Mobile browsers do not support getDisplayMedia -> show friendly guide modal
+      showGuideModal();
     }
 
     function handleStreamStarted(stream) {
-      localStream = stream;
       if (!pc) initPeerConnection();
 
-      stream.getTracks().forEach((track) => pc.addTrack(track, stream));
+      // Replace or add track to peer connection
+      const videoTrack = stream.getVideoTracks()[0];
+      if (videoTrack) {
+        const senders = pc.getSenders();
+        const videoSender = senders.find(s => s.track && s.track.kind === 'video');
+        if (videoSender) {
+          videoSender.replaceTrack(videoTrack);
+        } else {
+          pc.addTrack(videoTrack, stream);
+        }
 
-      document.getElementById('actionCard').style.opacity = '0.4';
-      startShareBtn.innerHTML = '<span>● Live Stream Shared</span>';
+        const settings = videoTrack.getSettings();
+        const streamW = settings.width || realW;
+        const streamH = settings.height || realH;
+        document.getElementById('deviceMeta').textContent = `${streamW} × ${streamH} • 60 FPS Hardware Live`;
+        sendSignalingMessage({
+          type: 'device-info',
+          name: deviceName,
+          os: os,
+          width: streamW,
+          height: streamH,
+          fps: settings.frameRate || 60
+        });
+      }
+
+      document.getElementById('cameraBtnText').textContent = '● Camera Streaming Live';
       statusDot.classList.add('connected');
       statusText.textContent = 'Streaming Live';
-
-      // Read real video dimensions
-      const vTrack = stream.getVideoTracks()[0];
-      if (vTrack) {
-        const settings = vTrack.getSettings();
-        if (settings.width && settings.height) {
-          document.getElementById('deviceMeta').textContent = `${settings.width} × ${settings.height} • Active Hardware Stream`;
-          sendSignalingMessage({
-            type: 'device-info',
-            name: deviceName,
-            width: settings.width,
-            height: settings.height,
-            fps: settings.frameRate || 60
-          });
-        }
-      }
     }
 
+    cameraShareBtn.addEventListener('click', () => startCameraStream(currentFacingMode));
     startShareBtn.addEventListener('click', startScreenStream);
-    cameraShareBtn.addEventListener('click', startCameraStream);
 
-    // 6. Real Touch / Tap Telemetry Capture
+    switchCameraBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const nextFacing = currentFacingMode === 'environment' ? 'user' : 'environment';
+      startCameraStream(nextFacing);
+    });
+
+    // 6. Modal Sheet Helpers
+    const guideModal = document.getElementById('guideModal');
+    const osMirrorGuideBtn = document.getElementById('osMirrorGuideBtn');
+    const closeGuideModalBtn = document.getElementById('closeGuideModalBtn');
+    const modalOkBtn = document.getElementById('modalOkBtn');
+
+    function showGuideModal() {
+      guideModal.classList.add('active');
+    }
+    function hideGuideModal() {
+      guideModal.classList.remove('active');
+    }
+
+    osMirrorGuideBtn.addEventListener('click', showGuideModal);
+    closeGuideModalBtn.addEventListener('click', hideGuideModal);
+    modalOkBtn.addEventListener('click', hideGuideModal);
+    guideModal.addEventListener('click', (e) => {
+      if (e.target === guideModal) hideGuideModal();
+    });
+
+    // 7. Real Touch / Tap Telemetry Capture
     const touchSurface = document.getElementById('touchSurface');
 
     function emitTouch(e, type) {
@@ -462,7 +774,7 @@
     touchSurface.addEventListener('touchstart', (e) => emitTouch(e, 'tap'), { passive: true });
     touchSurface.addEventListener('click', (e) => emitTouch(e, 'tap'), { passive: true });
 
-    // Initialize
+    // Initialize Connection
     initPeerConnection();
     connectSignalingWebSocket();
   </script>

@@ -144,21 +144,21 @@ class MobileStreamBridgeImpl {
    * Connects a simulated device preset for automated testing and offline visual previews.
    */
   public connectSimulatedDevice(
-    preset: "iphone" | "android" | "ipad" = "iphone",
+    preset: "android" | "iphone" | "ipad" = "android",
     type: "wifi" | "usb" | "cloud" = "wifi",
   ): MobileDeviceInfo {
     let device: MobileDeviceInfo;
-    if (preset === "android") {
+    if (preset === "iphone") {
       device = {
-        id: "dev-s24-ultra",
-        name: "Samsung Galaxy S24 Ultra",
-        os: "android",
+        id: "dev-iphone-15-pro",
+        name: "iPhone 15 Pro",
+        os: "ios",
         connectionType: type,
-        width: 1080,
-        height: 2400,
+        width: 1179,
+        height: 2556,
         fps: 60,
-        aspectRatio: "20:9",
-        latencyMs: type === "usb" ? 14 : 20,
+        aspectRatio: "19.5:9",
+        latencyMs: type === "usb" ? 10 : 22,
       };
     } else if (preset === "ipad") {
       device = {
@@ -174,15 +174,15 @@ class MobileStreamBridgeImpl {
       };
     } else {
       device = {
-        id: "dev-iphone-15-pro",
-        name: "iPhone 15 Pro",
-        os: "ios",
+        id: "dev-s24-ultra",
+        name: "Samsung Galaxy S24 Ultra",
+        os: "android",
         connectionType: type,
-        width: 1179,
-        height: 2556,
+        width: 1080,
+        height: 2400,
         fps: 60,
-        aspectRatio: "19.5:9",
-        latencyMs: type === "usb" ? 10 : 22,
+        aspectRatio: "20:9",
+        latencyMs: type === "usb" ? 14 : 20,
       };
     }
 
@@ -280,10 +280,12 @@ class MobileStreamBridgeImpl {
     if (msg.type === "hello" || msg.type === "device-info") {
       const width = Number(msg.width) || 1080;
       const height = Number(msg.height) || 2400;
+      const isIos = msg.os === "ios" || (/iPhone|iPad/i.test(msg.name || ""));
+      const os = isIos ? "ios" : "android";
       const device: MobileDeviceInfo = {
         id: `phone-${Date.now()}`,
-        name: msg.name || (/iPhone|iPad/.test(navigator.userAgent) ? "Apple iPhone" : "Android Device"),
-        os: msg.os || "android",
+        name: msg.name || (isIos ? "Apple iPhone" : "Android Device"),
+        os,
         connectionType: "wifi",
         width,
         height,
@@ -294,6 +296,13 @@ class MobileStreamBridgeImpl {
 
       this.activeDevice = device;
       this.deviceListeners.forEach((cb) => cb(device));
+
+      // Respond with acknowledgment back to mobile device
+      this.sendClientSignaling(clientTopic, {
+        type: "ack",
+        hostName: "DomoLens Laptop",
+        status: "ready",
+      });
 
       // Initiate WebRTC offer to the phone
       this.setupHostPeerConnection(clientTopic);

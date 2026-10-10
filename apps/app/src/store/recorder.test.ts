@@ -367,11 +367,14 @@ describe("useRecorder store", () => {
     globalThis.sessionStorage = originalStorage;
   });
 
-  it("switches between computer and mobile recording targets cleanly", () => {
+  it("switches between computer and mobile recording targets cleanly", async () => {
     useRecorder.getState().setDeviceTarget("mobile");
     expect(useRecorder.getState().deviceTarget).toBe("mobile");
+
+    const dev = await useRecorder.getState().connectMobileDevice("wifi", "android");
     expect(useRecorder.getState().mobileConnectionStatus).toBe("connected");
-    expect(useRecorder.getState().mobileDeviceInfo?.name).toBe("iPhone 15 Pro");
+    expect(dev.name).toBe("Samsung Galaxy S24 Ultra");
+    expect(useRecorder.getState().mobileDeviceInfo?.name).toBe("Samsung Galaxy S24 Ultra");
 
     useRecorder.getState().setDeviceTarget("computer");
     expect(useRecorder.getState().deviceTarget).toBe("computer");

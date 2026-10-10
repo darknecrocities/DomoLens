@@ -4,6 +4,7 @@ import {
   AppWindow,
   ArrowLeft,
   Cable,
+  Camera,
   Check,
   CheckCircle2,
   Copy,
@@ -491,7 +492,7 @@ export function RecordScreen() {
                   <div className="flex items-center gap-2">
                     <button
                       type="button"
-                      onClick={() => openSetupGuideFor(mobileConnectionType === "usb" ? "ios-usb" : "ios-wifi")}
+                      onClick={() => openSetupGuideFor(mobileConnectionType === "usb" ? "android-usb" : "android-wifi")}
                       className="flex items-center gap-1.5 rounded-lg border border-neutral-700 bg-neutral-800 hover:bg-neutral-700 px-3 py-1 text-xs font-semibold text-white transition-colors"
                     >
                       <HelpCircle className="size-3.5" />
@@ -534,14 +535,23 @@ export function RecordScreen() {
                   <div className="flex flex-col items-center space-y-3 w-full">
                     {mobileConnectionType !== "usb" ? (
                       <div className="flex flex-col items-center w-full p-4 rounded-2xl bg-black border border-neutral-800">
-                        {/* Real Scannable High-Res QR Code Card */}
-                        <div className="relative p-3 bg-white rounded-2xl shadow-lift border border-neutral-700 flex flex-col items-center">
+                        {/* Camera Scanner Guidance Banner */}
+                        <div className="w-full flex items-start gap-2.5 rounded-xl bg-neutral-900 border border-neutral-700/80 p-2.5 text-xs text-neutral-200 mb-3">
+                          <Camera className="size-4 text-white shrink-0 mt-0.5" />
+                          <div className="text-[11px] leading-snug">
+                            <span className="font-semibold text-white">Scan with Camera app or Google Lens: </span>
+                            <span className="text-neutral-400">Do not use your phone's Wi-Fi Settings scanner (this is a web stream link, not a Wi-Fi password). If opening in Messenger, tap [⋮] &rarr; Open in Chrome.</span>
+                          </div>
+                        </div>
+
+                        {/* Real Scannable High-Res QR Code Card (Unclipped square finder patterns with margin=6) */}
+                        <div className="relative p-3.5 bg-white rounded-2xl shadow-lift border border-neutral-700 flex flex-col items-center">
                           {!qrFailed ? (
                             <img
-                              src={`https://api.qrserver.com/v1/create-qr-code/?size=240x240&margin=2&format=svg&data=${encodeURIComponent(pairingInfo.activeUrl)}`}
+                              src={`https://api.qrserver.com/v1/create-qr-code/?size=280x280&margin=6&format=svg&data=${encodeURIComponent(pairingInfo.activeUrl)}`}
                               alt="Scan Pairing QR Code"
                               onError={() => setQrFailed(true)}
-                              className="size-48 sm:size-52 rounded-xl object-contain bg-white"
+                              className="size-48 sm:size-52 object-contain bg-white"
                             />
                           ) : (
                             <div className="size-48 sm:size-52 rounded-xl bg-white flex flex-col items-center justify-center p-3 text-black text-center">
@@ -552,7 +562,7 @@ export function RecordScreen() {
                           )}
                           <div className="mt-2 flex items-center gap-1.5 text-[10px] font-mono font-bold text-black uppercase tracking-wider">
                             <span className="size-1.5 rounded-full bg-black animate-pulse" />
-                            <span>{mobileConnectionType === "cloud" ? "Cellular 4G/5G WebRTC" : "Wi-Fi Direct Link"}</span>
+                            <span>{mobileConnectionType === "cloud" ? "Universal WebRTC Link" : "Direct Wi-Fi Link"}</span>
                           </div>
                         </div>
 
@@ -573,6 +583,17 @@ export function RecordScreen() {
                               Unpair
                             </button>
                           )}
+                        </div>
+
+                        {/* Direct Manual Link Box */}
+                        <div className="mt-2.5 w-full flex flex-col gap-1 rounded-xl bg-neutral-900/90 border border-neutral-800 p-2 text-[11px] font-mono">
+                          <div className="text-neutral-400 flex items-center justify-between text-[10px]">
+                            <span>Or type directly in mobile browser:</span>
+                            <span className="text-white font-semibold">{mobileConnectionType === "cloud" ? "Universal HTTPS" : "Direct Wi-Fi"}</span>
+                          </div>
+                          <div className="text-neutral-200 select-all truncate text-[11px] font-medium bg-black/70 p-1.5 rounded border border-neutral-800">
+                            {pairingInfo.activeUrl}
+                          </div>
                         </div>
 
                         {/* Quick Action Buttons */}
@@ -673,7 +694,7 @@ export function RecordScreen() {
                           </div>
                           <div className="flex items-start gap-2">
                             <span className="flex size-5 shrink-0 items-center justify-center rounded-full bg-white text-black text-[10px] font-bold">2</span>
-                            <span>On iPhone: Unlock and tap <strong>Trust Computer</strong>. On Android: Turn on <strong>USB Debugging</strong>.</span>
+                            <span>On Android: Turn on <strong>USB Debugging</strong>. On iPhone: Unlock and tap <strong>Trust Computer</strong>.</span>
                           </div>
                           <div className="flex items-start gap-2">
                             <span className="flex size-5 shrink-0 items-center justify-center rounded-full bg-white text-black text-[10px] font-bold">3</span>
@@ -682,7 +703,7 @@ export function RecordScreen() {
                         </div>
                         <button
                           type="button"
-                          onClick={() => openSetupGuideFor("ios-usb")}
+                          onClick={() => openSetupGuideFor("android-usb")}
                           className="mt-2 rounded-xl border border-neutral-700 bg-neutral-800 hover:bg-neutral-700 py-2 text-xs font-semibold text-white transition-colors text-center"
                         >
                           Open Detailed USB Setup Guide
@@ -699,24 +720,24 @@ export function RecordScreen() {
                       <div className="mt-2.5 flex flex-wrap gap-1.5 pt-2 border-t border-neutral-900">
                         <button
                           type="button"
-                          onClick={() => void connectMobileDevice(mobileConnectionType, "iphone")}
-                          className="rounded-lg border border-neutral-700 bg-neutral-800 hover:bg-neutral-700 px-2.5 py-1 text-[11px] font-medium text-white transition-colors"
-                        >
-                          iPhone 15 Pro (Simulated)
-                        </button>
-                        <button
-                          type="button"
                           onClick={() => void connectMobileDevice(mobileConnectionType, "android")}
                           className="rounded-lg border border-neutral-700 bg-neutral-800 hover:bg-neutral-700 px-2.5 py-1 text-[11px] font-medium text-white transition-colors"
                         >
-                          Galaxy S24 (Simulated)
+                          Galaxy S24 (Android)
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => void connectMobileDevice(mobileConnectionType, "iphone")}
+                          className="rounded-lg border border-neutral-700 bg-neutral-800 hover:bg-neutral-700 px-2.5 py-1 text-[11px] font-medium text-white transition-colors"
+                        >
+                          iPhone 15 Pro
                         </button>
                         <button
                           type="button"
                           onClick={() => void connectMobileDevice(mobileConnectionType, "ipad")}
                           className="rounded-lg border border-neutral-700 bg-neutral-800 hover:bg-neutral-700 px-2.5 py-1 text-[11px] font-medium text-white transition-colors"
                         >
-                          iPad Pro (Simulated)
+                          iPad Pro
                         </button>
                       </div>
                     </details>

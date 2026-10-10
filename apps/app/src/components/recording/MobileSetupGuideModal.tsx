@@ -20,7 +20,7 @@ interface MobileSetupGuideModalProps {
 
 type GuideTab = "cellular-hotspot" | "android-wifi" | "android-usb" | "ios-wifi" | "ios-usb" | "troubleshooting";
 
-export function MobileSetupGuideModal({ isOpen, onClose, initialTab = "ios-wifi" }: MobileSetupGuideModalProps) {
+export function MobileSetupGuideModal({ isOpen, onClose, initialTab = "android-wifi" }: MobileSetupGuideModalProps) {
   const [activeTab, setActiveTab] = useState<GuideTab>(initialTab);
 
   if (!isOpen) return null;
@@ -64,8 +64,32 @@ export function MobileSetupGuideModal({ isOpen, onClose, initialTab = "ios-wifi"
             </button>
           </div>
 
-          {/* Navigation Tabs */}
+          {/* Navigation Tabs (Android First) */}
           <div className="flex border-b border-ink-800 px-6 bg-ink-950/60 overflow-x-auto gap-1 py-1.5 scrollbar-none">
+            <button
+              type="button"
+              onClick={() => setActiveTab("android-wifi")}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-colors ${
+                activeTab === "android-wifi"
+                  ? "bg-white text-black shadow-sm"
+                  : "text-fg-muted hover:text-white hover:bg-ink-800"
+              }`}
+            >
+              <Wifi className="size-3.5" />
+              <span>Android (Wi-Fi)</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveTab("android-usb")}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-colors ${
+                activeTab === "android-usb"
+                  ? "bg-white text-black shadow-sm"
+                  : "text-fg-muted hover:text-white hover:bg-ink-800"
+              }`}
+            >
+              <Cable className="size-3.5" />
+              <span>Android (USB Cable)</span>
+            </button>
             <button
               type="button"
               onClick={() => setActiveTab("cellular-hotspot")}
@@ -101,30 +125,6 @@ export function MobileSetupGuideModal({ isOpen, onClose, initialTab = "ios-wifi"
             >
               <Cable className="size-3.5" />
               <span>iOS (USB Cable)</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => setActiveTab("android-wifi")}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-colors ${
-                activeTab === "android-wifi"
-                  ? "bg-white text-black shadow-sm"
-                  : "text-fg-muted hover:text-white hover:bg-ink-800"
-              }`}
-            >
-              <Wifi className="size-3.5" />
-              <span>Android (Wi-Fi)</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => setActiveTab("android-usb")}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-colors ${
-                activeTab === "android-usb"
-                  ? "bg-white text-black shadow-sm"
-                  : "text-fg-muted hover:text-white hover:bg-ink-800"
-              }`}
-            >
-              <Cable className="size-3.5" />
-              <span>Android (USB Cable)</span>
             </button>
             <button
               type="button"
@@ -298,9 +298,9 @@ export function MobileSetupGuideModal({ isOpen, onClose, initialTab = "ios-wifi"
                   <div className="flex items-start gap-3 rounded-2xl border border-ink-800 bg-ink-950/40 p-3.5">
                     <span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-white text-black text-xs font-bold">2</span>
                     <div>
-                      <h4 className="text-sm font-semibold text-white">Scan QR Code</h4>
+                      <h4 className="text-sm font-semibold text-white">Scan QR Code with Camera</h4>
                       <p className="mt-1 text-xs text-fg-muted leading-relaxed">
-                        Open your Android camera or Google Lens to scan the QR code on screen. Tap to open the URL in Chrome.
+                        Open your Android camera or Google Lens to scan the QR code on screen. Tap to open the URL in Chrome. <em>(Note: If opened from Facebook Messenger, tap the 3 dots [⋮] in the top right and choose <strong>"Open in Chrome"</strong>).</em>
                       </p>
                     </div>
                   </div>
