@@ -52,10 +52,7 @@ export function PainVsGainSection() {
           viewport={{ once: true, amount: 0.3 }}
           transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
         >
-          <div className="font-mono text-xs uppercase tracking-widest text-neutral-400">
-            // The Real Problem
-          </div>
-          <h2 className="mt-2 text-3xl font-black uppercase tracking-tight text-white sm:text-5xl">
+          <h2 className="text-3xl font-black uppercase tracking-tight text-white sm:text-5xl">
             Why Spend 3 Hours Keyframing?
           </h2>
           <p className="mt-2 max-w-2xl text-sm text-neutral-400 leading-relaxed">

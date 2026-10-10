@@ -169,10 +169,7 @@ export function ShowcaseSimulatorSection() {
     >
       <div id="studio-demo" className="sr-only" />
       <div className="mx-auto max-w-6xl">
-        <div className="font-mono text-xs uppercase tracking-widest text-neutral-400">
-          // See It In Action
-        </div>
-        <h2 className="mt-2 text-3xl font-black uppercase tracking-tight text-white sm:text-5xl">
+        <h2 className="text-3xl font-black uppercase tracking-tight text-white sm:text-5xl">
           Everything You Need To Showcase Your Work.
         </h2>
         <p className="mt-2 max-w-2xl text-sm text-neutral-400 leading-relaxed">

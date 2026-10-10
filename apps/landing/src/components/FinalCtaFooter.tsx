@@ -44,12 +44,8 @@ export function FinalCtaFooter() {
         </div>
       </div>
 
-      {/* Direct Downloads Section */}
       <div className="mx-auto max-w-5xl px-4 py-20 sm:px-6 lg:px-12 text-center relative z-10">
-        <div className="font-mono text-xs uppercase tracking-widest text-neutral-400">
-          // Section 5: Direct Multi-Platform Downloads
-        </div>
-        <h2 className="mt-2 text-4xl font-black uppercase tracking-tight text-white sm:text-6xl">
+        <h2 className="text-4xl font-black uppercase tracking-tight text-white sm:text-6xl">
           Start Recording Today.
         </h2>
         <p className="mx-auto mt-3 max-w-xl text-sm text-neutral-400">

@@ -98,10 +98,7 @@ export function WorksEverywhere() {
       </div>
 
       <div className="mx-auto max-w-6xl px-4 sm:px-6 lg:px-12">
-        <div className="font-mono text-xs uppercase tracking-widest text-neutral-400">
-          // Works On All Your Devices
-        </div>
-        <h2 className="mt-2 text-3xl font-black uppercase tracking-tight text-white sm:text-5xl">
+        <h2 className="text-3xl font-black uppercase tracking-tight text-white sm:text-5xl">
           One Project. Every Device.
         </h2>
         <p className="mt-2 max-w-xl text-sm text-neutral-400">

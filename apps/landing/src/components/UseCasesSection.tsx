@@ -56,10 +56,7 @@ export function UseCasesSection() {
       className="relative border-b border-white/[0.08] bg-black px-4 py-24 sm:px-6 lg:px-12"
     >
       <div className="mx-auto max-w-6xl">
-        <div className="font-mono text-xs uppercase tracking-widest text-neutral-400">
-          // Where Creators Use DomoLens
-        </div>
-        <h2 className="mt-2 text-3xl font-black uppercase tracking-tight text-white sm:text-5xl">
+        <h2 className="text-3xl font-black uppercase tracking-tight text-white sm:text-5xl">
           Built For Anyone Who Ships Products.
         </h2>
         <p className="mt-2 max-w-2xl text-sm text-neutral-400 leading-relaxed">

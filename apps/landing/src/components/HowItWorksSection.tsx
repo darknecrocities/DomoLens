@@ -40,10 +40,7 @@ export function HowItWorksSection() {
     >
       <div id="workflow" className="sr-only" />
       <div className="mx-auto max-w-6xl">
-        <div className="font-mono text-xs uppercase tracking-widest text-neutral-400">
-          // Four-Step Workflow
-        </div>
-        <h2 className="mt-2 text-3xl font-black uppercase tracking-tight text-white sm:text-5xl">
+        <h2 className="text-3xl font-black uppercase tracking-tight text-white sm:text-5xl">
           Four Steps. Zero Manual Keyframes.
         </h2>
         <p className="mt-2 max-w-xl text-sm text-neutral-400">

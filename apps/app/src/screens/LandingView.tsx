@@ -422,9 +422,6 @@ export function LandingView() {
       onScroll={handleScroll}
       className="flex-1 overflow-y-auto bg-black text-white selection:bg-white selection:text-black scroll-smooth"
     >
-      {/* ========================================================================= */}
-      {/* SECTION 1: HERO & SCROLL FADE-OUT / REAL APP DEMO VIDEO FADE-IN */}
-      {/* ========================================================================= */}
       <section
         id="hero"
         ref={cardRef}
@@ -598,9 +595,6 @@ export function LandingView() {
         </div>
       </section>
 
-      {/* ========================================================================= */}
-      {/* BRANDING BELT: CLEAN LOGO & TEXT ONLY (NO FRAMES, NO BOXES) */}
-      {/* ========================================================================= */}
       <div id="tech-stack" className="relative z-30 border-y border-neutral-800 bg-neutral-950 py-4 overflow-hidden shadow-[0_-25px_60px_rgba(0,0,0,0.95)]">
         <div className="animate-marquee flex items-center gap-12 font-mono text-xs font-bold uppercase tracking-wider text-neutral-300">
           {duplicatedBelt.map((item, idx) => {
@@ -619,9 +613,6 @@ export function LandingView() {
         </div>
       </div>
 
-      {/* ========================================================================= */}
-      {/* SECTION: PAIN VS. SOLUTION (WHY SPEND 3 HOURS IN A VIDEO EDITOR?) */}
-      {/* ========================================================================= */}
       <motion.section
         initial={{ opacity: 0, y: 50, clipPath: "inset(8% 0% 0% 0%)" }}
         whileInView={{ opacity: 1, y: 0, clipPath: "inset(0% 0% 0% 0%)" }}
@@ -630,10 +621,7 @@ export function LandingView() {
         className="relative border-b border-neutral-800 bg-neutral-950 px-4 py-24 sm:px-6 lg:px-12"
       >
         <div className="mx-auto max-w-6xl">
-          <div className="font-mono text-xs uppercase tracking-widest text-neutral-400">
-            // The Real Problem
-          </div>
-          <h2 className="mt-2 text-3xl font-black uppercase tracking-tight text-white sm:text-5xl">
+          <h2 className="text-3xl font-black uppercase tracking-tight text-white sm:text-5xl">
             Why Spend 3 Hours Keyframing?
           </h2>
           <p className="mt-2 max-w-2xl text-sm text-neutral-400 leading-relaxed">
@@ -719,9 +707,6 @@ export function LandingView() {
         </div>
       </motion.section>
 
-      {/* ========================================================================= */}
-      {/* SECTION: REAL APP SCREEN RECORDING IN ACTION */}
-      {/* ========================================================================= */}
       <motion.section
         id="studio-demo"
         initial={{ opacity: 0, y: 50, clipPath: "inset(8% 0% 0% 0%)" }}
@@ -732,10 +717,7 @@ export function LandingView() {
       >
         <div id="showcase" className="sr-only" />
         <div className="mx-auto max-w-6xl">
-          <div className="font-mono text-xs uppercase tracking-widest text-neutral-400">
-            // Real App In Action
-          </div>
-          <h2 className="mt-2 text-3xl font-black uppercase tracking-tight text-white sm:text-5xl">
+          <h2 className="text-3xl font-black uppercase tracking-tight text-white sm:text-5xl">
             Real Screen Recording. Zero Dummy Demos.
           </h2>
           <p className="mt-2 max-w-2xl text-sm text-neutral-400 leading-relaxed">
@@ -943,10 +925,6 @@ export function LandingView() {
         </div>
       </motion.section>
 
-      {/* ========================================================================= */}
-      {/* SECTION 2: CONTINUOUS FEATURE CARDS CAROUSEL (NON-STOP ANIMATION) */}
-      {/* With Curtain Reveal Effect */}
-      {/* ========================================================================= */}
       <motion.section
         id="features"
         initial={{ opacity: 0, y: 50, clipPath: "inset(8% 0% 0% 0%)" }}
@@ -956,10 +934,7 @@ export function LandingView() {
         className="relative scroll-mt-16 overflow-hidden border-b border-neutral-800 bg-black py-24"
       >
         <div className="mx-auto max-w-6xl px-4 sm:px-6 mb-12">
-          <div className="font-mono text-xs uppercase tracking-widest text-neutral-400">
-            // Made For Creators
-          </div>
-          <h2 className="mt-2 text-3xl font-black uppercase tracking-tight text-white sm:text-5xl">
+          <h2 className="text-3xl font-black uppercase tracking-tight text-white sm:text-5xl">
             Everything You Need.
           </h2>
           <p className="mt-2 max-w-xl text-sm text-neutral-400">
@@ -1006,10 +981,6 @@ export function LandingView() {
         </div>
       </motion.section>
 
-      {/* ========================================================================= */}
-      {/* SECTION 3: PRODUCT SHOWCASE ENGINE */}
-      {/* With Curtain Reveal Effect */}
-      {/* ========================================================================= */}
       <motion.section
         id="product-showcase"
         initial={{ opacity: 0, y: 50, clipPath: "inset(8% 0% 0% 0%)" }}
@@ -1019,10 +990,7 @@ export function LandingView() {
         className="relative border-b border-neutral-800 bg-neutral-950 px-4 py-24 sm:px-6 lg:px-12"
       >
         <div className="mx-auto max-w-6xl">
-          <div className="font-mono text-xs uppercase tracking-widest text-neutral-400">
-            // Product Showcase Engine
-          </div>
-          <h2 className="mt-2 text-3xl font-black uppercase tracking-tight text-white sm:text-5xl">
+          <h2 className="text-3xl font-black uppercase tracking-tight text-white sm:text-5xl">
             Perfect for Showcasing Your Product.
           </h2>
           <p className="mt-2 max-w-2xl text-sm text-neutral-400 leading-relaxed">
@@ -1095,9 +1063,6 @@ export function LandingView() {
         </div>
       </motion.section>
 
-      {/* ========================================================================= */}
-      {/* SECTION: REAL-WORLD USE CASES (BUILT FOR ANYONE WHO SHIPS PRODUCTS) */}
-      {/* ========================================================================= */}
       <motion.section
         initial={{ opacity: 0, y: 50, clipPath: "inset(8% 0% 0% 0%)" }}
         whileInView={{ opacity: 1, y: 0, clipPath: "inset(0% 0% 0% 0%)" }}
@@ -1106,10 +1071,7 @@ export function LandingView() {
         className="relative border-b border-neutral-800 bg-neutral-950 px-4 py-24 sm:px-6 lg:px-12"
       >
         <div className="mx-auto max-w-6xl">
-          <div className="font-mono text-xs uppercase tracking-widest text-neutral-400">
-            // Where Creators Use DomoLens
-          </div>
-          <h2 className="mt-2 text-3xl font-black uppercase tracking-tight text-white sm:text-5xl">
+          <h2 className="text-3xl font-black uppercase tracking-tight text-white sm:text-5xl">
             Built For Anyone Who Ships Products.
           </h2>
           <p className="mt-2 max-w-2xl text-sm text-neutral-400 leading-relaxed">
@@ -1156,10 +1118,6 @@ export function LandingView() {
         </div>
       </motion.section>
 
-      {/* ========================================================================= */}
-      {/* SECTION 4: FOUR-STEP WORKFLOW & BEFORE/AFTER COMPARISON */}
-      {/* With Curtain Reveal Effect */}
-      {/* ========================================================================= */}
       <motion.section
         id="workflow"
         initial={{ opacity: 0, y: 50, clipPath: "inset(8% 0% 0% 0%)" }}
@@ -1170,10 +1128,7 @@ export function LandingView() {
       >
         <div id="how-it-works" className="sr-only" />
         <div className="mx-auto max-w-6xl">
-          <div className="font-mono text-xs uppercase tracking-widest text-neutral-400">
-            // Workflow Walkthrough
-          </div>
-          <h2 className="mt-2 text-3xl font-black uppercase tracking-tight text-white sm:text-5xl">
+          <h2 className="text-3xl font-black uppercase tracking-tight text-white sm:text-5xl">
             Four Steps. Zero Manual Keyframes.
           </h2>
           <p className="mt-2 max-w-xl text-sm text-neutral-400">
@@ -1278,10 +1233,6 @@ export function LandingView() {
         </div>
       </motion.section>
 
-      {/* ========================================================================= */}
-      {/* SECTION 5: NATIVE ARCHITECTURE COMPARISON TABLE */}
-      {/* With Curtain Reveal Effect */}
-      {/* ========================================================================= */}
       <motion.section
         initial={{ opacity: 0, y: 50, clipPath: "inset(8% 0% 0% 0%)" }}
         whileInView={{ opacity: 1, y: 0, clipPath: "inset(0% 0% 0% 0%)" }}
@@ -1290,10 +1241,7 @@ export function LandingView() {
         className="relative border-b border-neutral-800 bg-neutral-950 py-24"
       >
         <div className="mx-auto max-w-6xl px-4 sm:px-6">
-          <div className="font-mono text-xs uppercase tracking-widest text-neutral-400">
-            // Why DomoLens
-          </div>
-          <h2 className="mt-2 text-3xl font-black uppercase tracking-tight text-white sm:text-5xl">
+          <h2 className="text-3xl font-black uppercase tracking-tight text-white sm:text-5xl">
             Full Desktop App vs. Browser Tools
           </h2>
           <p className="mt-2 max-w-xl text-sm text-neutral-400">
@@ -1341,10 +1289,6 @@ export function LandingView() {
         </div>
       </motion.section>
 
-      {/* ========================================================================= */}
-      {/* SECTION 6: DIRECT MULTI-PLATFORM DOWNLOADS & DEPLOYMENT */}
-      {/* With Curtain Reveal Effect */}
-      {/* ========================================================================= */}
       <motion.section
         id="downloads"
         initial={{ opacity: 0, y: 50, clipPath: "inset(8% 0% 0% 0%)" }}
@@ -1355,10 +1299,7 @@ export function LandingView() {
       >
         <div id="download" className="sr-only" />
         <div className="mx-auto max-w-5xl text-center">
-          <div className="font-mono text-xs uppercase tracking-widest text-neutral-400">
-            // Direct Downloads
-          </div>
-          <h2 className="mt-2 text-4xl font-black uppercase tracking-tight text-white sm:text-6xl">
+          <h2 className="text-4xl font-black uppercase tracking-tight text-white sm:text-6xl">
             Download DomoLens.
           </h2>
           <p className="mx-auto mt-3 max-w-xl text-sm text-neutral-400">
@@ -1540,10 +1481,7 @@ export function LandingView() {
 
                 {/* Overlapped Text */}
                 <div className="absolute inset-0 flex flex-col items-center justify-center text-center p-6 bg-black/40 backdrop-blur-[2px]">
-                  <span className="font-mono text-xs uppercase tracking-widest text-neutral-400">
-                    // Android Companion
-                  </span>
-                  <h3 className="mt-2 text-2xl sm:text-3xl font-black uppercase tracking-tight text-white">
+                  <h3 className="text-2xl sm:text-3xl font-black uppercase tracking-tight text-white">
                     Coming Soon
                   </h3>
                   <p className="mt-2 max-w-md text-xs sm:text-sm text-neutral-300">

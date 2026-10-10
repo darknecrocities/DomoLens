@@ -80,36 +80,17 @@ export function App() {
         </div>
       </nav>
 
-      {/* Marketing Sections */}
       <main>
-        {/* Section 1: Hero & Native Architecture Showcase with Scroll Fade Out / Video Fade In */}
         <HeroSection />
-
-        {/* Section 2: Pain vs Solution (Why Spend 3 Hours Keyframing?) */}
         <PainVsGainSection />
-
-        {/* Section 3: Interactive Showcase Simulator (Pick How You Want To Show It) */}
         <ShowcaseSimulatorSection />
-
-        {/* Section 4: Live Product Showcase Engine */}
         <TypingFocusSection />
-
-        {/* Section 5: Continuous Feature Cards Carousel (Non-stop) */}
         <FeaturesCarousel />
-
-        {/* Section 6: Real-World Use Cases (Built For Anyone Who Ships Products) */}
         <UseCasesSection />
-
-        {/* Section 7: Four-Step Workflow & Before/After Comparison */}
         <HowItWorksSection />
         <BeforeAfterSlider />
-
-        {/* Section 8: Brand Belt (Logo + Text only) & Architectural Matrix */}
         <WorksEverywhere />
-
         <LiveCounterSection />
-
-        {/* Section 9: Direct Multi-Platform Downloads & Deployment */}
         <FinalCtaFooter />
       </main>
     </div>

@@ -53,10 +53,7 @@ export function BeforeAfterSlider() {
       className="relative border-b border-white/[0.08] bg-black px-4 py-24 sm:px-6 lg:px-12"
     >
       <div className="mx-auto max-w-6xl">
-        <div className="flex items-center gap-3 font-mono text-xs uppercase tracking-widest text-neutral-400">
-          <span>// Instant Video Comparison</span>
-        </div>
-        <h2 className="mt-2 text-3xl font-black uppercase tracking-tight text-white sm:text-5xl">
+        <h2 className="text-3xl font-black uppercase tracking-tight text-white sm:text-5xl">
           Raw Screen vs. DomoLens Focus
         </h2>
         <p className="mt-2 max-w-xl text-sm text-neutral-400">
