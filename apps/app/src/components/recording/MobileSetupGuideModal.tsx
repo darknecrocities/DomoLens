@@ -3,7 +3,6 @@ import { AnimatePresence, motion } from "framer-motion";
 import {
   Cable,
   CheckCircle2,
-  Globe,
   Info,
   Smartphone,
   Wifi,
@@ -15,12 +14,12 @@ import { Button } from "../ui/Button";
 interface MobileSetupGuideModalProps {
   isOpen: boolean;
   onClose: () => void;
-  initialTab?: "cellular-hotspot" | "android-wifi" | "android-usb" | "ios-wifi" | "ios-usb";
+  initialTab?: "android-usb" | "android-wifi" | "ios-usb" | "troubleshooting";
 }
 
-type GuideTab = "cellular-hotspot" | "android-wifi" | "android-usb" | "ios-wifi" | "ios-usb" | "troubleshooting";
+type GuideTab = "android-usb" | "android-wifi" | "ios-usb" | "troubleshooting";
 
-export function MobileSetupGuideModal({ isOpen, onClose, initialTab = "android-wifi" }: MobileSetupGuideModalProps) {
+export function MobileSetupGuideModal({ isOpen, onClose, initialTab = "android-usb" }: MobileSetupGuideModalProps) {
   const [activeTab, setActiveTab] = useState<GuideTab>(initialTab);
 
   if (!isOpen) return null;
@@ -52,7 +51,7 @@ export function MobileSetupGuideModal({ isOpen, onClose, initialTab = "android-w
               </div>
               <div>
                 <h3 className="text-base font-bold text-white">Mobile Device Setup Guide</h3>
-                <p className="text-xs text-fg-muted">Connect Android or iOS via Wi-Fi, Mobile Data, or USB cable</p>
+                <p className="text-xs text-fg-muted">Connect Android or iOS via USB Debugging or Wireless Debugging</p>
               </div>
             </div>
             <button
@@ -64,20 +63,8 @@ export function MobileSetupGuideModal({ isOpen, onClose, initialTab = "android-w
             </button>
           </div>
 
-          {/* Navigation Tabs (Android First) */}
+          {/* Navigation Tabs */}
           <div className="flex border-b border-ink-800 px-6 bg-ink-950/60 overflow-x-auto gap-1 py-1.5 scrollbar-none">
-            <button
-              type="button"
-              onClick={() => setActiveTab("android-wifi")}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-colors ${
-                activeTab === "android-wifi"
-                  ? "bg-white text-black shadow-sm"
-                  : "text-fg-muted hover:text-white hover:bg-ink-800"
-              }`}
-            >
-              <Wifi className="size-3.5" />
-              <span>Android (Wi-Fi)</span>
-            </button>
             <button
               type="button"
               onClick={() => setActiveTab("android-usb")}
@@ -88,31 +75,19 @@ export function MobileSetupGuideModal({ isOpen, onClose, initialTab = "android-w
               }`}
             >
               <Cable className="size-3.5" />
-              <span>Android (USB Cable)</span>
+              <span>Android (USB Debugging)</span>
             </button>
             <button
               type="button"
-              onClick={() => setActiveTab("cellular-hotspot")}
+              onClick={() => setActiveTab("android-wifi")}
               className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-colors ${
-                activeTab === "cellular-hotspot"
-                  ? "bg-white text-black shadow-sm"
-                  : "text-fg-muted hover:text-white hover:bg-ink-800"
-              }`}
-            >
-              <Globe className="size-3.5" />
-              <span>Cellular / Hotspot</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => setActiveTab("ios-wifi")}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-colors ${
-                activeTab === "ios-wifi"
+                activeTab === "android-wifi"
                   ? "bg-white text-black shadow-sm"
                   : "text-fg-muted hover:text-white hover:bg-ink-800"
               }`}
             >
               <Wifi className="size-3.5" />
-              <span>iOS (Wi-Fi)</span>
+              <span>Android (Wireless ADB)</span>
             </button>
             <button
               type="button"
@@ -136,195 +111,19 @@ export function MobileSetupGuideModal({ isOpen, onClose, initialTab = "android-w
               }`}
             >
               <Zap className="size-3.5" />
-              <span>Low Latency Tips</span>
+              <span>Troubleshooting &amp; Tips</span>
             </button>
           </div>
 
           {/* Tab Content Body */}
           <div className="flex-1 overflow-y-auto p-6 space-y-4">
-            {/* 0. Mobile Data & Cellular Hotspot */}
-            {activeTab === "cellular-hotspot" && (
-              <div className="space-y-4">
-                <div className="rounded-2xl border border-ink-800 bg-ink-800/40 p-4">
-                  <span className="text-xs font-mono uppercase tracking-wider text-neutral-400">Cellular 4G/5G &amp; Personal Hotspot</span>
-                  <p className="mt-1 text-sm font-medium text-white">
-                    Connect your iPhone or Android phone when running on mobile carrier cellular data or away from home Wi-Fi.
-                  </p>
-                </div>
-
-                <div className="space-y-3">
-                  <div className="flex items-start gap-3 rounded-2xl border border-ink-800 bg-ink-950/40 p-3.5">
-                    <span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-white text-black text-xs font-bold">1</span>
-                    <div>
-                      <h4 className="text-sm font-semibold text-white">Method A: Direct Cloud WebRTC (Mobile Data 4G/5G)</h4>
-                      <p className="mt-1 text-xs text-fg-muted leading-relaxed">
-                        On the DomoLens recording screen, select <strong>"Mobile Data (4G/5G Cellular)"</strong>. Point your phone camera at the QR code. Open the link in Safari or Chrome, and tap <strong>"Share Screen"</strong>. Your stream will flow across cellular WAN to your laptop.
-                      </p>
-                    </div>
-                  </div>
-
-                  <div className="flex items-start gap-3 rounded-2xl border border-ink-800 bg-ink-950/40 p-3.5">
-                    <span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-white text-black text-xs font-bold">2</span>
-                    <div>
-                      <h4 className="text-sm font-semibold text-white">Method B: Phone Personal Hotspot (Recommended)</h4>
-                      <p className="mt-1 text-xs text-fg-muted leading-relaxed">
-                        On your phone, enable <strong>Personal Hotspot</strong> (iPhone: Settings → Personal Hotspot → Allow Others to Join; Android: Settings → Hotspot &amp; Tethering). Connect your laptop to your phone's hotspot Wi-Fi. Scan the <strong>"Wi-Fi / Personal Hotspot"</strong> QR code. This gives you direct &lt; 15ms latency without consuming cellular video data!
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* 1. iOS Wi-Fi */}
-            {activeTab === "ios-wifi" && (
-              <div className="space-y-4">
-                <div className="rounded-2xl border border-ink-800 bg-ink-800/40 p-4">
-                  <span className="text-xs font-mono uppercase tracking-wider text-neutral-400">Prerequisites</span>
-                  <p className="mt-1 text-sm font-medium text-white">
-                    iPhone or iPad on iOS 15+ connected to the same Wi-Fi network as this computer (5 GHz Wi-Fi recommended).
-                  </p>
-                </div>
-
-                <div className="space-y-3">
-                  <div className="flex items-start gap-3 rounded-2xl border border-ink-800 bg-ink-950/40 p-3.5">
-                    <span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-white text-black text-xs font-bold">1</span>
-                    <div>
-                      <h4 className="text-sm font-semibold text-white">Scan the On-Screen QR Code</h4>
-                      <p className="mt-1 text-xs text-fg-muted leading-relaxed">
-                        Open the native <strong>Camera app</strong> on your iPhone and point it at the QR code shown on the DomoLens recording screen. Tap the yellow banner that appears to open Safari.
-                      </p>
-                    </div>
-                  </div>
-
-                  <div className="flex items-start gap-3 rounded-2xl border border-ink-800 bg-ink-950/40 p-3.5">
-                    <span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-white text-black text-xs font-bold">2</span>
-                    <div>
-                      <h4 className="text-sm font-semibold text-white">Tap "Start Screen Broadcast"</h4>
-                      <p className="mt-1 text-xs text-fg-muted leading-relaxed">
-                        On the DomoLens Mobile Companion page in Safari, tap the large <strong>"Start Screen Broadcast"</strong> button.
-                      </p>
-                    </div>
-                  </div>
-
-                  <div className="flex items-start gap-3 rounded-2xl border border-ink-800 bg-ink-950/40 p-3.5">
-                    <span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-white text-black text-xs font-bold">3</span>
-                    <div>
-                      <h4 className="text-sm font-semibold text-white">Confirm iOS System Broadcast</h4>
-                      <p className="mt-1 text-xs text-fg-muted leading-relaxed">
-                        In the iOS system dialog, verify <strong>"DomoLens Broadcast"</strong> is highlighted and tap <strong>"Start Broadcast"</strong>. After the 3-second countdown, switch to any app you wish to demo!
-                      </p>
-                    </div>
-                  </div>
-
-                  <div className="flex items-start gap-3 rounded-2xl border border-ink-800 bg-ink-950/40 p-3.5">
-                    <span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-white text-black text-xs font-bold">4</span>
-                    <div>
-                      <h4 className="text-sm font-semibold text-white">Automatic Live Mirror & Taps</h4>
-                      <p className="mt-1 text-xs text-fg-muted leading-relaxed">
-                        Your phone screen will now appear live in DomoLens at 60 FPS. Every tap is logged with millisecond accuracy for smart auto-zoom.
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* 2. iOS USB Cable */}
-            {activeTab === "ios-usb" && (
-              <div className="space-y-4">
-                <div className="rounded-2xl border border-ink-800 bg-ink-800/40 p-4">
-                  <span className="text-xs font-mono uppercase tracking-wider text-neutral-400">Zero-Latency Hardware Feed</span>
-                  <p className="mt-1 text-sm font-medium text-white">
-                    Direct hardware connection via Lightning or USB-C cable. No Wi-Fi required. Latency is under 15ms at native 60 FPS.
-                  </p>
-                </div>
-
-                <div className="space-y-3">
-                  <div className="flex items-start gap-3 rounded-2xl border border-ink-800 bg-ink-950/40 p-3.5">
-                    <span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-white text-black text-xs font-bold">1</span>
-                    <div>
-                      <h4 className="text-sm font-semibold text-white">Connect Cable</h4>
-                      <p className="mt-1 text-xs text-fg-muted leading-relaxed">
-                        Plug your iPhone or iPad directly into your computer using a genuine Apple or high-speed USB-C / Lightning cable.
-                      </p>
-                    </div>
-                  </div>
-
-                  <div className="flex items-start gap-3 rounded-2xl border border-ink-800 bg-ink-950/40 p-3.5">
-                    <span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-white text-black text-xs font-bold">2</span>
-                    <div>
-                      <h4 className="text-sm font-semibold text-white">Trust Computer</h4>
-                      <p className="mt-1 text-xs text-fg-muted leading-relaxed">
-                        Unlock your iPhone. If you see the prompt <strong>"Trust This Computer?"</strong>, tap <strong>Trust</strong> and enter your device passcode.
-                      </p>
-                    </div>
-                  </div>
-
-                  <div className="flex items-start gap-3 rounded-2xl border border-ink-800 bg-ink-950/40 p-3.5">
-                    <span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-white text-black text-xs font-bold">3</span>
-                    <div>
-                      <h4 className="text-sm font-semibold text-white">Instant Hardware Link Ready</h4>
-                      <p className="mt-1 text-xs text-fg-muted leading-relaxed">
-                        DomoLens automatically interfaces with the native Apple AVFoundation capture pipeline. The status badge will turn to <strong>Ready • Connected</strong>.
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* 3. Android Wi-Fi */}
-            {activeTab === "android-wifi" && (
-              <div className="space-y-4">
-                <div className="rounded-2xl border border-ink-800 bg-ink-800/40 p-4">
-                  <span className="text-xs font-mono uppercase tracking-wider text-neutral-400">Wireless Screen Casting</span>
-                  <p className="mt-1 text-sm font-medium text-white">
-                    Works on Samsung, Google Pixel, OnePlus, Xiaomi, and all modern Android devices running Android 10+.
-                  </p>
-                </div>
-
-                <div className="space-y-3">
-                  <div className="flex items-start gap-3 rounded-2xl border border-ink-800 bg-ink-950/40 p-3.5">
-                    <span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-white text-black text-xs font-bold">1</span>
-                    <div>
-                      <h4 className="text-sm font-semibold text-white">Connect to Same Wi-Fi</h4>
-                      <p className="mt-1 text-xs text-fg-muted leading-relaxed">
-                        Verify your Android device is on the same local Wi-Fi network or mobile hotspot as your computer.
-                      </p>
-                    </div>
-                  </div>
-
-                  <div className="flex items-start gap-3 rounded-2xl border border-ink-800 bg-ink-950/40 p-3.5">
-                    <span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-white text-black text-xs font-bold">2</span>
-                    <div>
-                      <h4 className="text-sm font-semibold text-white">Scan QR Code with Camera</h4>
-                      <p className="mt-1 text-xs text-fg-muted leading-relaxed">
-                        Open your Android camera or Google Lens to scan the QR code on screen. Tap to open the URL in Chrome. <em>(Note: If opened from Facebook Messenger, tap the 3 dots [⋮] in the top right and choose <strong>"Open in Chrome"</strong>).</em>
-                      </p>
-                    </div>
-                  </div>
-
-                  <div className="flex items-start gap-3 rounded-2xl border border-ink-800 bg-ink-950/40 p-3.5">
-                    <span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-white text-black text-xs font-bold">3</span>
-                    <div>
-                      <h4 className="text-sm font-semibold text-white">Grant Screen Cast Permission</h4>
-                      <p className="mt-1 text-xs text-fg-muted leading-relaxed">
-                        Tap <strong>"Share Screen"</strong>. On the Android permission pop-up, choose <strong>"Entire screen"</strong> and tap <strong>"Start now"</strong>.
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* 4. Android USB Cable */}
+            {/* 1. Android USB Cable */}
             {activeTab === "android-usb" && (
               <div className="space-y-4">
                 <div className="rounded-2xl border border-ink-800 bg-ink-800/40 p-4">
-                  <span className="text-xs font-mono uppercase tracking-wider text-neutral-400">Direct USB Debugging Link</span>
+                  <span className="text-xs font-mono uppercase tracking-wider text-neutral-400">Direct USB Cable Link (Native ADB)</span>
                   <p className="mt-1 text-sm font-medium text-white">
-                    Ultra-fast 60 FPS connection with sub-10ms response time via USB cable.
+                    Ultra-fast 60 FPS connection with sub-10ms response time via USB-C cable for Samsung, Pixel, OnePlus, Xiaomi, and all Android devices.
                   </p>
                 </div>
 
@@ -334,7 +133,7 @@ export function MobileSetupGuideModal({ isOpen, onClose, initialTab = "android-w
                     <div>
                       <h4 className="text-sm font-semibold text-white">Enable Developer Options</h4>
                       <p className="mt-1 text-xs text-fg-muted leading-relaxed">
-                        On your phone, go to <strong>Settings → About Phone</strong>. Find <strong>"Build Number"</strong> and tap it <strong>7 times</strong> until you see "You are now a developer!".
+                        On your phone, go to <strong>Settings → About Phone</strong>. Find <strong>"Build Number"</strong> (on Xiaomi: "MIUI/HyperOS version") and tap it <strong>7 times</strong> until you see <em>"You are now a developer!"</em>.
                       </p>
                     </div>
                   </div>
@@ -344,7 +143,7 @@ export function MobileSetupGuideModal({ isOpen, onClose, initialTab = "android-w
                     <div>
                       <h4 className="text-sm font-semibold text-white">Turn On USB Debugging</h4>
                       <p className="mt-1 text-xs text-fg-muted leading-relaxed">
-                        Go back to <strong>Settings → System → Developer Options</strong> (or search "Developer Options" in Settings). Scroll down and toggle <strong>USB Debugging</strong> to ON.
+                        Go to <strong>Settings → Developer Options</strong> (usually inside System or Additional Settings). Scroll down and toggle <strong>USB Debugging</strong> to ON.
                       </p>
                     </div>
                   </div>
@@ -352,9 +151,19 @@ export function MobileSetupGuideModal({ isOpen, onClose, initialTab = "android-w
                   <div className="flex items-start gap-3 rounded-2xl border border-ink-800 bg-ink-950/40 p-3.5">
                     <span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-white text-black text-xs font-bold">3</span>
                     <div>
-                      <h4 className="text-sm font-semibold text-white">Plug In & Allow Prompt</h4>
+                      <h4 className="text-sm font-semibold text-white">Change USB Mode to File Transfer / MTP</h4>
                       <p className="mt-1 text-xs text-fg-muted leading-relaxed">
-                        Connect your phone via USB-C. Unlock your screen. When the pop-up asks <strong>"Allow USB debugging?"</strong>, check <em>"Always allow from this computer"</em> and tap <strong>Allow</strong>.
+                        Plug your phone into your laptop. Pull down the phone's notification shade, tap <strong>"Charging this device via USB"</strong>, and select <strong>"File Transfer"</strong> (or "Transferring files / MTP"). Some phones disable ADB while in "Charge only" mode.
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-start gap-3 rounded-2xl border border-ink-800 bg-ink-950/40 p-3.5">
+                    <span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-white text-black text-xs font-bold">4</span>
+                    <div>
+                      <h4 className="text-sm font-semibold text-white">Accept Computer Authorization Prompt</h4>
+                      <p className="mt-1 text-xs text-fg-muted leading-relaxed">
+                        Keep your phone screen unlocked. A prompt will appear saying <strong>"Allow USB debugging?"</strong>. Check <em>"Always allow from this computer"</em> and tap <strong>Allow</strong>. Then click <strong>"Scan Devices"</strong> in DomoLens!
                       </p>
                     </div>
                   </div>
@@ -362,15 +171,113 @@ export function MobileSetupGuideModal({ isOpen, onClose, initialTab = "android-w
               </div>
             )}
 
-            {/* 5. Low Latency & Troubleshooting Tips */}
+            {/* 2. Android Wireless ADB */}
+            {activeTab === "android-wifi" && (
+              <div className="space-y-4">
+                <div className="rounded-2xl border border-ink-800 bg-ink-800/40 p-4">
+                  <span className="text-xs font-mono uppercase tracking-wider text-neutral-400">Wireless Debugging (Wi-Fi ADB)</span>
+                  <p className="mt-1 text-sm font-medium text-white">
+                    Connect wirelessly with zero cables on any Android 11+ device on the same local Wi-Fi network.
+                  </p>
+                </div>
+
+                <div className="space-y-3">
+                  <div className="flex items-start gap-3 rounded-2xl border border-ink-800 bg-ink-950/40 p-3.5">
+                    <span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-white text-black text-xs font-bold">1</span>
+                    <div>
+                      <h4 className="text-sm font-semibold text-white">Connect to Same Wi-Fi</h4>
+                      <p className="mt-1 text-xs text-fg-muted leading-relaxed">
+                        Ensure both your Android device and this computer are connected to the same Wi-Fi network (or connect your laptop to your phone's Wi-Fi hotspot).
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-start gap-3 rounded-2xl border border-ink-800 bg-ink-950/40 p-3.5">
+                    <span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-white text-black text-xs font-bold">2</span>
+                    <div>
+                      <h4 className="text-sm font-semibold text-white">Turn On Wireless Debugging</h4>
+                      <p className="mt-1 text-xs text-fg-muted leading-relaxed">
+                        In phone <strong>Settings → Developer Options</strong>, scroll down to <strong>Wireless Debugging</strong> and toggle it ON.
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-start gap-3 rounded-2xl border border-ink-800 bg-ink-950/40 p-3.5">
+                    <span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-white text-black text-xs font-bold">3</span>
+                    <div>
+                      <h4 className="text-sm font-semibold text-white">Get IP, Port &amp; Pairing Code</h4>
+                      <p className="mt-1 text-xs text-fg-muted leading-relaxed">
+                        Tap on the text <strong>"Wireless Debugging"</strong>, then tap <strong>"Pair device with pairing code"</strong>. Note the displayed IP address, port, and 6-digit Wi-Fi pairing code.
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-start gap-3 rounded-2xl border border-ink-800 bg-ink-950/40 p-3.5">
+                    <span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-white text-black text-xs font-bold">4</span>
+                    <div>
+                      <h4 className="text-sm font-semibold text-white">Connect in DomoLens</h4>
+                      <p className="mt-1 text-xs text-fg-muted leading-relaxed">
+                        Enter the IP address:port and 6-digit pairing code into the DomoLens Wireless Debugging panel and click <strong>"Connect Wireless Phone"</strong>.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* 3. iOS USB Cable */}
+            {activeTab === "ios-usb" && (
+              <div className="space-y-4">
+                <div className="rounded-2xl border border-ink-800 bg-ink-800/40 p-4">
+                  <span className="text-xs font-mono uppercase tracking-wider text-neutral-400">Zero-Latency Hardware Feed</span>
+                  <p className="mt-1 text-sm font-medium text-white">
+                    Direct hardware connection via Lightning or USB-C cable for iPhone and iPad.
+                  </p>
+                </div>
+
+                <div className="space-y-3">
+                  <div className="flex items-start gap-3 rounded-2xl border border-ink-800 bg-ink-950/40 p-3.5">
+                    <span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-white text-black text-xs font-bold">1</span>
+                    <div>
+                      <h4 className="text-sm font-semibold text-white">Connect Cable</h4>
+                      <p className="mt-1 text-xs text-fg-muted leading-relaxed">
+                        Plug your iPhone or iPad directly into your computer using a USB-C or Lightning cable.
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-start gap-3 rounded-2xl border border-ink-800 bg-ink-950/40 p-3.5">
+                    <span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-white text-black text-xs font-bold">2</span>
+                    <div>
+                      <h4 className="text-sm font-semibold text-white">Trust Computer</h4>
+                      <p className="mt-1 text-xs text-fg-muted leading-relaxed">
+                        Unlock your iPhone. When prompted with <strong>"Trust This Computer?"</strong>, tap <strong>Trust</strong> and enter your passcode.
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-start gap-3 rounded-2xl border border-ink-800 bg-ink-950/40 p-3.5">
+                    <span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-white text-black text-xs font-bold">3</span>
+                    <div>
+                      <h4 className="text-sm font-semibold text-white">Instant Hardware Link Ready</h4>
+                      <p className="mt-1 text-xs text-fg-muted leading-relaxed">
+                        DomoLens automatically interfaces with the native Apple AVFoundation capture pipeline for sub-10ms latency.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* 4. Troubleshooting & Tips */}
             {activeTab === "troubleshooting" && (
               <div className="space-y-3">
                 <div className="flex items-start gap-3 rounded-2xl border border-ink-800 bg-ink-950/40 p-4">
                   <Zap className="size-5 text-white shrink-0 mt-0.5" />
                   <div>
-                    <h4 className="text-sm font-semibold text-white">Use 5 GHz Wi-Fi or USB Cable</h4>
+                    <h4 className="text-sm font-semibold text-white">USB Cable Checklist</h4>
                     <p className="mt-1 text-xs text-fg-muted leading-relaxed">
-                      2.4 GHz Wi-Fi networks suffer from interference and high packet jitter. Switching to 5 GHz or using a USB-C cable reduces latency from 120ms down to 15-25ms.
+                      Many cheap cables are "charge-only" without data lines. Use a high-speed data-capable USB-C cable. If your device isn't detected, try another USB port on your computer.
                     </p>
                   </div>
                 </div>
@@ -378,9 +285,9 @@ export function MobileSetupGuideModal({ isOpen, onClose, initialTab = "android-w
                 <div className="flex items-start gap-3 rounded-2xl border border-ink-800 bg-ink-950/40 p-4">
                   <CheckCircle2 className="size-5 text-white shrink-0 mt-0.5" />
                   <div>
-                    <h4 className="text-sm font-semibold text-white">Turn Off Low Power Mode</h4>
+                    <h4 className="text-sm font-semibold text-white">Revoke USB Debugging Authorizations</h4>
                     <p className="mt-1 text-xs text-fg-muted leading-relaxed">
-                      Low Power Mode on both iOS and Android throttles background hardware video encoders to 30 FPS. Disable Low Power Mode for silky smooth 60 FPS screen capture.
+                      If your phone status is stuck on "unauthorized", go to <strong>Settings → Developer Options → Revoke USB debugging authorizations</strong>. Unplug the cable, plug it back in, and tap "Always allow".
                     </p>
                   </div>
                 </div>
@@ -388,9 +295,9 @@ export function MobileSetupGuideModal({ isOpen, onClose, initialTab = "android-w
                 <div className="flex items-start gap-3 rounded-2xl border border-ink-800 bg-ink-950/40 p-4">
                   <Info className="size-5 text-white shrink-0 mt-0.5" />
                   <div>
-                    <h4 className="text-sm font-semibold text-white">Automatic Screen Aspect Ratio Recognition</h4>
+                    <h4 className="text-sm font-semibold text-white">Dynamic Screen Aspect Ratio Recognition</h4>
                     <p className="mt-1 text-xs text-fg-muted leading-relaxed">
-                      DomoLens automatically detects your mobile screen resolution (e.g. 1179x2556 on iPhone 15 Pro, 1080x2400 on Galaxy S24) and adapts the video editor canvas without black letterboxing.
+                      DomoLens automatically detects your physical phone screen resolution (e.g. 1080×2400 on Galaxy S24, 1179×2556 on iPhone 15 Pro) and adjusts canvas size and auto-zoom keyframes dynamically.
                     </p>
                   </div>
                 </div>

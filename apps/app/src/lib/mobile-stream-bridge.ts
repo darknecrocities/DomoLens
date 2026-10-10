@@ -9,7 +9,7 @@ export interface MobileDeviceInfo {
   id: string;
   name: string;
   os: "ios" | "android" | "other";
-  connectionType: "wifi" | "usb" | "cloud";
+  connectionType: "wifi" | "usb";
   width: number;
   height: number;
   fps: number;
@@ -37,6 +37,16 @@ export interface PairingInfo {
   activeUrl: string;
 }
 
+export interface AdbDeviceItem {
+  serial: string;
+  state: "device" | "unauthorized" | "offline";
+  model: string;
+  product: string;
+  width: number;
+  height: number;
+  is_wireless: boolean;
+}
+
 type DeviceListener = (device: MobileDeviceInfo) => void;
 type DisconnectListener = () => void;
 type TouchListener = (event: MobileTouchEvent) => void;
@@ -57,9 +67,167 @@ class MobileStreamBridgeImpl {
   private peerConnection: RTCPeerConnection | null = null;
   private dataChannel: RTCDataChannel | null = null;
   private signalingWs: WebSocket | null = null;
+  private adbDevices: AdbDeviceItem[] = [];
+  private framePollingTimer: any = null;
+  private frameCanvas: HTMLCanvasElement | null = null;
+  private frameCtx: CanvasRenderingContext2D | null = null;
+
+  public async scanAdbDevices(): Promise<AdbDeviceItem[]> {
+    if (typeof window !== "undefined" && "__TAURI_INTERNALS__" in window) {
+      try {
+        const { invoke } = await import("@tauri-apps/api/core");
+        const list = await invoke<AdbDeviceItem[]>("get_adb_devices");
+        this.adbDevices = list || [];
+
+        const authorized = this.adbDevices.find((d) => d.state === "device");
+        if (authorized) {
+          this.bindAdbDevice(authorized);
+        }
+        return this.adbDevices;
+      } catch (err) {
+        console.debug("[scanAdbDevices error]", err);
+      }
+    }
+    return [];
+  }
+
+  public getAdbDevices(): AdbDeviceItem[] {
+    return this.adbDevices;
+  }
+
+  public async connectWirelessAdb(address: string, pairCode?: string): Promise<{ success: boolean; message: string }> {
+    if (typeof window !== "undefined" && "__TAURI_INTERNALS__" in window) {
+      const { invoke } = await import("@tauri-apps/api/core");
+      if (pairCode && pairCode.trim()) {
+        try {
+          await invoke("pair_wireless_adb", { address, code: pairCode.trim() });
+        } catch (e: any) {
+          return { success: false, message: e?.toString() || "Pairing failed" };
+        }
+      }
+      try {
+        const msg = await invoke<string>("connect_wireless_adb", { address });
+        await this.scanAdbDevices();
+        return { success: true, message: msg };
+      } catch (err: any) {
+        return { success: false, message: err?.toString() || "Connection failed" };
+      }
+    }
+    return { success: false, message: "Desktop environment required" };
+  }
+
+  public bindAdbDevice(device: AdbDeviceItem): MobileDeviceInfo {
+    const width = device.width || 1080;
+    const height = device.height || 2400;
+    const info: MobileDeviceInfo = {
+      id: device.serial,
+      name: device.model || "Android Phone",
+      os: "android",
+      connectionType: device.is_wireless ? "wifi" : "usb",
+      width,
+      height,
+      fps: 60,
+      aspectRatio: `${width} / ${height}`,
+      latencyMs: device.is_wireless ? 16 : 8,
+    };
+
+    this.activeDevice = info;
+    this.setupHardwareCaptureStream(info);
+    this.startFramePolling(device.serial);
+
+    this.deviceListeners.forEach((cb) => cb(info));
+    if (this.activeStream) {
+      this.streamListeners.forEach((cb) => cb(this.activeStream!));
+    }
+    return info;
+  }
+
+  private setupHardwareCaptureStream(device: MobileDeviceInfo): void {
+    if (typeof document !== "undefined") {
+      try {
+        const canvas = document.createElement("canvas");
+        canvas.width = device.width;
+        canvas.height = device.height;
+        const ctx = canvas.getContext("2d");
+        if (ctx) {
+          ctx.fillStyle = "#000000";
+          ctx.fillRect(0, 0, device.width, device.height);
+          this.frameCanvas = canvas;
+          this.frameCtx = ctx;
+        }
+        if (typeof canvas.captureStream === "function") {
+          this.activeStream = canvas.captureStream(30);
+          return;
+        }
+      } catch {}
+    }
+
+    if (typeof MediaStream !== "undefined") {
+      try {
+        this.activeStream = new MediaStream();
+        return;
+      } catch {}
+    }
+
+    this.activeStream = {
+      getTracks: () => [],
+      getVideoTracks: () => [{
+        getSettings: () => ({ width: device.width, height: device.height }),
+        stop: () => {},
+      }],
+      getAudioTracks: () => [],
+      addTrack: () => {},
+      removeTrack: () => {},
+    } as unknown as MediaStream;
+  }
+
+  public startFramePolling(serial: string): void {
+    if (this.framePollingTimer) {
+      clearInterval(this.framePollingTimer);
+      this.framePollingTimer = null;
+    }
+
+    if (typeof window === "undefined" || !("__TAURI_INTERNALS__" in window)) {
+      return;
+    }
+
+    const img = new Image();
+    this.framePollingTimer = setInterval(async () => {
+      try {
+        const { invoke } = await import("@tauri-apps/api/core");
+        const frameDataUrl = await invoke<string>("capture_device_frame", { serial });
+        if (frameDataUrl && this.frameCtx && this.activeDevice) {
+          img.onload = () => {
+            if (this.frameCtx && this.activeDevice) {
+              this.frameCtx.drawImage(img, 0, 0, this.activeDevice.width, this.activeDevice.height);
+            }
+          };
+          img.src = frameDataUrl;
+        }
+      } catch {}
+    }, 150);
+  }
+
+  public async sendDeviceTap(normX: number, normY: number): Promise<void> {
+    if (!this.activeDevice) return;
+    if (typeof window !== "undefined" && "__TAURI_INTERNALS__" in window) {
+      try {
+        const { invoke } = await import("@tauri-apps/api/core");
+        const x = Math.round(normX * this.activeDevice.width);
+        const y = Math.round(normY * this.activeDevice.height);
+        await invoke("send_device_tap", { serial: this.activeDevice.id, x, y });
+      } catch (e) {
+        console.debug("sendDeviceTap error:", e);
+      }
+    }
+  }
 
   public getActiveDevice(): MobileDeviceInfo | null {
     return this.activeDevice;
+  }
+
+  public getFrameCanvas(): HTMLCanvasElement | null {
+    return this.frameCanvas;
   }
 
   public getStream(): MediaStream | null {
@@ -104,7 +272,7 @@ class MobileStreamBridgeImpl {
    * Generates real pairing URLs for QR Code scanning.
    * Produces both a local LAN / Hotspot URL and an internet Cloud WebRTC URL.
    */
-  public generatePairingInfo(channel: "wifi" | "cloud" | "usb" = "wifi"): PairingInfo {
+  public generatePairingInfo(channel: "wifi" | "usb" = "usb"): PairingInfo {
     if (!this.currentSession) {
       this.currentSession = `dl_${Math.random().toString(36).substring(2, 8)}`;
     }
@@ -118,14 +286,12 @@ class MobileStreamBridgeImpl {
 
     const port = typeof window !== "undefined" && window.location.port ? Number(window.location.port) : 3210;
     const localUrl = `http://${host}:${port === 3210 ? 1420 : port}/remote.html?session=${this.currentSession}&mode=wifi`;
-    const cloudUrl = `https://vdo.ninja/?push=domolens_${this.currentSession}&screenshare=1&autostart=1`;
+    const cloudUrl = "";
     const usbUrl = `http://localhost:${port === 3210 ? 1420 : port}/remote.html?session=${this.currentSession}&mode=usb`;
 
-    let activeUrl = localUrl;
-    if (channel === "cloud") {
-      activeUrl = cloudUrl;
-    } else if (channel === "usb") {
-      activeUrl = usbUrl;
+    let activeUrl = usbUrl;
+    if (channel === "wifi") {
+      activeUrl = localUrl;
     }
 
     return {
@@ -145,7 +311,7 @@ class MobileStreamBridgeImpl {
    */
   public connectSimulatedDevice(
     preset: "android" | "iphone" | "ipad" = "android",
-    type: "wifi" | "usb" | "cloud" = "wifi",
+    type: "wifi" | "usb" = "usb",
   ): MobileDeviceInfo {
     let device: MobileDeviceInfo;
     if (preset === "iphone") {

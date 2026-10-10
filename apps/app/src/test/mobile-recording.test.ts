@@ -10,7 +10,7 @@ describe("Mobile Recording Engine & Transport", () => {
       countdown: 3,
       source: "screen",
       deviceTarget: "computer",
-      mobileConnectionType: "wifi",
+      mobileConnectionType: "usb",
       mobileConnectionStatus: "disconnected",
       mobileDeviceInfo: null,
       lastMobileTap: null,

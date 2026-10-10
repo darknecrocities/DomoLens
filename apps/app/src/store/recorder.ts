@@ -12,7 +12,7 @@ import { useProjects } from "./projects";
 import { useNav } from "./nav";
 import { platform } from "../platform";
 import { createLiveStreamMotionTracker, scanVideoElementForActivity } from "../lib/video-activity-detector";
-import { mobileStreamBridge, type MobileDeviceInfo } from "../lib/mobile-stream-bridge";
+import { mobileStreamBridge, type MobileDeviceInfo, type AdbDeviceItem } from "../lib/mobile-stream-bridge";
 
 let cursorTrajectoryBuffer: import("@domolens/core").CursorTrajectoryPoint[] = [];
 let transcriptSegments: Array<{ text: string; startMs: number; durationMs?: number }> = [];
@@ -23,7 +23,7 @@ let currentInterimStartMs = 0;
 let isIntentionallyStoppingRecognition = false;
 
 export type DeviceTarget = "computer" | "mobile";
-export type MobileConnectionType = "wifi" | "usb" | "cloud";
+export type MobileConnectionType = "usb" | "wifi";
 export type MobileConnectionStatus = "disconnected" | "pairing" | "connected";
 export type RecordingState = "idle" | "requesting_share" | "countdown" | "recording" | "paused";
 export type RecordingSource = "screen" | "window";
@@ -43,6 +43,8 @@ interface RecorderStore {
   mobileConnectionStatus: MobileConnectionStatus;
   mobileDeviceInfo: MobileDeviceInfo | null;
   lastMobileTap: { x: number; y: number; timestamp: number } | null;
+  adbDevices: AdbDeviceItem[];
+  adbScanStatus: "idle" | "scanning" | "connected" | "unauthorized" | "not_found";
   recordingMode: RecordingMode;
   micEnabled: boolean;
   systemAudioEnabled: boolean;
@@ -57,6 +59,9 @@ interface RecorderStore {
   // Actions
   setDeviceTarget: (target: DeviceTarget) => void;
   setMobileConnectionType: (type: MobileConnectionType) => void;
+  scanAdbDevices: () => Promise<AdbDeviceItem[]>;
+  connectWirelessAdb: (address: string, pairCode?: string) => Promise<{ success: boolean; message: string }>;
+  selectAdbDevice: (serial: string) => void;
   connectMobileDevice: (type?: MobileConnectionType, preset?: "android" | "iphone" | "ipad") => Promise<MobileDeviceInfo>;
   disconnectMobileDevice: () => void;
   simulateMobileTap: (x: number, y: number) => void;
@@ -300,10 +305,12 @@ export const useRecorder = create<RecorderStore>((set, get) => ({
   countdown: 3,
   source: "screen",
   deviceTarget: "computer",
-  mobileConnectionType: "wifi",
+  mobileConnectionType: "usb",
   mobileConnectionStatus: "disconnected",
   mobileDeviceInfo: null,
   lastMobileTap: null,
+  adbDevices: [],
+  adbScanStatus: "idle",
   recordingMode: "auto-zoom-sfx-transcribe" as RecordingMode,
   micEnabled: true,
   systemAudioEnabled: true,
@@ -325,28 +332,89 @@ export const useRecorder = create<RecorderStore>((set, get) => ({
           mobileConnectionStatus: "connected",
         });
       });
+      // Automatically scan for connected USB / Wireless phones
+      void get().scanAdbDevices();
     }
   },
 
   setMobileConnectionType: (mobileConnectionType) => {
     set({ mobileConnectionType });
-    if (get().deviceTarget === "mobile" && get().mobileDeviceInfo) {
-      const connType = mobileConnectionType === "cloud" ? "wifi" : mobileConnectionType;
-      const dev = mobileStreamBridge.connectSimulatedDevice(
-        get().mobileDeviceInfo?.os === "ios" ? "iphone" : "android",
-        connType,
+    if (get().deviceTarget === "mobile") {
+      const match = get().adbDevices.find((d) =>
+        mobileConnectionType === "wifi" ? d.is_wireless : !d.is_wireless,
       );
+      if (match) {
+        get().selectAdbDevice(match.serial);
+      } else {
+        void get().scanAdbDevices();
+      }
+    }
+  },
+
+  scanAdbDevices: async () => {
+    set({ adbScanStatus: "scanning" });
+    try {
+      const list = await mobileStreamBridge.scanAdbDevices();
+      set({ adbDevices: list });
+      if (!list || list.length === 0) {
+        set({ adbScanStatus: "not_found" });
+        return [];
+      }
+      const authorized = list.find((d) => d.state === "device");
+      if (authorized) {
+        const info = mobileStreamBridge.bindAdbDevice(authorized);
+        set({
+          adbScanStatus: "connected",
+          mobileDeviceInfo: info,
+          mobileConnectionStatus: "connected",
+          mobileConnectionType: authorized.is_wireless ? "wifi" : "usb",
+        });
+        toast.success(`Connected: ${info.name} (${info.width}×${info.height})`);
+      } else {
+        const unauthorized = list.find((d) => d.state === "unauthorized");
+        if (unauthorized) {
+          set({ adbScanStatus: "unauthorized" });
+          toast.warning("Phone connected but unauthorized. Unlock screen and allow USB debugging.");
+        } else {
+          set({ adbScanStatus: "not_found" });
+        }
+      }
+      return list;
+    } catch {
+      set({ adbScanStatus: "not_found" });
+      return [];
+    }
+  },
+
+  connectWirelessAdb: async (address: string, pairCode?: string) => {
+    set({ adbScanStatus: "scanning" });
+    const res = await mobileStreamBridge.connectWirelessAdb(address, pairCode);
+    if (res.success) {
+      await get().scanAdbDevices();
+      toast.success(res.message);
+    } else {
+      toast.error(res.message);
+      set({ adbScanStatus: "not_found" });
+    }
+    return res;
+  },
+
+  selectAdbDevice: (serial: string) => {
+    const dev = get().adbDevices.find((d) => d.serial === serial);
+    if (dev) {
+      const info = mobileStreamBridge.bindAdbDevice(dev);
       set({
-        mobileDeviceInfo: dev,
+        mobileDeviceInfo: info,
         mobileConnectionStatus: "connected",
+        adbScanStatus: dev.state === "device" ? "connected" : dev.state === "unauthorized" ? "unauthorized" : "not_found",
+        mobileConnectionType: dev.is_wireless ? "wifi" : "usb",
       });
     }
   },
 
   connectMobileDevice: async (type = get().mobileConnectionType, preset = "android") => {
     set({ mobileConnectionStatus: "pairing" });
-    const connType = type === "cloud" ? "wifi" : type;
-    const dev = mobileStreamBridge.connectSimulatedDevice(preset, connType);
+    const dev = mobileStreamBridge.connectSimulatedDevice(preset, type);
     set({
       mobileDeviceInfo: dev,
       mobileConnectionStatus: "connected",
@@ -361,12 +429,14 @@ export const useRecorder = create<RecorderStore>((set, get) => ({
     set({
       mobileDeviceInfo: null,
       mobileConnectionStatus: "disconnected",
+      adbScanStatus: "idle",
     });
     toast.info("Mobile device disconnected.");
   },
 
   simulateMobileTap: (x, y) => {
     mobileStreamBridge.simulateTap(x, y);
+    void mobileStreamBridge.sendDeviceTap(x, y);
     if (get().state === "recording") {
       get().recordClick(x, y, "left");
       get().recordCursorPoint(x, y);

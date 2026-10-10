@@ -816,6 +816,202 @@ fn read_media_file(path: String) -> Result<Vec<u8>, String> {
     fs::read(&path).map_err(|e| e.to_string())
 }
 
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct AdbDeviceInfo {
+    pub serial: String,
+    pub state: String,
+    pub model: String,
+    pub product: String,
+    pub width: u32,
+    pub height: u32,
+    pub is_wireless: bool,
+}
+
+fn find_adb_binary() -> Option<PathBuf> {
+    if let Ok(output) = std::process::Command::new("adb").arg("version").output() {
+        if output.status.success() {
+            return Some(PathBuf::from("adb"));
+        }
+    }
+
+    let home = std::env::var("HOME").or_else(|_| std::env::var("USERPROFILE")).unwrap_or_default();
+    let candidates = vec![
+        PathBuf::from(&home).join("Library/Android/sdk/platform-tools/adb"),
+        PathBuf::from("/opt/homebrew/bin/adb"),
+        PathBuf::from("/usr/local/bin/adb"),
+        PathBuf::from("/usr/bin/adb"),
+        PathBuf::from(&home).join("AppData/Local/Android/Sdk/platform-tools/adb.exe"),
+    ];
+
+    for c in candidates {
+        if c.exists() {
+            return Some(c);
+        }
+    }
+    None
+}
+
+#[tauri::command]
+fn get_adb_devices() -> Result<Vec<AdbDeviceInfo>, String> {
+    let adb_path = match find_adb_binary() {
+        Some(p) => p,
+        None => return Ok(Vec::new()),
+    };
+
+    let output = std::process::Command::new(&adb_path)
+        .arg("devices")
+        .arg("-l")
+        .output()
+        .map_err(|e| format!("Failed to run adb: {}", e))?;
+
+    if !output.status.success() {
+        return Ok(Vec::new());
+    }
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let mut devices = Vec::new();
+
+    for line in stdout.lines() {
+        let trimmed = line.trim();
+        if trimmed.is_empty() || trimmed.starts_with("List of devices") || trimmed.starts_with("* daemon") {
+            continue;
+        }
+
+        let parts: Vec<&str> = trimmed.split_whitespace().collect();
+        if parts.len() < 2 {
+            continue;
+        }
+
+        let serial = parts[0].to_string();
+        let state = parts[1].to_string();
+        let is_wireless = serial.contains(':');
+
+        let mut model = if is_wireless { "Wireless Android Device".to_string() } else { "Android Phone".to_string() };
+        let mut product = "Android".to_string();
+
+        for part in &parts[2..] {
+            if let Some(m) = part.strip_prefix("model:") {
+                model = m.replace('_', " ");
+            } else if let Some(p) = part.strip_prefix("product:") {
+                product = p.to_string();
+            }
+        }
+
+        let mut width = 1080;
+        let mut height = 2400;
+
+        if state == "device" {
+            if let Ok(wm_out) = std::process::Command::new(&adb_path)
+                .args(["-s", &serial, "shell", "wm", "size"])
+                .output()
+            {
+                let wm_str = String::from_utf8_lossy(&wm_out.stdout);
+                for wline in wm_str.lines() {
+                    if let Some(pos) = wline.find(':') {
+                        let size_part = wline[pos + 1..].trim();
+                        let dims: Vec<&str> = size_part.split('x').collect();
+                        if dims.len() == 2 {
+                            if let (Ok(w), Ok(h)) = (dims[0].trim().parse::<u32>(), dims[1].trim().parse::<u32>()) {
+                                width = w;
+                                height = h;
+                            }
+                        }
+                    }
+                }
+            }
+
+            if let Ok(brand_out) = std::process::Command::new(&adb_path)
+                .args(["-s", &serial, "shell", "getprop", "ro.product.brand"])
+                .output()
+            {
+                let brand = String::from_utf8_lossy(&brand_out.stdout).trim().to_string();
+                if !brand.is_empty() && !model.to_lowercase().contains(&brand.to_lowercase()) {
+                    model = format!("{} {}", brand, model);
+                }
+            }
+        }
+
+        devices.push(AdbDeviceInfo {
+            serial,
+            state,
+            model,
+            product,
+            width,
+            height,
+            is_wireless,
+        });
+    }
+
+    Ok(devices)
+}
+
+#[tauri::command]
+fn connect_wireless_adb(address: String) -> Result<String, String> {
+    let adb_path = find_adb_binary().ok_or_else(|| "ADB not found. Please install Android Platform Tools.".to_string())?;
+
+    let output = std::process::Command::new(&adb_path)
+        .arg("connect")
+        .arg(&address)
+        .output()
+        .map_err(|e| e.to_string())?;
+
+    let stdout = String::from_utf8_lossy(&output.stdout).to_string();
+    if stdout.to_lowercase().contains("connected") {
+        Ok(stdout)
+    } else {
+        Err(stdout)
+    }
+}
+
+#[tauri::command]
+fn pair_wireless_adb(address: String, code: String) -> Result<String, String> {
+    let adb_path = find_adb_binary().ok_or_else(|| "ADB not found. Please install Android Platform Tools.".to_string())?;
+
+    let output = std::process::Command::new(&adb_path)
+        .arg("pair")
+        .arg(&address)
+        .arg(&code)
+        .output()
+        .map_err(|e| e.to_string())?;
+
+    let stdout = String::from_utf8_lossy(&output.stdout).to_string();
+    if stdout.to_lowercase().contains("successfully") {
+        Ok(stdout)
+    } else {
+        Err(stdout)
+    }
+}
+
+#[tauri::command]
+fn capture_device_frame(serial: String) -> Result<String, String> {
+    let adb_path = find_adb_binary().ok_or_else(|| "ADB not found".to_string())?;
+
+    let output = std::process::Command::new(&adb_path)
+        .args(["-s", &serial, "exec-out", "screencap", "-p"])
+        .output()
+        .map_err(|e| e.to_string())?;
+
+    if !output.status.success() || output.stdout.is_empty() {
+        return Err("Failed to capture frame from device".to_string());
+    }
+
+    use base64::Engine;
+    let b64 = base64::engine::general_purpose::STANDARD.encode(&output.stdout);
+    Ok(format!("data:image/png;base64,{}", b64))
+}
+
+#[tauri::command]
+fn send_device_tap(serial: String, x: u32, y: u32) -> Result<(), String> {
+    let adb_path = find_adb_binary().ok_or_else(|| "ADB not found".to_string())?;
+
+    let _ = std::process::Command::new(&adb_path)
+        .args(["-s", &serial, "shell", "input", "tap", &x.to_string(), &y.to_string()])
+        .output();
+
+    Ok(())
+}
+
+
 #[tauri::command]
 fn show_recording_hud(app_handle: tauri::AppHandle) -> Result<(), String> {
     if let Some(main_win) = app_handle.get_webview_window("main") {
@@ -1351,7 +1547,12 @@ pub fn run() {
             export_source_video_file,
             show_item_in_folder,
             sync_tray_recording_state,
-            sync_tray_recent_projects
+            sync_tray_recent_projects,
+            get_adb_devices,
+            connect_wireless_adb,
+            pair_wireless_adb,
+            capture_device_frame,
+            send_device_tap
         ])
         .on_window_event(|window, event| {
             if let tauri::WindowEvent::CloseRequested { api, .. } = event {
