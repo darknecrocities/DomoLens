@@ -220,6 +220,36 @@ export function ToolsSidebar() {
     };
   }, []);
 
+  // Self-heal incompatible desktop frames on mobile recordings (e.g. Samsung A55 with iMac frame)
+  useEffect(() => {
+    if (!project) return;
+    const isMobileProj =
+      (project.summary.width && project.summary.height && project.summary.width < project.summary.height) ||
+      project.looks.aspectRatio === "9:16" ||
+      (project.summary.name && /(android|iphone|samsung|pixel|mobile|ios|phone)/i.test(project.summary.name));
+    const isIos = /(iphone|ios)/i.test(project.summary.name || "");
+    const curFrame = project.looks.windowFrame;
+    const isDesktopFrame =
+      curFrame === "macbook" ||
+      curFrame === "laptop" ||
+      curFrame === "imac" ||
+      curFrame === "macos" ||
+      curFrame === "windows" ||
+      curFrame === "terminal" ||
+      curFrame === "chrome" ||
+      curFrame === "safari" ||
+      curFrame === "glass";
+
+    if (isMobileProj && isDesktopFrame) {
+      updateLooks({
+        windowFrame: isIos ? "iphone" : "android",
+        borderRadius: isIos ? 36 : 28,
+        padding: project.looks.padding === 0 ? 0 : 24,
+        shadow: project.looks.shadow === "none" ? "none" : "lift",
+      });
+    }
+  }, [project?.summary.id, project?.summary.width, project?.summary.height, project?.looks.aspectRatio, project?.looks.windowFrame, updateLooks]);
+
   const toggleAudioPreview = (track: { id: string; url: string; volume?: number; muted?: boolean }) => {
     if (previewingAudioId === track.id) {
       if (audioPreviewRef.current) {
@@ -2665,6 +2695,77 @@ export function ToolsSidebar() {
                 </span>
               }
             >
+              {/* Master Device Framing Toggle: Enabled | Disabled */}
+              {(() => {
+                const isMobileRecording = Boolean(
+                  (project?.summary.width && project?.summary.height && project?.summary.width < project?.summary.height) ||
+                  project?.looks.aspectRatio === "9:16" ||
+                  (project?.summary.name && /(android|iphone|samsung|pixel|mobile|ios|phone)/i.test(project.summary.name))
+                );
+                const isIos = /(iphone|ios)/i.test(project?.summary.name || "");
+                const isFramingActive = (project?.looks.windowFrame ?? "none") !== "none" && (project?.looks.padding ?? 32) > 0;
+
+                return (
+                  <div className="flex items-center justify-between pb-2 border-b border-ink-800/80">
+                    <div>
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-[11px] font-semibold text-white">Device Framing</span>
+                        <span className="rounded bg-neutral-800 px-1.5 py-0.5 text-[8px] font-mono uppercase text-neutral-300">
+                          {isMobileRecording ? "Mobile Mode" : "Laptop/Desktop"}
+                        </span>
+                      </div>
+                      <span className="block text-[9px] text-fg-muted mt-0.5">
+                        {isFramingActive
+                          ? isMobileRecording
+                            ? "Phone chassis active"
+                            : "Laptop frame active"
+                          : "Frameless canvas (0 margin)"}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-1 bg-ink-900 border border-ink-800 p-0.5 rounded-lg">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const targetFrame = isMobileRecording ? (isIos ? "iphone" : "android") : "macbook";
+                          updateLooks({
+                            windowFrame: targetFrame,
+                            padding: isMobileRecording ? 24 : 32,
+                            borderRadius: isMobileRecording ? (isIos ? 36 : 28) : 14,
+                            shadow: "lift",
+                            fit: "contain",
+                          });
+                        }}
+                        className={`px-2 py-0.5 text-[10px] font-semibold rounded-md transition-all ${
+                          isFramingActive
+                            ? "bg-white text-black font-bold shadow-sm"
+                            : "text-fg-muted hover:text-white"
+                        }`}
+                      >
+                        Enabled
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          updateLooks({
+                            windowFrame: "none",
+                            padding: 0,
+                            borderRadius: 0,
+                            shadow: "none",
+                          });
+                        }}
+                        className={`px-2 py-0.5 text-[10px] font-semibold rounded-md transition-all ${
+                          !isFramingActive
+                            ? "bg-white text-black font-bold shadow-sm"
+                            : "text-fg-muted hover:text-white"
+                        }`}
+                      >
+                        Disabled
+                      </button>
+                    </div>
+                  </div>
+                );
+              })()}
+
               {/* Aspect Ratio & Display Mode */}
               <div className="space-y-1.5">
                 <div className="flex justify-between items-center text-[11px]">
@@ -2972,99 +3073,156 @@ export function ToolsSidebar() {
               </div>
 
               {/* Device Chassis & Window Mockup Frames */}
-              <div className="pt-2 border-t border-ink-800/80 space-y-3">
-                {/* 1. Physical Device Chassis */}
-                <div>
-                  <div className="flex items-center justify-between mb-1.5">
-                    <span className="text-[11px] font-semibold text-white">
-                      Device Frames
-                    </span>
-                    <span className="text-[9px] font-medium text-neutral-400">
-                      Mobile, Laptop &amp; Tablet
-                    </span>
-                  </div>
-                  <div className="grid grid-cols-2 gap-1.5">
-                    {[
-                      { id: "iphone" as const, label: "iPhone Pro", desc: "Dynamic Island + home bar", defaultRadius: 36 },
-                      { id: "android" as const, label: "Android Flagship", desc: "Punch-hole + nav bar", defaultRadius: 24 },
-                      { id: "macbook" as const, label: "MacBook Pro", desc: "Camera notch + aluminum lip", defaultRadius: 14 },
-                      { id: "laptop" as const, label: "Modern Laptop", desc: "Webcam bezel + hinge deck", defaultRadius: 10 },
-                      { id: "ipad" as const, label: "iPad Tablet", desc: "Symmetrical front camera", defaultRadius: 24 },
-                      { id: "imac" as const, label: "iMac Display", desc: "Studio chin + stand neck", defaultRadius: 12 },
-                    ].map((df) => {
-                      const isActive = project?.looks.windowFrame === df.id;
-                      return (
-                        <button
-                          key={df.id}
-                          type="button"
-                          onClick={() =>
-                            updateLooks({
-                              windowFrame: df.id,
-                              borderRadius:
-                                project?.looks.borderRadius === 0 || !project?.looks.borderRadius
-                                  ? df.defaultRadius
-                                  : project.looks.borderRadius,
-                              shadow: (project?.looks.shadow ?? "none") === "none" ? "lift" : project?.looks.shadow,
-                            })
-                          }
-                          className={`rounded-lg py-1.5 px-2 text-left transition-all border ${
-                            isActive
-                              ? "bg-white text-black font-bold shadow-sm border-white"
-                              : "bg-ink-900 border-ink-800 text-fg-muted hover:text-white hover:bg-ink-800"
-                          }`}
-                        >
-                          <span className="block text-[11px] font-semibold leading-tight">{df.label}</span>
-                          <span className={`block text-[9px] leading-tight mt-0.5 ${isActive ? "text-neutral-700 font-medium" : "text-fg-faint"}`}>
-                            {df.desc}
-                          </span>
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
+              {(() => {
+                const isMobileRecording = Boolean(
+                  (project?.summary.width && project?.summary.height && project?.summary.width < project?.summary.height) ||
+                  project?.looks.aspectRatio === "9:16" ||
+                  (project?.summary.name && /(android|iphone|samsung|pixel|mobile|ios|phone)/i.test(project.summary.name))
+                );
 
-                {/* 2. Desktop Window Shells */}
-                <div>
-                  <div className="flex items-center justify-between mb-1.5">
-                    <span className="text-[11px] font-semibold text-white">
-                      Window Shells
-                    </span>
-                    <span className="text-[9px] font-medium text-neutral-400">
-                      OS &amp; Browsers
-                    </span>
-                  </div>
-                  <div className="grid grid-cols-2 gap-1.5">
-                    {[
-                      { id: "macos" as const, label: "macOS Window", desc: "Cupertino traffic lights" },
-                      { id: "windows" as const, label: "Windows 11", desc: "Win 11 PowerShell tab + controls" },
-                      { id: "terminal" as const, label: "macOS Terminal", desc: "Dark zsh terminal prompt" },
-                      { id: "chrome" as const, label: "Google Chrome", desc: "Tab strip + Omnibox URL" },
-                      { id: "safari" as const, label: "Safari Browser", desc: "Unified address bar" },
-                      { id: "glass" as const, label: "Frosted Glass", desc: "Translucent glass shell" },
-                      { id: "none" as const, label: "Frameless", desc: "Edge-to-edge raw canvas" },
-                    ].map((wf) => {
-                      const isActive = (project?.looks.windowFrame || "macos") === wf.id;
-                      return (
-                        <button
-                          key={wf.id}
-                          type="button"
-                          onClick={() => updateLooks({ windowFrame: wf.id })}
-                          className={`rounded-lg py-1.5 px-2 text-left transition-all border ${
-                            isActive
-                              ? "bg-white text-black font-bold shadow-sm border-white"
-                              : "bg-ink-900 border-ink-800 text-fg-muted hover:text-white hover:bg-ink-800"
-                          }`}
-                        >
-                          <span className="block text-[11px] font-semibold leading-tight">{wf.label}</span>
-                          <span className={`block text-[9px] leading-tight mt-0.5 ${isActive ? "text-neutral-700 font-medium" : "text-fg-faint"}`}>
-                            {wf.desc}
+                return (
+                  <div className="pt-2 border-t border-ink-800/80 space-y-3">
+                    {/* 1. Physical Device Chassis */}
+                    <div>
+                      <div className="flex items-center justify-between mb-1.5">
+                        <span className="text-[11px] font-semibold text-white">
+                          Device Frames
+                        </span>
+                        <span className="text-[9px] font-medium text-neutral-400">
+                          {isMobileRecording ? "Mobile & Tablet Active" : "Laptop & Desktop Active"}
+                        </span>
+                      </div>
+                      <div className="grid grid-cols-2 gap-1.5">
+                        {[
+                          { id: "iphone" as const, label: "iPhone Pro", desc: "Dynamic Island + home bar", defaultRadius: 36, isMobileOnly: true },
+                          { id: "android" as const, label: "Android Flagship", desc: "Punch-hole + nav bar", defaultRadius: 24, isMobileOnly: true },
+                          { id: "macbook" as const, label: "MacBook Pro", desc: "Camera notch + aluminum lip", defaultRadius: 14, isDesktopOnly: true },
+                          { id: "laptop" as const, label: "Modern Laptop", desc: "Webcam bezel + hinge deck", defaultRadius: 10, isDesktopOnly: true },
+                          { id: "ipad" as const, label: "iPad Tablet", desc: "Symmetrical front camera", defaultRadius: 24, isMobileOnly: false },
+                          { id: "imac" as const, label: "iMac Display", desc: "Studio chin + stand neck", defaultRadius: 12, isDesktopOnly: true },
+                        ].map((df) => {
+                          const isActive = project?.looks.windowFrame === df.id;
+                          const isDisabled = isMobileRecording ? Boolean(df.isDesktopOnly) : Boolean(df.isMobileOnly);
+                          const disabledBadge = isMobileRecording ? "Laptop only" : "Phone only";
+
+                          return (
+                            <button
+                              key={df.id}
+                              type="button"
+                              disabled={isDisabled}
+                              onClick={() => {
+                                if (isDisabled) return;
+                                updateLooks({
+                                  windowFrame: df.id,
+                                  borderRadius:
+                                    project?.looks.borderRadius === 0 || !project?.looks.borderRadius
+                                      ? df.defaultRadius
+                                      : project.looks.borderRadius,
+                                  padding: (project?.looks.padding ?? 0) === 0 ? (isMobileRecording ? 24 : 32) : project?.looks.padding,
+                                  shadow: (project?.looks.shadow ?? "none") === "none" ? "lift" : project?.looks.shadow,
+                                });
+                              }}
+                              className={`rounded-lg py-1.5 px-2 text-left transition-all border ${
+                                isDisabled
+                                  ? "opacity-35 cursor-not-allowed bg-ink-950/60 border-ink-800/40 text-fg-faint pointer-events-none"
+                                  : isActive
+                                  ? "bg-white text-black font-bold shadow-sm border-white"
+                                  : "bg-ink-900 border-ink-800 text-fg-muted hover:text-white hover:bg-ink-800"
+                              }`}
+                              title={isDisabled ? `Disabled for this recording (${disabledBadge})` : `${df.label} chassis`}
+                            >
+                              <div className="flex items-center justify-between gap-1">
+                                <span className="block text-[11px] font-semibold leading-tight truncate">{df.label}</span>
+                                {isDisabled && (
+                                  <span className="text-[7.5px] font-mono px-1 py-0.2 rounded bg-ink-800/80 text-neutral-400 border border-ink-700/60 shrink-0">
+                                    {disabledBadge}
+                                  </span>
+                                )}
+                              </div>
+                              <span className={`block text-[9px] leading-tight mt-0.5 ${isActive && !isDisabled ? "text-neutral-700 font-medium" : "text-fg-faint"}`}>
+                                {df.desc}
+                              </span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    {/* 2. Desktop Window Shells */}
+                    <div>
+                      <div className="flex items-center justify-between mb-1.5">
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-[11px] font-semibold text-white">
+                            Window Shells
                           </span>
-                        </button>
-                      );
-                    })}
+                          {isMobileRecording && (
+                            <span className="text-[8px] font-mono px-1.5 py-0.5 rounded bg-ink-900 text-neutral-500 border border-ink-800 uppercase">
+                              Laptop only
+                            </span>
+                          )}
+                        </div>
+                        <span className="text-[9px] font-medium text-neutral-400">
+                          {isMobileRecording ? "Disabled on Mobile" : "OS & Browsers"}
+                        </span>
+                      </div>
+                      <div className="grid grid-cols-2 gap-1.5">
+                        {[
+                          { id: "macos" as const, label: "macOS Window", desc: "Cupertino traffic lights", isDesktopOnly: true },
+                          { id: "windows" as const, label: "Windows 11", desc: "Win 11 PowerShell tab + controls", isDesktopOnly: true },
+                          { id: "terminal" as const, label: "macOS Terminal", desc: "Dark zsh terminal prompt", isDesktopOnly: true },
+                          { id: "chrome" as const, label: "Google Chrome", desc: "Tab strip + Omnibox URL", isDesktopOnly: true },
+                          { id: "safari" as const, label: "Safari Browser", desc: "Unified address bar", isDesktopOnly: true },
+                          { id: "glass" as const, label: "Frosted Glass", desc: "Translucent glass shell", isDesktopOnly: true },
+                          { id: "none" as const, label: "Frameless", desc: "Edge-to-edge raw canvas", isDesktopOnly: false },
+                        ].map((wf) => {
+                          const isActive = (project?.looks.windowFrame || "macos") === wf.id;
+                          const isDisabled = isMobileRecording && wf.isDesktopOnly;
+
+                          return (
+                            <button
+                              key={wf.id}
+                              type="button"
+                              disabled={isDisabled}
+                              onClick={() => {
+                                if (isDisabled) return;
+                                if (wf.id === "none") {
+                                  updateLooks({ windowFrame: "none", padding: 0, borderRadius: 0, shadow: "none" });
+                                } else {
+                                  updateLooks({
+                                    windowFrame: wf.id,
+                                    padding: (project?.looks.padding ?? 0) === 0 ? 32 : project?.looks.padding,
+                                    shadow: (project?.looks.shadow ?? "none") === "none" ? "lift" : project?.looks.shadow,
+                                  });
+                                }
+                              }}
+                              className={`rounded-lg py-1.5 px-2 text-left transition-all border ${
+                                isDisabled
+                                  ? "opacity-35 cursor-not-allowed bg-ink-950/60 border-ink-800/40 text-fg-faint pointer-events-none"
+                                  : isActive
+                                  ? "bg-white text-black font-bold shadow-sm border-white"
+                                  : "bg-ink-900 border-ink-800 text-fg-muted hover:text-white hover:bg-ink-800"
+                              }`}
+                              title={isDisabled ? "Desktop window shells are disabled for mobile recordings" : wf.label}
+                            >
+                              <div className="flex items-center justify-between gap-1">
+                                <span className="block text-[11px] font-semibold leading-tight truncate">{wf.label}</span>
+                                {isDisabled && (
+                                  <span className="text-[7.5px] font-mono px-1 py-0.2 rounded bg-ink-800/80 text-neutral-400 border border-ink-700/60 shrink-0">
+                                    Laptop only
+                                  </span>
+                                )}
+                              </div>
+                              <span className={`block text-[9px] leading-tight mt-0.5 ${isActive && !isDisabled ? "text-neutral-700 font-medium" : "text-fg-faint"}`}>
+                                {wf.desc}
+                              </span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
                   </div>
-                </div>
-              </div>
+                );
+              })()}
             </CollapsibleCard>
 
             {/* 3. 3D Tilt & Camera Physics */}

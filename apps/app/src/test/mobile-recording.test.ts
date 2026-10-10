@@ -248,5 +248,78 @@ describe("Mobile Recording Engine & Transport", () => {
       expect(useEditor.getState().project?.looks.windowFrame).toBe(style);
     }
   });
+
+  it("self-heals desktop frames like iMac, Safari, or Windows on mobile recordings while preserving intentional frameless mode", async () => {
+    const { useEditor } = await import("../store/editor");
+    const { platform } = await import("../platform");
+
+    // Case A: Mobile recording with desktop "imac" frame auto-heals to "android"
+    const mobileWithImac = {
+      summary: {
+        id: "mobile-imac-proj",
+        name: "Samsung A55 Recording",
+        source: "recording",
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+        durationMs: 8000,
+        width: 1080,
+        height: 2340,
+        thumbnail: null,
+        media: null,
+      },
+      clicks: [],
+      interactions: [],
+      cursorTrajectory: [],
+      zoomBlocks: [{ id: "zb1", startTimeMs: 0, endTimeMs: 4000, targetX: 0.5, targetY: 0.5, scale: 1.5, enabled: true }],
+      keyframes: [{ id: "kf1", timeMs: 0, targetX: 0.5, targetY: 0.5, scale: 1.5 }],
+      textOverlays: [],
+      audioTracks: [],
+      clips: [],
+      looks: {
+        ...useEditor.getState().project?.looks!,
+        windowFrame: "imac" as any,
+        borderRadius: 12,
+        padding: 32,
+        aspectRatio: "9:16",
+      },
+      audioSettings: {
+        clickSoundEnabled: true,
+        clickSoundVolume: 1,
+        clickSoundPreset: "click",
+        typingSoundEnabled: true,
+        typingSoundVolume: 1,
+        typingSoundPreset: "creamy",
+        musicDuckingEnabled: true,
+        duckingAmount: 0.3,
+      },
+    };
+
+    await platform.saveFullProject?.(mobileWithImac as any);
+    await useEditor.getState().loadProject("mobile-imac-proj");
+    const healed = useEditor.getState().project;
+    expect(healed?.looks.windowFrame).toBe("android");
+    expect(healed?.looks.borderRadius).toBe(28);
+
+    // Case B: Explicit frameless mode (windowFrame: "none", padding: 0) is preserved
+    const mobileFrameless = {
+      ...mobileWithImac,
+      summary: {
+        ...mobileWithImac.summary,
+        id: "mobile-frameless-proj",
+      },
+      looks: {
+        ...mobileWithImac.looks,
+        windowFrame: "none" as any,
+        padding: 0,
+        borderRadius: 0,
+      },
+    };
+
+    await platform.saveFullProject?.(mobileFrameless as any);
+    await useEditor.getState().loadProject("mobile-frameless-proj");
+    const preservedFrameless = useEditor.getState().project;
+    expect(preservedFrameless?.looks.windowFrame).toBe("none");
+    expect(preservedFrameless?.looks.padding).toBe(0);
+  });
 });
 

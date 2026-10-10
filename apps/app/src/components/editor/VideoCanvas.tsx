@@ -1004,8 +1004,47 @@ export function VideoCanvas({ project, currentTimeMs: propTimeMs }: VideoCanvasP
   const isIphone = isPhoneOrTablet && looks.windowFrame === "iphone";
   const isIpad = isPhoneOrTablet && looks.windowFrame === "ipad";
 
+  // Responsive Canvas Viewport Measurement: ensures device frame remains firmly fixed and full-size on screen
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [containerSize, setContainerSize] = useState<{ width: number; height: number }>({ width: 0, height: 0 });
+
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    const updateSize = () => {
+      const rect = el.getBoundingClientRect();
+      const padPx = looks.padding === 0 ? 0 : Math.min(looks.padding, Math.max(8, Math.min(rect.width, rect.height) * 0.08));
+      const availW = Math.max(80, rect.width - 2 * padPx);
+      const availH = Math.max(80, rect.height - 2 * padPx);
+      setContainerSize({ width: availW, height: availH });
+    };
+    updateSize();
+    const ro = new ResizeObserver(updateSize);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [looks.padding]);
+
+  const frameDimensions = useMemo(() => {
+    const { width: availW, height: availH } = containerSize;
+    const aspect = viewAspectNum || (summary.width && summary.height ? summary.width / summary.height : 16 / 9);
+    if (!availW || !availH || !aspect) {
+      return { maxWidth: "100%", maxHeight: "100%", aspectRatio: viewportAspectRatio };
+    }
+    const containerAspect = availW / availH;
+    if (containerAspect > aspect) {
+      const h = Math.round(availH);
+      const w = Math.round(availH * aspect);
+      return { width: `${w}px`, height: `${h}px` };
+    } else {
+      const w = Math.round(availW);
+      const h = Math.round(availW / aspect);
+      return { width: `${w}px`, height: `${h}px` };
+    }
+  }, [containerSize, viewAspectNum, viewportAspectRatio, summary.width, summary.height]);
+
   return (
     <div
+      ref={containerRef}
       className="relative flex size-full items-center justify-center overflow-hidden"
       style={{
         background: looks.backgroundValue,
@@ -1039,15 +1078,16 @@ export function VideoCanvas({ project, currentTimeMs: propTimeMs }: VideoCanvasP
       {/* 3D Tilt Wrapper: maintains 3D perspective physics for entire chassis & screen */}
       <div
         ref={tiltWrapperRef}
-        className="relative flex size-full items-center justify-center pointer-events-none transition-transform duration-300"
+        className="relative flex items-center justify-center pointer-events-none transition-transform duration-300 shrink-0"
         style={{
+          ...frameDimensions,
           transform: `perspective(${tilt3D.perspective}px) rotateX(${tilt3D.rotateX}deg) rotateY(${tilt3D.rotateY}deg) rotateZ(${tilt3D.rotateZ}deg)`,
           transformStyle: "preserve-3d",
         }}
       >
         {/* Physical Smartphone / Tablet Chassis Body with Real Hardware Edges */}
         <div
-          className={`relative flex items-center justify-center max-h-full max-w-full pointer-events-auto transition-all duration-300 ${
+          className={`relative flex flex-col items-center justify-center size-full pointer-events-auto transition-all duration-300 select-none ${
             isPhoneOrTablet
               ? isIphone
                 ? "bg-gradient-to-b from-[#2e2e34] via-[#1e1e22] to-[#121215] border-[3px] border-[#4b4b52]"
@@ -1057,7 +1097,6 @@ export function VideoCanvas({ project, currentTimeMs: propTimeMs }: VideoCanvasP
               : ""
           }`}
           style={{
-            aspectRatio: viewportAspectRatio,
             paddingTop: isPhoneOrTablet ? (isIpad ? "14px" : "12px") : "0px",
             paddingBottom: isPhoneOrTablet ? (isIpad ? "14px" : "12px") : "0px",
             paddingLeft: isPhoneOrTablet ? (isIpad ? "14px" : "8px") : "0px",
@@ -1067,14 +1106,14 @@ export function VideoCanvas({ project, currentTimeMs: propTimeMs }: VideoCanvasP
                 ? "none"
                 : isPhoneOrTablet
                 ? "0 0 0 1px rgba(255,255,255,0.25), 0 0 0 2px rgba(0,0,0,0.9), 0 25px 65px -12px rgba(0,0,0,0.95), 0 0 25px rgba(0,0,0,0.5)"
-                : shadowStyles[looks.shadow] || shadowStyles.lift,
+                : "none",
             borderRadius: isPhoneOrTablet
               ? isIphone
                 ? `${Math.max(42, (looks.borderRadius || 36) + 10)}px`
                 : isAndroid
                 ? `${Math.max(34, (looks.borderRadius || 28) + 8)}px`
                 : `${Math.max(28, (looks.borderRadius || 24) + 8)}px`
-              : `${looks.borderRadius}px`,
+              : "0px",
           }}
         >
           {/* Physical Hardware Buttons on Left Edge */}
@@ -1133,13 +1172,10 @@ export function VideoCanvas({ project, currentTimeMs: propTimeMs }: VideoCanvasP
             onPointerMove={handlePointerMove}
             onPointerUp={handlePointerUp}
             onPointerCancel={handlePointerCancel}
-            className={`relative flex flex-col ${
-              isPhoneOrTablet ? "size-full min-h-0 min-w-0" : "max-h-full max-w-full"
-            } overflow-hidden bg-ink-950 ${
+            className={`relative flex flex-col size-full min-h-0 min-w-0 overflow-hidden bg-ink-950 ${
               isTraceShiftingMode ? "cursor-crosshair ring-2 ring-white/60 touch-none" : "cursor-crosshair"
             } group select-none transition-all duration-300`}
             style={{
-              aspectRatio: isPhoneOrTablet ? undefined : viewportAspectRatio,
               borderRadius: isPhoneOrTablet
                 ? isIphone
                   ? `${looks.borderRadius || 36}px`

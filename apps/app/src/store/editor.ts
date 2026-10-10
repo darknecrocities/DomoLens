@@ -540,14 +540,22 @@ export const useEditor = create<EditorState>((set, get) => ({
           parsed.looks.windowFrame === "windows" ||
           parsed.looks.windowFrame === "macbook" ||
           parsed.looks.windowFrame === "laptop" ||
+          parsed.looks.windowFrame === "imac" ||
+          parsed.looks.windowFrame === "chrome" ||
+          parsed.looks.windowFrame === "safari" ||
+          parsed.looks.windowFrame === "glass" ||
           parsed.looks.windowFrame === "none" ||
           !parsed.looks.windowFrame
         ) {
-          parsed.looks.windowFrame = defaultMobileFrame;
-          parsed.looks.borderRadius = isIos ? 36 : 28;
-          parsed.looks.padding = 24;
-          parsed.looks.aspectRatio = "9:16";
-          parsed.looks.fit = "contain";
+          if (parsed.looks.padding === 0 && parsed.looks.windowFrame === "none") {
+            // Keep intentional frameless 0 margin mode
+          } else {
+            parsed.looks.windowFrame = defaultMobileFrame;
+            parsed.looks.borderRadius = isIos ? 36 : 28;
+            parsed.looks.padding = 24;
+            parsed.looks.aspectRatio = "9:16";
+            parsed.looks.fit = "contain";
+          }
         }
       } else if (parsed.summary.source === "recording" && (parsed.looks.windowFrame === "none" || !parsed.looks.windowFrame)) {
         // Desktop recording: restore MacBook terminal frame
