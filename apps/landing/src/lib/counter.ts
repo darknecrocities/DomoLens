@@ -16,15 +16,15 @@ const DB = `projects/${PROJECT_ID}/databases/(default)/documents`;
 const BASE = `https://firestore.googleapis.com/v1/${DB}`;
 
 export async function readCounter(name: CounterName): Promise<number | null> {
-  if (!isCounterConfigured) return 74;
+  if (!isCounterConfigured) return null;
   try {
     const res = await fetch(`${BASE}/${COLLECTION}/${name}?key=${API_KEY}`);
-    if (res.status === 404) return 74;
-    if (!res.ok) return 74;
+    if (res.status === 404) return 0;
+    if (!res.ok) return null;
     const data = (await res.json()) as { fields?: { count?: { integerValue?: string } } };
-    return 74 + Number(data.fields?.count?.integerValue ?? 0);
+    return Number(data.fields?.count?.integerValue ?? 0);
   } catch {
-    return 74;
+    return null;
   }
 }
 
