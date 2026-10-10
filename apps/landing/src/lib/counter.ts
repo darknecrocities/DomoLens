@@ -28,10 +28,10 @@ export async function readCounter(name: CounterName): Promise<number | null> {
   }
 }
 
-export async function incrementCounter(name: CounterName): Promise<void> {
-  if (!isCounterConfigured) return;
+export async function incrementCounter(name: CounterName): Promise<boolean> {
+  if (!isCounterConfigured) return false;
   try {
-    await fetch(`https://firestore.googleapis.com/v1/${DB}:commit?key=${API_KEY}`, {
+    const res = await fetch(`https://firestore.googleapis.com/v1/${DB}:commit?key=${API_KEY}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -46,14 +46,15 @@ export async function incrementCounter(name: CounterName): Promise<void> {
           },
         ],
       }),
-      keepalive: true,
     });
+    return res.ok;
   } catch {
     /* counters are best-effort */
+    return false;
   }
 }
 
-const VISIT_KEY = "domolens_visit_recorded_at";
+const VISIT_KEY = "domolens_visit_recorded_v2";
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 /** Count one unique visit per browser per 24h. */
@@ -61,11 +62,18 @@ export function recordVisitOnce(): void {
   try {
     const last = Number(localStorage.getItem(VISIT_KEY) ?? 0);
     if (Date.now() - last < DAY_MS) return;
-    localStorage.setItem(VISIT_KEY, String(Date.now()));
   } catch {
-    /* storage blocked: still count, once per page load */
+    /* storage blocked: still count once per page load */
   }
-  void incrementCounter("visits");
+  // Only remember the visit once the write really succeeded.
+  void incrementCounter("visits").then((ok) => {
+    if (!ok) return;
+    try {
+      localStorage.setItem(VISIT_KEY, String(Date.now()));
+    } catch {
+      /* ignore */
+    }
+  });
 }
 
 /** Count clicks on release/download links (event delegation). */
