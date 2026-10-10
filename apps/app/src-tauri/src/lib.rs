@@ -86,6 +86,8 @@ static RECORDING_ACTIVE: AtomicBool = AtomicBool::new(false);
 static LAST_MOUSE_POS: Mutex<(f64, f64)> = Mutex::new((0.5, 0.5));
 static LAST_MOVE_EMIT_MS: Mutex<i64> = Mutex::new(0);
 static EVENT_TAP_PORT: Mutex<Option<usize>> = Mutex::new(None);
+static CAPTURE_IN_PROGRESS: AtomicBool = AtomicBool::new(false);
+static LAST_FRAME_CACHE: Mutex<Option<String>> = Mutex::new(None);
 
 fn get_data_dir() -> PathBuf {
     if let Some(dirs) = directories::ProjectDirs::from("com", "domolens", "desktop") {
@@ -869,7 +871,7 @@ fn get_adb_devices() -> Result<Vec<AdbDeviceInfo>, String> {
     }
 
     let stdout = String::from_utf8_lossy(&output.stdout);
-    let mut devices = Vec::new();
+    let mut raw_devices = Vec::new();
 
     for line in stdout.lines() {
         let trimmed = line.trim();
@@ -884,7 +886,11 @@ fn get_adb_devices() -> Result<Vec<AdbDeviceInfo>, String> {
 
         let serial = parts[0].to_string();
         let state = parts[1].to_string();
-        let is_wireless = serial.contains(':');
+        let is_wireless = serial.contains(':')
+            || serial.contains("._tcp")
+            || serial.contains("._adb")
+            || serial.starts_with("adb-")
+            || serial.contains("tls");
 
         let mut model = if is_wireless { "Wireless Android Device".to_string() } else { "Android Phone".to_string() };
         let mut product = "Android".to_string();
@@ -931,7 +937,7 @@ fn get_adb_devices() -> Result<Vec<AdbDeviceInfo>, String> {
             }
         }
 
-        devices.push(AdbDeviceInfo {
+        raw_devices.push(AdbDeviceInfo {
             serial,
             state,
             model,
@@ -940,6 +946,18 @@ fn get_adb_devices() -> Result<Vec<AdbDeviceInfo>, String> {
             height,
             is_wireless,
         });
+    }
+
+    // Deduplicate: if multiple connections exist for the same device (e.g. IP endpoint and mDNS TLS service),
+    // keep the one with clean IP or authorized state
+    let mut devices: Vec<AdbDeviceInfo> = Vec::new();
+    for dev in raw_devices {
+        let is_dup = devices.iter().any(|existing| {
+            existing.model == dev.model && existing.width == dev.width && existing.height == dev.height
+        });
+        if !is_dup {
+            devices.push(dev);
+        }
     }
 
     Ok(devices)
@@ -956,10 +974,13 @@ fn connect_wireless_adb(address: String) -> Result<String, String> {
         .map_err(|e| e.to_string())?;
 
     let stdout = String::from_utf8_lossy(&output.stdout).to_string();
-    if stdout.to_lowercase().contains("connected") {
-        Ok(stdout)
+    let stderr = String::from_utf8_lossy(&output.stderr).to_string();
+    let combined = format!("{}\n{}", stdout, stderr);
+
+    if combined.to_lowercase().contains("connected") || combined.to_lowercase().contains("already") {
+        Ok(combined.trim().to_string())
     } else {
-        Err(stdout)
+        Err(combined.trim().to_string())
     }
 }
 
@@ -974,16 +995,49 @@ fn pair_wireless_adb(address: String, code: String) -> Result<String, String> {
         .output()
         .map_err(|e| e.to_string())?;
 
-    let stdout = String::from_utf8_lossy(&output.stdout).to_string();
-    if stdout.to_lowercase().contains("successfully") {
-        Ok(stdout)
+    let combined = format!(
+        "{}\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let lower = combined.to_lowercase();
+    if lower.contains("successfully") || lower.contains("already") {
+        Ok(combined.trim().to_string())
     } else {
-        Err(stdout)
+        Err(combined.trim().to_string())
     }
 }
 
 #[tauri::command]
+fn restart_adb_server() -> Result<String, String> {
+    let adb_path = find_adb_binary().ok_or_else(|| "ADB not found".to_string())?;
+    let _ = std::process::Command::new(&adb_path).arg("kill-server").output();
+    let _ = std::process::Command::new(&adb_path).arg("start-server").output();
+    let _ = std::process::Command::new(&adb_path).arg("devices").output();
+    Ok("ADB server restarted".to_string())
+}
+
+#[tauri::command]
 fn capture_device_frame(serial: String) -> Result<String, String> {
+    // If a capture is already executing, return the cached previous frame immediately!
+    // This strictly prevents subprocess stacking and keeps CPU low.
+    if CAPTURE_IN_PROGRESS.compare_exchange(false, true, std::sync::atomic::Ordering::SeqCst, std::sync::atomic::Ordering::SeqCst).is_err() {
+        if let Ok(guard) = LAST_FRAME_CACHE.lock() {
+            if let Some(ref cached) = *guard {
+                return Ok(cached.clone());
+            }
+        }
+        return Err("Busy".to_string());
+    }
+
+    struct CaptureGuard;
+    impl Drop for CaptureGuard {
+        fn drop(&mut self) {
+            CAPTURE_IN_PROGRESS.store(false, std::sync::atomic::Ordering::SeqCst);
+        }
+    }
+    let _guard = CaptureGuard;
+
     let adb_path = find_adb_binary().ok_or_else(|| "ADB not found".to_string())?;
 
     let output = std::process::Command::new(&adb_path)
@@ -992,12 +1046,23 @@ fn capture_device_frame(serial: String) -> Result<String, String> {
         .map_err(|e| e.to_string())?;
 
     if !output.status.success() || output.stdout.is_empty() {
+        if let Ok(guard) = LAST_FRAME_CACHE.lock() {
+            if let Some(ref cached) = *guard {
+                return Ok(cached.clone());
+            }
+        }
         return Err("Failed to capture frame from device".to_string());
     }
 
     use base64::Engine;
     let b64 = base64::engine::general_purpose::STANDARD.encode(&output.stdout);
-    Ok(format!("data:image/png;base64,{}", b64))
+    let data_url = format!("data:image/png;base64,{}", b64);
+
+    if let Ok(mut guard) = LAST_FRAME_CACHE.lock() {
+        *guard = Some(data_url.clone());
+    }
+
+    Ok(data_url)
 }
 
 #[tauri::command]
@@ -1551,6 +1616,7 @@ pub fn run() {
             get_adb_devices,
             connect_wireless_adb,
             pair_wireless_adb,
+            restart_adb_server,
             capture_device_frame,
             send_device_tap
         ])

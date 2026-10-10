@@ -54,6 +54,7 @@ export function RecordScreen() {
     setDeviceTarget,
     setMobileConnectionType,
     scanAdbDevices,
+    restartAdbServer,
     connectWirelessAdb,
     selectAdbDevice,
     connectMobileDevice,
@@ -76,12 +77,22 @@ export function RecordScreen() {
   const [wirelessPairCode, setWirelessPairCode] = useState("");
   const [isConnectingWireless, setIsConnectingWireless] = useState(false);
 
+  const detectedWirelessDevice = adbDevices.find((d) => d.is_wireless && d.state === "device");
+  const detectedUsbDevice = adbDevices.find((d) => !d.is_wireless && d.state === "device");
+
   // Automatically scan for connected devices when mobile target is selected
   useEffect(() => {
     if (deviceTarget === "mobile") {
       void scanAdbDevices();
     }
   }, [deviceTarget, scanAdbDevices]);
+
+  // Pre-fill wireless address if an active Wi-Fi device is detected and field is empty
+  useEffect(() => {
+    if (detectedWirelessDevice && !wirelessAddress && detectedWirelessDevice.serial.includes(":")) {
+      setWirelessAddress(detectedWirelessDevice.serial);
+    }
+  }, [detectedWirelessDevice, wirelessAddress]);
 
   const deviceTargets: Array<{ id: DeviceTarget; label: string; desc: string; icon: typeof Monitor }> = [
     {
@@ -537,6 +548,36 @@ export function RecordScreen() {
                           </button>
                         </div>
 
+                        {/* Detected Wi-Fi Phone Banner (when phone is on Wi-Fi instead of USB cable) */}
+                        {detectedWirelessDevice && (!mobileDeviceInfo || mobileDeviceInfo.connectionType !== "usb") && (
+                          <div className="rounded-xl border border-neutral-700 bg-neutral-900/90 p-3 text-xs space-y-2">
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center gap-2">
+                                <Wifi className="size-3.5 text-white" />
+                                <span className="font-bold text-white text-xs">
+                                  Wi-Fi Device Available: {detectedWirelessDevice.model || detectedWirelessDevice.serial}
+                                </span>
+                              </div>
+                              <span className="px-1.5 py-0.5 rounded text-[10px] font-mono font-semibold bg-white text-black">
+                                Ready
+                              </span>
+                            </div>
+                            <p className="text-[11px] text-neutral-300 leading-relaxed">
+                              Your phone is already connected to this laptop over Wireless ADB. You can mirror it right now without needing a USB cable.
+                            </p>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setMobileConnectionType("wifi");
+                                selectAdbDevice(detectedWirelessDevice.serial);
+                              }}
+                              className="w-full py-1.5 rounded-lg bg-white text-black font-semibold text-xs hover:bg-neutral-200 transition-colors shadow-sm"
+                            >
+                              Switch to Wireless Mode ({detectedWirelessDevice.model || "Connected Phone"})
+                            </button>
+                          </div>
+                        )}
+
                         {/* Status / Device Detection View */}
                         {adbScanStatus === "unauthorized" ? (
                           <div className="rounded-xl border border-neutral-700 bg-neutral-900 p-3 text-xs space-y-2">
@@ -667,6 +708,16 @@ export function RecordScreen() {
 
                         <button
                           type="button"
+                          disabled={adbScanStatus === "scanning"}
+                          onClick={() => void restartAdbServer()}
+                          className="flex items-center justify-center gap-1.5 w-full py-1.5 rounded-lg border border-neutral-800 bg-neutral-900/60 hover:bg-neutral-800 text-[11px] text-neutral-400 hover:text-white transition-colors disabled:opacity-50"
+                        >
+                          <RefreshCw className={`size-3 ${adbScanStatus === "scanning" ? "animate-spin" : ""}`} />
+                          <span>Restart ADB Server (Fix Stuck USB / Unresponsive)</span>
+                        </button>
+
+                        <button
+                          type="button"
                           onClick={() => openSetupGuideFor("android-usb")}
                           className="text-[11px] text-neutral-400 hover:text-white underline text-left pt-1"
                         >
@@ -713,6 +764,63 @@ export function RecordScreen() {
                           </div>
                         ) : (
                           <div className="space-y-3">
+                            {/* Discovered Wi-Fi Phone 1-Click Card */}
+                            {detectedWirelessDevice && (
+                              <div className="rounded-xl border border-neutral-700 bg-neutral-900/90 p-3 text-xs space-y-2">
+                                <div className="flex items-center justify-between">
+                                  <div className="flex items-center gap-2">
+                                    <span className="size-2 rounded-full bg-white animate-pulse" />
+                                    <span className="font-bold text-white text-sm">
+                                      {detectedWirelessDevice.model || detectedWirelessDevice.serial}
+                                    </span>
+                                  </div>
+                                  <span className="px-2 py-0.5 rounded text-[10px] font-mono font-semibold bg-white text-black">
+                                    Wi-Fi Device Ready
+                                  </span>
+                                </div>
+                                <p className="text-[11px] text-neutral-300 leading-relaxed">
+                                  Phone is already connected over Wi-Fi (<span className="font-mono text-white">{detectedWirelessDevice.serial}</span>).
+                                </p>
+                                <button
+                                  type="button"
+                                  onClick={() => selectAdbDevice(detectedWirelessDevice.serial)}
+                                  className="w-full py-2 rounded-xl bg-white text-black font-semibold text-xs hover:bg-neutral-200 transition-colors shadow-sm"
+                                >
+                                  Link &amp; Mirror Screen ({detectedWirelessDevice.model || "Phone"})
+                                </button>
+                              </div>
+                            )}
+
+                            {/* Detected USB Phone Banner (if phone is plugged into USB while on wireless tab) */}
+                            {detectedUsbDevice && (!mobileDeviceInfo || mobileDeviceInfo.connectionType !== "wifi") && (
+                              <div className="rounded-xl border border-neutral-700 bg-neutral-900/90 p-3 text-xs space-y-2">
+                                <div className="flex items-center justify-between">
+                                  <div className="flex items-center gap-2">
+                                    <Cable className="size-3.5 text-white" />
+                                    <span className="font-bold text-white text-xs">
+                                      USB Device Available: {detectedUsbDevice.model || detectedUsbDevice.serial}
+                                    </span>
+                                  </div>
+                                  <span className="px-1.5 py-0.5 rounded text-[10px] font-mono font-semibold bg-white text-black">
+                                    Plugged In
+                                  </span>
+                                </div>
+                                <p className="text-[11px] text-neutral-300 leading-relaxed">
+                                  A phone was detected on your USB cable. You can switch to USB mode for ultra-low latency direct mirror.
+                                </p>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setMobileConnectionType("usb");
+                                    selectAdbDevice(detectedUsbDevice.serial);
+                                  }}
+                                  className="w-full py-1.5 rounded-lg bg-white text-black font-semibold text-xs hover:bg-neutral-200 transition-colors shadow-sm"
+                                >
+                                  Switch to USB Mode ({detectedUsbDevice.model || "Connected Phone"})
+                                </button>
+                              </div>
+                            )}
+
                             <div className="space-y-2">
                               <div>
                                 <label className="block text-[11px] font-mono text-neutral-400 mb-1">
@@ -753,6 +861,16 @@ export function RecordScreen() {
                               className="w-full py-2 rounded-xl bg-white text-black font-semibold text-xs hover:bg-neutral-200 transition-colors disabled:opacity-50 shadow-sm"
                             >
                               {isConnectingWireless ? "Connecting to Phone..." : "Connect Wireless Phone"}
+                            </button>
+
+                            <button
+                              type="button"
+                              disabled={adbScanStatus === "scanning"}
+                              onClick={() => void restartAdbServer()}
+                              className="flex items-center justify-center gap-1.5 w-full py-1.5 rounded-lg border border-neutral-800 bg-neutral-900/60 hover:bg-neutral-800 text-[11px] text-neutral-400 hover:text-white transition-colors disabled:opacity-50"
+                            >
+                              <RefreshCw className={`size-3 ${adbScanStatus === "scanning" ? "animate-spin" : ""}`} />
+                              <span>Restart ADB Server &amp; Rescan</span>
                             </button>
 
                             <div className="rounded-xl border border-neutral-800 bg-neutral-900/60 p-3 space-y-1.5 text-[11px] text-neutral-300">

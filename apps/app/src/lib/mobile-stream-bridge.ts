@@ -80,7 +80,7 @@ class MobileStreamBridgeImpl {
         this.adbDevices = list || [];
 
         const authorized = this.adbDevices.find((d) => d.state === "device");
-        if (authorized) {
+        if (authorized && (!this.activeDevice || this.activeDevice.id !== authorized.serial)) {
           this.bindAdbDevice(authorized);
         }
         return this.adbDevices;
@@ -95,23 +95,57 @@ class MobileStreamBridgeImpl {
     return this.adbDevices;
   }
 
+  public async restartAdbServer(): Promise<{ success: boolean; message: string }> {
+    if (typeof window !== "undefined" && "__TAURI_INTERNALS__" in window) {
+      try {
+        const { invoke } = await import("@tauri-apps/api/core");
+        const msg = await invoke<string>("restart_adb_server");
+        await this.scanAdbDevices();
+        return { success: true, message: msg || "ADB server restarted" };
+      } catch (err: any) {
+        console.debug("[restartAdbServer error]", err);
+        return { success: false, message: String(err?.message || err) };
+      }
+    }
+    return { success: false, message: "Desktop environment required" };
+  }
+
   public async connectWirelessAdb(address: string, pairCode?: string): Promise<{ success: boolean; message: string }> {
     if (typeof window !== "undefined" && "__TAURI_INTERNALS__" in window) {
       const { invoke } = await import("@tauri-apps/api/core");
+      let pairErr = "";
       if (pairCode && pairCode.trim()) {
         try {
           await invoke("pair_wireless_adb", { address, code: pairCode.trim() });
         } catch (e: any) {
-          return { success: false, message: e?.toString() || "Pairing failed" };
+          pairErr = e?.toString() || "Pairing failed";
+          console.debug("[pair_wireless_adb notice]", e);
         }
       }
+
       try {
         const msg = await invoke<string>("connect_wireless_adb", { address });
-        await this.scanAdbDevices();
-        return { success: true, message: msg };
+        console.debug("[connect_wireless_adb result]", msg);
       } catch (err: any) {
-        return { success: false, message: err?.toString() || "Connection failed" };
+        console.debug("[connect_wireless_adb notice]", err);
       }
+
+      const devices = await this.scanAdbDevices();
+      const connected = devices.find((d) => d.state === "device");
+      if (connected) {
+        return { success: true, message: `Connected to ${connected.model}` };
+      }
+
+      const unauthorized = devices.find((d) => d.state === "unauthorized");
+      if (unauthorized) {
+        return { success: false, message: "Phone connected but unauthorized. Please tap Allow on your phone screen." };
+      }
+
+      if (pairErr && !pairErr.toLowerCase().includes("already")) {
+        return { success: false, message: pairErr };
+      }
+
+      return { success: false, message: "Connection failed. Please ensure your phone is on the same Wi-Fi and Wireless Debugging is on." };
     }
     return { success: false, message: "Desktop environment required" };
   }
@@ -181,31 +215,62 @@ class MobileStreamBridgeImpl {
     } as unknown as MediaStream;
   }
 
+  private isPollingActive = false;
+
   public startFramePolling(serial: string): void {
-    if (this.framePollingTimer) {
-      clearInterval(this.framePollingTimer);
-      this.framePollingTimer = null;
-    }
+    this.stopFramePolling();
 
     if (typeof window === "undefined" || !("__TAURI_INTERNALS__" in window)) {
       return;
     }
 
+    this.isPollingActive = true;
     const img = new Image();
-    this.framePollingTimer = setInterval(async () => {
-      try {
-        const { invoke } = await import("@tauri-apps/api/core");
-        const frameDataUrl = await invoke<string>("capture_device_frame", { serial });
-        if (frameDataUrl && this.frameCtx && this.activeDevice) {
-          img.onload = () => {
-            if (this.frameCtx && this.activeDevice) {
-              this.frameCtx.drawImage(img, 0, 0, this.activeDevice.width, this.activeDevice.height);
-            }
-          };
-          img.src = frameDataUrl;
+
+    const loop = async () => {
+      const { invoke } = await import("@tauri-apps/api/core");
+
+      while (this.isPollingActive) {
+        if (!this.activeDevice || this.activeDevice.id !== serial) {
+          break;
         }
-      } catch {}
-    }, 150);
+
+        try {
+          const frameDataUrl = await invoke<string>("capture_device_frame", { serial });
+          if (frameDataUrl && this.frameCtx && this.activeDevice && this.isPollingActive) {
+            await new Promise<void>((resolve) => {
+              img.onload = () => {
+                if (this.frameCtx && this.activeDevice) {
+                  this.frameCtx.drawImage(img, 0, 0, this.activeDevice.width, this.activeDevice.height);
+                }
+                resolve();
+              };
+              img.onerror = () => resolve();
+              img.src = frameDataUrl;
+            });
+          }
+        } catch {
+          // If device is offline or error, wait 1s before retrying
+          await new Promise((r) => setTimeout(r, 1000));
+        }
+
+        if (!this.isPollingActive) break;
+
+        // Adaptive breathing room: pause 300ms after drawing before requesting next frame!
+        // This guarantees the UI thread has 300ms of completely idle, 60 FPS silky smooth response time!
+        await new Promise((r) => setTimeout(r, 300));
+      }
+    };
+
+    void loop();
+  }
+
+  public stopFramePolling(): void {
+    this.isPollingActive = false;
+    if (this.framePollingTimer) {
+      clearInterval(this.framePollingTimer);
+      this.framePollingTimer = null;
+    }
   }
 
   public async sendDeviceTap(normX: number, normY: number): Promise<void> {
@@ -643,6 +708,7 @@ class MobileStreamBridgeImpl {
    * Disconnects current mobile stream and releases resources.
    */
   public disconnect(): void {
+    this.stopFramePolling();
     if (this.activeStream) {
       this.activeStream.getTracks().forEach((t) => t.stop());
       this.activeStream = null;

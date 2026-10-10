@@ -159,9 +159,9 @@ export function MobileLiveMonitor({
                 <div className="absolute inset-2 rounded-full border border-white/30" />
                 <Smartphone className="size-7 text-white" />
               </div>
-              <span className="text-xs font-bold font-mono text-white tracking-wider">RADAR ACTIVE</span>
-              <span className="mt-1 text-[10px] text-neutral-400 max-w-[130px] leading-tight font-sans">
-                Scan QR code with your Android or iOS camera
+              <span className="text-xs font-bold font-mono text-white tracking-wider">MIRROR STANDBY</span>
+              <span className="mt-1 text-[10px] text-neutral-400 max-w-[140px] leading-tight font-sans">
+                Connect via USB cable or Wireless ADB
               </span>
             </div>
           )}
@@ -212,7 +212,7 @@ export function MobileLiveMonitor({
 
       {/* Screen Specs Footer */}
       <div className="mt-2 text-center text-[10px] font-mono text-neutral-400">
-        {deviceInfo ? `${width} × ${height} (${aspectRatio}) • ${name} • Click to test tap` : "1080 × 2400 (20:9) • Standby (Scan QR Code to Connect)"}
+        {deviceInfo ? `${width} × ${height} (${aspectRatio}) • ${name} • Click to test tap` : "1080 × 2400 (20:9) • Standby (Connect USB or Wireless ADB)"}
       </div>
     </div>
   );

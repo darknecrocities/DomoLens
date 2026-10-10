@@ -60,6 +60,7 @@ interface RecorderStore {
   setDeviceTarget: (target: DeviceTarget) => void;
   setMobileConnectionType: (type: MobileConnectionType) => void;
   scanAdbDevices: () => Promise<AdbDeviceItem[]>;
+  restartAdbServer: () => Promise<void>;
   connectWirelessAdb: (address: string, pairCode?: string) => Promise<{ success: boolean; message: string }>;
   selectAdbDevice: (serial: string) => void;
   connectMobileDevice: (type?: MobileConnectionType, preset?: "android" | "iphone" | "ipad") => Promise<MobileDeviceInfo>;
@@ -384,6 +385,17 @@ export const useRecorder = create<RecorderStore>((set, get) => ({
       set({ adbScanStatus: "not_found" });
       return [];
     }
+  },
+
+  restartAdbServer: async () => {
+    set({ adbScanStatus: "scanning" });
+    const res = await mobileStreamBridge.restartAdbServer();
+    if (res.success) {
+      toast.success(res.message);
+    } else {
+      toast.warning(res.message);
+    }
+    await get().scanAdbDevices();
   },
 
   connectWirelessAdb: async (address: string, pairCode?: string) => {
