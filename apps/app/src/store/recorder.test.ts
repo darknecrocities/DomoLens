@@ -366,6 +366,90 @@ describe("useRecorder store", () => {
 
     globalThis.sessionStorage = originalStorage;
   });
+
+  it("switches between computer and mobile recording targets cleanly", () => {
+    useRecorder.getState().setDeviceTarget("mobile");
+    expect(useRecorder.getState().deviceTarget).toBe("mobile");
+    expect(useRecorder.getState().mobileConnectionStatus).toBe("connected");
+    expect(useRecorder.getState().mobileDeviceInfo?.name).toBe("iPhone 15 Pro");
+
+    useRecorder.getState().setDeviceTarget("computer");
+    expect(useRecorder.getState().deviceTarget).toBe("computer");
+  });
+
+  it("connects and disconnects simulated mobile phone via Wi-Fi and USB", async () => {
+    useRecorder.getState().setDeviceTarget("mobile");
+    useRecorder.getState().setMobileConnectionType("usb");
+    expect(useRecorder.getState().mobileConnectionType).toBe("usb");
+
+    const androidDev = await useRecorder.getState().connectMobileDevice("usb", "android");
+    expect(androidDev.name).toBe("Samsung Galaxy S24 Ultra");
+    expect(androidDev.width).toBe(1080);
+    expect(androidDev.height).toBe(2400);
+    expect(androidDev.aspectRatio).toBe("20:9");
+
+    useRecorder.getState().disconnectMobileDevice();
+    expect(useRecorder.getState().mobileDeviceInfo).toBeNull();
+    expect(useRecorder.getState().mobileConnectionStatus).toBe("disconnected");
+  });
+
+  it("captures mobile tap events and updates clicks, trajectory, and lastMobileTap", () => {
+    useRecorder.getState().setDeviceTarget("mobile");
+    useRecorder.setState({ state: "recording" });
+
+    useRecorder.getState().simulateMobileTap(0.35, 0.65);
+
+    expect(useRecorder.getState().clicks).toHaveLength(1);
+    expect(useRecorder.getState().clicks[0]?.x).toBe(0.35);
+    expect(useRecorder.getState().clicks[0]?.y).toBe(0.65);
+    expect(useRecorder.getState().lastMobileTap).toEqual(
+      expect.objectContaining({ x: 0.35, y: 0.65 }),
+    );
+  });
+
+  it("stopRecording with mobile target dynamically sets native mobile dimensions and phone looks", async () => {
+    useRecorder.getState().setDeviceTarget("mobile");
+    await useRecorder.getState().connectMobileDevice("wifi", "iphone");
+
+    useRecorder.setState({
+      state: "recording",
+      elapsedMs: 6000,
+      clicks: [
+        { id: "tap-1", timestampMs: 1200, x: 0.5, y: 0.4, button: "left" },
+      ],
+      interactions: [
+        { id: "tap-1", type: "click", timestampMs: 1200, x: 0.5, y: 0.4, button: "left" },
+      ],
+    });
+
+    const storageMap = new Map<string, string>();
+    const originalStorage = globalThis.sessionStorage;
+    globalThis.sessionStorage = {
+      getItem: (key: string) => storageMap.get(key) ?? null,
+      setItem: (key: string, val: string) => storageMap.set(key, val),
+      removeItem: (key: string) => storageMap.delete(key),
+      clear: () => storageMap.clear(),
+      length: 0,
+      key: () => null,
+    };
+
+    const summary = await useRecorder.getState().stopRecording();
+    expect(summary).not.toBeNull();
+    expect(summary?.width).toBe(1179);
+    expect(summary?.height).toBe(2556);
+    expect(summary?.name).toContain("iPhone 15 Pro Recording");
+
+    const saved = globalThis.sessionStorage.getItem(`domolens_project_${summary?.id}`);
+    const project = JSON.parse(saved!);
+    expect(project.looks.aspectRatio).toBe("9:16");
+    expect(project.looks.borderRadius).toBe(28);
+    expect(project.looks.windowFrame).toBe("none");
+
+    // Auto-zoom generated from mobile tap!
+    expect(project.zoomBlocks.length).toBeGreaterThanOrEqual(1);
+
+    globalThis.sessionStorage = originalStorage;
+  });
 });
 
 describe("extractSpeechIntervalsFromBlob", () => {

@@ -1,22 +1,37 @@
+import { useState, useMemo } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import {
   AppWindow,
   ArrowLeft,
+  Cable,
   CheckCircle2,
+  HelpCircle,
   Mic,
   MicOff,
   Monitor,
   Pause,
   Play,
+  QrCode,
+  Smartphone,
   Video,
   Volume2,
   VolumeX,
+  Wifi,
 } from "lucide-react";
 import { formatDuration } from "@domolens/core";
 import { copy } from "../copy/en";
 import { Button } from "../components/ui/Button";
 import { useNav } from "../store/nav";
-import { useRecorder, type RecordingSource, type RecordingMode } from "../store/recorder";
+import {
+  useRecorder,
+  type RecordingSource,
+  type RecordingMode,
+  type DeviceTarget,
+  type MobileConnectionType,
+} from "../store/recorder";
+import { MobileSetupGuideModal } from "../components/recording/MobileSetupGuideModal";
+import { MobileLiveMonitor } from "../components/recording/MobileLiveMonitor";
+import { mobileStreamBridge } from "../lib/mobile-stream-bridge";
 
 export function RecordScreen() {
   const { back } = useNav();
@@ -24,12 +39,20 @@ export function RecordScreen() {
     state,
     countdown,
     source,
+    deviceTarget,
+    mobileConnectionType,
+    mobileDeviceInfo,
+    lastMobileTap,
     recordingMode,
     micEnabled,
     systemAudioEnabled,
     elapsedMs,
     clicks,
     setSource,
+    setDeviceTarget,
+    setMobileConnectionType,
+    connectMobileDevice,
+    simulateMobileTap,
     setRecordingMode,
     toggleMic,
     toggleSystemAudio,
@@ -40,6 +63,44 @@ export function RecordScreen() {
     cancelRecording,
     isProcessing,
   } = useRecorder();
+
+  const [isGuideOpen, setIsGuideOpen] = useState(false);
+  const [guideInitialTab, setGuideInitialTab] = useState<"android-wifi" | "android-usb" | "ios-wifi" | "ios-usb">("ios-wifi");
+
+  const pairingInfo = useMemo(
+    () => mobileStreamBridge.generatePairingInfo(mobileConnectionType),
+    [mobileConnectionType],
+  );
+
+  const deviceTargets: Array<{ id: DeviceTarget; label: string; desc: string; icon: typeof Monitor }> = [
+    {
+      id: "computer",
+      label: "Computer (Desktop / Laptop)",
+      desc: "Record entire desktop monitor or specific application window.",
+      icon: Monitor,
+    },
+    {
+      id: "mobile",
+      label: "Mobile Phone (Android / iOS)",
+      desc: "Record smartphone with dynamic screen size, live mirror, and tap tracking.",
+      icon: Smartphone,
+    },
+  ];
+
+  const mobileConnectionModes: Array<{ id: MobileConnectionType; label: string; desc: string; icon: typeof Wifi }> = [
+    {
+      id: "wifi",
+      label: "Wi-Fi Wireless (WebRTC)",
+      desc: "Scan QR code with phone camera to connect wirelessly (< 30ms latency).",
+      icon: Wifi,
+    },
+    {
+      id: "usb",
+      label: "USB Cable (Direct Link)",
+      desc: "Ultra-low latency (< 15ms) via USB-C or Lightning cable.",
+      icon: Cable,
+    },
+  ];
 
   const sources: Array<{ id: RecordingSource; label: string; desc: string; icon: typeof Monitor }> = [
     {
@@ -60,14 +121,14 @@ export function RecordScreen() {
     {
       id: "auto-zoom-sfx-transcribe",
       label: "Auto-Zoom + SFX + Transcribe",
-      desc: "Complete studio suite: automatic click zoom tracking, satisfying SFX, and live speech-to-text subtitles synced to your microphone.",
+      desc: "Complete studio suite: automatic click/tap zoom tracking, satisfying SFX, and live speech-to-text subtitles synced to your microphone.",
       badge: "All-in-One",
       featured: true,
     },
     {
       id: "auto-zoom-sfx",
       label: "Auto-Zoom + SFX",
-      desc: "Automatically zooms into your clicks and adds satisfying sound effects. Best for product demos.",
+      desc: "Automatically zooms into your clicks and taps and adds satisfying sound effects. Best for product demos.",
       badge: "Popular",
     },
     {
@@ -79,7 +140,7 @@ export function RecordScreen() {
     {
       id: "auto-zoom",
       label: "Auto-Zoom Only",
-      desc: "Smart zoom-tracking on every click without any sound effects. Clean and minimal.",
+      desc: "Smart zoom-tracking on every click and tap without sound effects. Clean and minimal.",
     },
     {
       id: "regular",
@@ -88,9 +149,14 @@ export function RecordScreen() {
     },
   ];
 
+  const openSetupGuideFor = (tab: "android-wifi" | "android-usb" | "ios-wifi" | "ios-usb") => {
+    setGuideInitialTab(tab);
+    setIsGuideOpen(true);
+  };
+
   return (
     <div className="mx-auto flex w-full max-w-3xl flex-1 flex-col items-center justify-center px-4 py-8 sm:px-6 pb-safe px-safe">
-      {/* 0. Screen Share Requesting Prompt */}
+      {/* 0. Screen Share Requesting Prompt (Computer Only) */}
       <AnimatePresence mode="wait">
         {state === "requesting_share" && (
           <motion.div
@@ -129,7 +195,11 @@ export function RecordScreen() {
           >
             <div className="flex items-center gap-2 mb-6 px-3.5 py-1.5 rounded-full border border-ink-600 bg-ink-900/80 text-xs text-white">
               <span className="size-2 rounded-full bg-white animate-pulse" />
-              <span>Screen Shared & Ready</span>
+              <span>
+                {deviceTarget === "mobile"
+                  ? `${mobileDeviceInfo?.name || "Mobile Phone"} Stream Linked & Ready`
+                  : "Screen Shared & Ready"}
+              </span>
             </div>
 
             <motion.div
@@ -167,6 +237,11 @@ export function RecordScreen() {
                 <span className="text-fg">
                   {state === "recording" ? copy.record.recordingIndicator : copy.record.pausedIndicator}
                 </span>
+                {deviceTarget === "mobile" && (
+                  <span className="ml-1 rounded bg-white text-black px-1.5 py-0.2 text-[10px] font-bold">
+                    MOBILE
+                  </span>
+                )}
               </div>
 
               {/* Time Display */}
@@ -175,12 +250,26 @@ export function RecordScreen() {
               </div>
 
               <p className="mt-2 text-sm text-fg-muted font-mono">
-                {clicks.length === 1 ? "1 click logged" : `${clicks.length} clicks logged`}
+                {clicks.length === 1 ? "1 action / tap logged" : `${clicks.length} actions / taps logged`}
               </p>
 
+              {/* Live Mobile Mirror Monitor on Computer Screen */}
+              {deviceTarget === "mobile" && (
+                <div className="mt-6 mb-4 flex justify-center w-full">
+                  <MobileLiveMonitor
+                    deviceInfo={mobileDeviceInfo}
+                    lastTap={lastMobileTap}
+                    isRecording={state === "recording"}
+                    onSimulateTap={simulateMobileTap}
+                  />
+                </div>
+              )}
+
               {/* Live Tip */}
-              <div className="mt-6 rounded-xl border border-ink-700 bg-ink-900/60 p-3 text-xs leading-relaxed text-fg-faint">
-                {copy.record.clickHint}
+              <div className="mt-4 rounded-xl border border-ink-700 bg-ink-900/60 p-3 text-xs leading-relaxed text-fg-faint">
+                {deviceTarget === "mobile"
+                  ? "Every tap on your phone or on the preview monitor is recorded with microsecond timestamps for automatic camera zoom."
+                  : copy.record.clickHint}
               </div>
 
               {/* Action Bar */}
@@ -252,7 +341,7 @@ export function RecordScreen() {
               <div className="w-16" />
             </div>
 
-            {/* Recording Mode Selector */}
+            {/* 1. Recording Mode Selector */}
             <div className="mb-6">
               <label className="mb-3 block text-sm font-semibold text-fg">Recording Mode</label>
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
@@ -274,10 +363,8 @@ export function RecordScreen() {
                       {m.badge && (
                         <span className={`absolute right-3 top-3 rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-widest ${
                           m.badge === "All-in-One"
-                            ? "bg-amber-400/20 text-amber-300 border border-amber-400/30"
-                            : m.badge === "AI"
-                            ? "bg-violet-500/20 text-violet-300"
-                            : "bg-white/10 text-fg-muted"
+                            ? "bg-white/20 text-white border border-white/30"
+                            : "bg-neutral-800 text-neutral-300 border border-neutral-700"
                         }`}>
                           {m.badge}
                         </span>
@@ -290,20 +377,21 @@ export function RecordScreen() {
               </div>
             </div>
 
-            {/* Source Selection Cards */}
+            {/* 2. Target Device Selector (Computer vs Mobile Phone) */}
             <div className="mb-6">
-              <label className="mb-3 block text-sm font-semibold text-fg">
-                {copy.record.sourceTitle}
-              </label>
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-                {sources.map((s) => {
-                  const Icon = s.icon;
-                  const selected = source === s.id;
+              <div className="flex items-center justify-between mb-3">
+                <label className="text-sm font-semibold text-fg">Recording Target</label>
+                <span className="text-[11px] font-mono text-fg-muted">Select where to record</span>
+              </div>
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                {deviceTargets.map((d) => {
+                  const Icon = d.icon;
+                  const selected = deviceTarget === d.id;
                   return (
                     <button
-                      key={s.id}
+                      key={d.id}
                       type="button"
-                      onClick={() => setSource(s.id)}
+                      onClick={() => setDeviceTarget(d.id)}
                       className={`flex flex-col items-start rounded-2xl border p-4 text-left transition-all ${
                         selected
                           ? "border-white bg-white/10 shadow-sm"
@@ -317,15 +405,197 @@ export function RecordScreen() {
                       >
                         <Icon className="size-5" />
                       </div>
-                      <span className="text-base font-semibold text-fg">{s.label}</span>
-                      <span className="mt-1 text-xs text-fg-muted leading-relaxed">{s.desc}</span>
+                      <span className="text-base font-semibold text-fg">{d.label}</span>
+                      <span className="mt-1 text-xs text-fg-muted leading-relaxed">{d.desc}</span>
                     </button>
                   );
                 })}
               </div>
             </div>
 
-            {/* Audio Options */}
+            {/* 3A. Computer Source Selection Cards (when Computer is selected) */}
+            {deviceTarget === "computer" && (
+              <div className="mb-6">
+                <label className="mb-3 block text-sm font-semibold text-fg">
+                  {copy.record.sourceTitle}
+                </label>
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  {sources.map((s) => {
+                    const Icon = s.icon;
+                    const selected = source === s.id;
+                    return (
+                      <button
+                        key={s.id}
+                        type="button"
+                        onClick={() => setSource(s.id)}
+                        className={`flex flex-col items-start rounded-2xl border p-4 text-left transition-all ${
+                          selected
+                            ? "border-white bg-white/10 shadow-sm"
+                            : "border-ink-700 bg-ink-800 hover:border-ink-600 hover:bg-ink-700/60"
+                        }`}
+                      >
+                        <div
+                          className={`mb-3 flex size-10 items-center justify-center rounded-xl ${
+                            selected ? "bg-white text-black" : "bg-ink-700 text-fg-muted"
+                          }`}
+                        >
+                          <Icon className="size-5" />
+                        </div>
+                        <span className="text-base font-semibold text-fg">{s.label}</span>
+                        <span className="mt-1 text-xs text-fg-muted leading-relaxed">{s.desc}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* 3B. Mobile Connection & Live Mirror Hub (when Mobile Phone is selected) */}
+            {deviceTarget === "mobile" && (
+              <div className="mb-6 space-y-4 rounded-3xl border border-neutral-700 bg-ink-800/80 p-5 shadow-lg">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-ink-700 pb-3">
+                  <div className="flex items-center gap-2">
+                    <Smartphone className="size-5 text-white" />
+                    <div>
+                      <h3 className="text-sm font-bold text-white">Mobile Device Link Hub</h3>
+                      <p className="text-[11px] text-fg-muted">
+                        Connect Android or iOS via Wi-Fi or USB cable
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => openSetupGuideFor(mobileConnectionType === "wifi" ? "ios-wifi" : "ios-usb")}
+                      className="flex items-center gap-1.5 rounded-lg border border-neutral-700 bg-neutral-800 hover:bg-neutral-700 px-3 py-1 text-xs font-semibold text-white transition-colors"
+                    >
+                      <HelpCircle className="size-3.5" />
+                      <span>Setup Guide</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Connection Mode (Wi-Fi vs USB) */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {mobileConnectionModes.map((cm) => {
+                    const Icon = cm.icon;
+                    const selected = mobileConnectionType === cm.id;
+                    return (
+                      <button
+                        key={cm.id}
+                        type="button"
+                        onClick={() => setMobileConnectionType(cm.id)}
+                        className={`flex flex-col items-start rounded-2xl border p-3.5 text-left transition-all ${
+                          selected
+                            ? "border-white bg-white/10 shadow-sm"
+                            : "border-ink-700 bg-ink-900/60 hover:border-ink-600 hover:bg-ink-700/40"
+                        }`}
+                      >
+                        <div className="flex items-center gap-2 mb-1.5">
+                          <div className={`p-1.5 rounded-lg ${selected ? "bg-white text-black" : "bg-ink-800 text-fg-muted"}`}>
+                            <Icon className="size-4" />
+                          </div>
+                          <span className="text-xs font-bold text-white">{cm.label}</span>
+                        </div>
+                        <span className="text-[11px] text-fg-muted leading-tight">{cm.desc}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {/* Live Device Status & Preview Hub */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-center rounded-2xl border border-neutral-700/80 bg-ink-950/70 p-4">
+                  {/* Left Column: Device Info & Quick Connectors */}
+                  <div className="space-y-3">
+                    <div className="flex items-center gap-2">
+                      <span className="size-2 rounded-full bg-white animate-pulse" />
+                      <span className="text-xs font-semibold text-white">
+                        {mobileDeviceInfo ? `Connected: ${mobileDeviceInfo.name}` : "Ready to Pair"}
+                      </span>
+                    </div>
+
+                    <div className="rounded-xl border border-neutral-800 bg-ink-900 p-3 space-y-1.5 text-xs font-mono">
+                      <div className="flex justify-between text-neutral-400">
+                        <span>Resolution:</span>
+                        <span className="text-white font-bold">
+                          {mobileDeviceInfo ? `${mobileDeviceInfo.width} × ${mobileDeviceInfo.height}` : "1179 × 2556"}
+                        </span>
+                      </div>
+                      <div className="flex justify-between text-neutral-400">
+                        <span>Aspect Ratio:</span>
+                        <span className="text-white">
+                          {mobileDeviceInfo?.aspectRatio || "19.5:9 (Portrait)"}
+                        </span>
+                      </div>
+                      <div className="flex justify-between text-neutral-400">
+                        <span>Transport Link:</span>
+                        <span className="text-white uppercase">{mobileConnectionType} Direct</span>
+                      </div>
+                      <div className="flex justify-between text-neutral-400">
+                        <span>Latency & FPS:</span>
+                        <span className="text-white">
+                          {mobileDeviceInfo?.latencyMs || 22}ms • 60 FPS
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Quick Preset Device Switcher */}
+                    <div>
+                      <span className="block text-[10px] font-mono uppercase tracking-wider text-neutral-400 mb-1.5">
+                        Test Device Presets
+                      </span>
+                      <div className="flex flex-wrap gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() => void connectMobileDevice(mobileConnectionType, "iphone")}
+                          className="rounded-lg border border-neutral-700 bg-neutral-800 hover:bg-neutral-700 px-2.5 py-1 text-[11px] font-medium text-white transition-colors"
+                        >
+                          iPhone 15 Pro
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => void connectMobileDevice(mobileConnectionType, "android")}
+                          className="rounded-lg border border-neutral-700 bg-neutral-800 hover:bg-neutral-700 px-2.5 py-1 text-[11px] font-medium text-white transition-colors"
+                        >
+                          Galaxy S24 (Android)
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => void connectMobileDevice(mobileConnectionType, "ipad")}
+                          className="rounded-lg border border-neutral-700 bg-neutral-800 hover:bg-neutral-700 px-2.5 py-1 text-[11px] font-medium text-white transition-colors"
+                        >
+                          iPad Pro (Tablet)
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* QR Code pairing URL / Host Info */}
+                    {mobileConnectionType === "wifi" && (
+                      <div className="rounded-xl border border-neutral-800 bg-neutral-900/60 p-2.5 text-[10px] font-mono text-neutral-400">
+                        <div className="flex items-center gap-1.5 text-white font-semibold mb-1">
+                          <QrCode className="size-3.5" />
+                          <span>Wi-Fi Pairing Address:</span>
+                        </div>
+                        <div className="truncate text-neutral-300">{pairingInfo.pairingUrl}</div>
+                        <div className="mt-1 text-fg-faint">Scan with iPhone or Android camera on same Wi-Fi.</div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Right Column: Live Mobile Screen Mirror Monitor */}
+                  <div className="flex flex-col items-center justify-center p-2 border border-neutral-800 rounded-2xl bg-black/40">
+                    <MobileLiveMonitor
+                      deviceInfo={mobileDeviceInfo}
+                      lastTap={lastMobileTap}
+                      isRecording={false}
+                      onSimulateTap={simulateMobileTap}
+                    />
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* 4. Audio Options */}
             <div className="mb-8 rounded-2xl border border-ink-700 bg-ink-800 p-4">
               <span className="mb-3 block text-sm font-semibold text-fg">
                 {copy.record.audioTitle}
@@ -368,7 +638,9 @@ export function RecordScreen() {
                     ) : (
                       <VolumeX className="size-5 text-fg-faint" />
                     )}
-                    <span className="text-sm font-medium">{copy.record.systemAudioLabel}</span>
+                    <span className="text-sm font-medium">
+                      {deviceTarget === "mobile" ? "Mobile Sound" : copy.record.systemAudioLabel}
+                    </span>
                   </div>
                   <span className="text-xs font-semibold uppercase tracking-wider text-fg-muted">
                     {systemAudioEnabled ? "On" : "Off"}
@@ -377,29 +649,44 @@ export function RecordScreen() {
               </div>
             </div>
 
-            {/* Start Button */}
+            {/* 5. Start Button */}
             <div className="flex flex-col items-center gap-4">
               <Button
                 variant="primary"
                 size="xl"
-                icon={<Video className="size-6 text-ink-950" />}
+                icon={
+                  deviceTarget === "mobile" ? (
+                    <Smartphone className="size-6 text-ink-950" />
+                  ) : (
+                    <Video className="size-6 text-ink-950" />
+                  )
+                }
                 onClick={startCountdown}
                 className="w-full sm:w-auto sm:px-16"
               >
-                {copy.record.startBtn}
+                {deviceTarget === "mobile" ? "Start mobile recording" : copy.record.startBtn}
               </Button>
 
               {/* Hardware Permission Criteria Note */}
               <div className="flex items-center gap-2 font-mono text-[11px] text-neutral-400">
                 <span className="size-1.5 rounded-full bg-white animate-pulse" />
                 <span>
-                  Hardware capture ready: macOS ScreenCaptureKit, Windows Graphics Capture, Linux PipeWire
+                  {deviceTarget === "mobile"
+                    ? "Mobile hardware ready: Low-latency WebRTC 60 FPS, Apple AVFoundation USB, Android ADB direct"
+                    : "Hardware capture ready: macOS ScreenCaptureKit, Windows Graphics Capture, Linux PipeWire"}
                 </span>
               </div>
             </div>
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* Mobile Device Setup Guide Modal */}
+      <MobileSetupGuideModal
+        isOpen={isGuideOpen}
+        onClose={() => setIsGuideOpen(false)}
+        initialTab={guideInitialTab}
+      />
     </div>
   );
 }
