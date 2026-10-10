@@ -1378,7 +1378,79 @@ export async function renderProjectVideo(options: RenderOptions): Promise<Render
       ctx.fillStyle = createUniversalBackgroundFill(ctx, width, height, looks.backgroundValue);
       ctx.fillRect(0, 0, width, height);
 
-      // 2. Draw Outer Window / Chassis Drop Shadow
+      // 2. Compute camera state at timestamp tMs
+      const rawCamera = calculateCameraAtTime(
+        tMs,
+        project.zoomBlocks,
+        500,
+        400,
+        smoothedTrajectory,
+        project.keyframes,
+        {
+          autoTrackCursor: Boolean(looks.autoTrackCursor),
+          autoTrackScale: looks.autoTrackScale || 1.6,
+          cursorSmoothing: looks.cursorSmoothing || "smooth",
+          cameraPhysics: looks.cameraPhysics,
+          clicks: project.clicks,
+          alreadySmoothed: true,
+        },
+      );
+      const camera = rawCamera;
+
+      // Compute active visual effects at timestamp tMs
+      const effectsState = calculateActiveEffectsState(
+        project.effects || [],
+        tMs,
+        project.keyframes,
+        { x: camera.x, y: camera.y },
+      );
+
+      // Frame & window dimensions for framing and sub-region clipping
+      const isWindowBar =
+        looks.windowFrame === "macos" ||
+        looks.windowFrame === "windows" ||
+        looks.windowFrame === "terminal" ||
+        looks.windowFrame === "chrome" ||
+        looks.windowFrame === "safari" ||
+        looks.windowFrame === "glass";
+      const isLaptop = looks.windowFrame === "laptop";
+      const isMacbook = looks.windowFrame === "macbook";
+      const isImac = looks.windowFrame === "imac";
+
+      const topBarH = isWindowBar
+        ? (looks.windowFrame === "chrome" ? 36 : 26) * baseScale
+        : isLaptop
+        ? 16 * baseScale
+        : 0;
+
+      const bottomBarH = isMacbook
+        ? 12 * baseScale
+        : isLaptop
+        ? 12 * baseScale
+        : isImac
+        ? 28 * baseScale
+        : 0;
+
+      const vidY = winY + topBarH;
+      const vidH = Math.max(10, winH - topBarH - bottomBarH);
+
+      const exportVideoAspect =
+        videoLoaded && video.videoWidth && video.videoHeight ? video.videoWidth / video.videoHeight : null;
+      const mapExportPt = (px: number, py: number) =>
+        mapVideoPointToViewport(px, py, exportVideoAspect, winW / vidH);
+      const camView = mapExportPt(camera.x, camera.y);
+
+      // Whole Canvas Camera Transform: zooms & shifts the entire framed video screen across the canvas
+      const stageCenterX = isPhoneOrTablet ? chassisX + chassisW / 2 : winX + winW / 2;
+      const stageCenterY = isPhoneOrTablet ? chassisY + chassisH / 2 : winY + winH / 2;
+
+      ctx.save();
+      ctx.translate(stageCenterX, stageCenterY);
+      ctx.scale(camera.scale, camera.scale);
+      ctx.translate((0.5 - camView.x) * winW, (0.5 - camView.y) * vidH);
+      ctx.translate(-stageCenterX, -stageCenterY);
+
+      // 3. Draw Outer Window / Chassis Drop Shadow
       if (looks.shadow && looks.shadow !== "none") {
         ctx.save();
         ctx.shadowColor =
@@ -1403,7 +1475,7 @@ export async function renderProjectVideo(options: RenderOptions): Promise<Render
         ctx.restore();
       }
 
-      // 2b. Draw Physical Phone Chassis Body with Real Hardware Edges
+      // 3b. Draw Physical Phone Chassis Body with Real Hardware Edges
       if (isPhoneOrTablet) {
         ctx.save();
         // Hardware Buttons on Outer Edges
@@ -1446,33 +1518,6 @@ export async function renderProjectVideo(options: RenderOptions): Promise<Render
         ctx.restore();
       }
 
-      // 3. Compute camera state at timestamp tMs
-      const rawCamera = calculateCameraAtTime(
-        tMs,
-        project.zoomBlocks,
-        500,
-        400,
-        smoothedTrajectory,
-        project.keyframes,
-        {
-          autoTrackCursor: Boolean(looks.autoTrackCursor),
-          autoTrackScale: looks.autoTrackScale || 1.6,
-          cursorSmoothing: looks.cursorSmoothing || "smooth",
-          cameraPhysics: looks.cameraPhysics,
-          clicks: project.clicks,
-          alreadySmoothed: true,
-        },
-      );
-      const camera = rawCamera;
-
-      // Compute active visual effects at timestamp tMs
-      const effectsState = calculateActiveEffectsState(
-        project.effects || [],
-        tMs,
-        project.keyframes,
-        { x: camera.x, y: camera.y },
-      );
-
       // 4. Clip inner video window & apply 3D tilt perspective
       ctx.save();
       const tilt3D = evaluate3DTiltAtTime(tMs, looks, project.interactions, project.keyframes);
@@ -1500,40 +1545,7 @@ export async function renderProjectVideo(options: RenderOptions): Promise<Render
         ctx.clip();
       }
 
-      // 5. Apply camera transform (scale and target centering)
-      const isWindowBar =
-        looks.windowFrame === "macos" ||
-        looks.windowFrame === "windows" ||
-        looks.windowFrame === "terminal" ||
-        looks.windowFrame === "chrome" ||
-        looks.windowFrame === "safari" ||
-        looks.windowFrame === "glass";
-      const isLaptop = looks.windowFrame === "laptop";
-      const isMacbook = looks.windowFrame === "macbook";
-      const isImac = looks.windowFrame === "imac";
-
-      const topBarH = isWindowBar
-        ? (looks.windowFrame === "chrome" ? 36 : 26) * baseScale
-        : isLaptop
-        ? 16 * baseScale
-        : 0;
-
-      const bottomBarH = isMacbook
-        ? 12 * baseScale
-        : isLaptop
-        ? 12 * baseScale
-        : isImac
-        ? 28 * baseScale
-        : 0;
-
-      const vidY = winY + topBarH;
-      const vidH = Math.max(10, winH - topBarH - bottomBarH);
-
-      const exportVideoAspect =
-        videoLoaded && video.videoWidth && video.videoHeight ? video.videoWidth / video.videoHeight : null;
-      const mapExportPt = (px: number, py: number) =>
-        mapVideoPointToViewport(px, py, exportVideoAspect, winW / vidH);
-      const camView = mapExportPt(camera.x, camera.y);
+      // 5. Video content sub-region (1:1 uncropped inside device frame)
       ctx.save();
       // Clip to video content sub-region (below header) so video does not occlude or get covered by header
       ctx.beginPath();
@@ -1541,8 +1553,6 @@ export async function renderProjectVideo(options: RenderOptions): Promise<Render
       ctx.clip();
 
       ctx.translate(winX + winW / 2, vidY + vidH / 2);
-      ctx.scale(camera.scale, camera.scale);
-      ctx.translate((0.5 - camView.x) * winW, (0.5 - camView.y) * vidH);
 
       // 6. Draw video source or high-fidelity mockup
       if (videoLoaded && video.readyState >= 2) {
@@ -1733,47 +1743,6 @@ export async function renderProjectVideo(options: RenderOptions): Promise<Render
       }
 
       ctx.restore(); // Restore window clipping
-
-      // 8b. Draw user's template photo placeholder image
-      if (photoImg && looks.photoOverlay) {
-        const po = looks.photoOverlay;
-        const pSize = po.size * width;
-        const pX = po.x * width - pSize / 2;
-        const pY = po.y * height - pSize / 2;
-        const side = Math.min(photoImg.naturalWidth, photoImg.naturalHeight);
-        const psx = (photoImg.naturalWidth - side) / 2;
-        const psy = (photoImg.naturalHeight - side) / 2;
-        ctx.save();
-        ctx.beginPath();
-        if (po.shape === "circle") {
-          ctx.arc(pX + pSize / 2, pY + pSize / 2, pSize / 2, 0, Math.PI * 2);
-        } else if (typeof ctx.roundRect === "function") {
-          ctx.roundRect(pX, pY, pSize, pSize, po.shape === "rounded" ? pSize * 0.22 : 0);
-        } else {
-          ctx.rect(pX, pY, pSize, pSize);
-        }
-        ctx.shadowColor = "rgba(0,0,0,0.45)";
-        ctx.shadowBlur = 18 * baseScale;
-        ctx.fillStyle = "#000";
-        ctx.fill();
-        ctx.shadowColor = "transparent";
-        ctx.clip();
-        ctx.drawImage(photoImg, psx, psy, side, side, pX, pY, pSize, pSize);
-        ctx.restore();
-        ctx.save();
-        ctx.beginPath();
-        if (po.shape === "circle") {
-          ctx.arc(pX + pSize / 2, pY + pSize / 2, pSize / 2, 0, Math.PI * 2);
-        } else if (typeof ctx.roundRect === "function") {
-          ctx.roundRect(pX, pY, pSize, pSize, po.shape === "rounded" ? pSize * 0.22 : 0);
-        } else {
-          ctx.rect(pX, pY, pSize, pSize);
-        }
-        ctx.strokeStyle = "rgba(255,255,255,0.9)";
-        ctx.lineWidth = 3 * baseScale;
-        ctx.stroke();
-        ctx.restore();
-      }
 
       // 9. Draw Window Mockup Shell Header & Device Framing Overlays
       if (looks.windowFrame && looks.windowFrame !== "none") {
@@ -2120,6 +2089,49 @@ export async function renderProjectVideo(options: RenderOptions): Promise<Render
           }
         }
 
+        ctx.restore();
+      }
+
+      ctx.restore(); // Restore Whole Canvas Camera Transform
+
+      // 10. Draw user's template photo placeholder image (pinned to canvas)
+      if (photoImg && looks.photoOverlay) {
+        const po = looks.photoOverlay;
+        const pSize = po.size * width;
+        const pX = po.x * width - pSize / 2;
+        const pY = po.y * height - pSize / 2;
+        const side = Math.min(photoImg.naturalWidth, photoImg.naturalHeight);
+        const psx = (photoImg.naturalWidth - side) / 2;
+        const psy = (photoImg.naturalHeight - side) / 2;
+        ctx.save();
+        ctx.beginPath();
+        if (po.shape === "circle") {
+          ctx.arc(pX + pSize / 2, pY + pSize / 2, pSize / 2, 0, Math.PI * 2);
+        } else if (typeof ctx.roundRect === "function") {
+          ctx.roundRect(pX, pY, pSize, pSize, po.shape === "rounded" ? pSize * 0.22 : 0);
+        } else {
+          ctx.rect(pX, pY, pSize, pSize);
+        }
+        ctx.shadowColor = "rgba(0,0,0,0.45)";
+        ctx.shadowBlur = 18 * baseScale;
+        ctx.fillStyle = "#000";
+        ctx.fill();
+        ctx.shadowColor = "transparent";
+        ctx.clip();
+        ctx.drawImage(photoImg, psx, psy, side, side, pX, pY, pSize, pSize);
+        ctx.restore();
+        ctx.save();
+        ctx.beginPath();
+        if (po.shape === "circle") {
+          ctx.arc(pX + pSize / 2, pY + pSize / 2, pSize / 2, 0, Math.PI * 2);
+        } else if (typeof ctx.roundRect === "function") {
+          ctx.roundRect(pX, pY, pSize, pSize, po.shape === "rounded" ? pSize * 0.22 : 0);
+        } else {
+          ctx.rect(pX, pY, pSize, pSize);
+        }
+        ctx.strokeStyle = "rgba(255,255,255,0.9)";
+        ctx.lineWidth = 3 * baseScale;
+        ctx.stroke();
         ctx.restore();
       }
 

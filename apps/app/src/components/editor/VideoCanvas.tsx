@@ -26,6 +26,7 @@ import {
   screenToVideoCoordinates,
   smoothCursorTrajectory,
   mapVideoPointToViewport,
+  viewportToVideoPoint,
   ensureCursorTrajectory,
   processDrawnTracePath,
   pointsToSmoothSvgPath,
@@ -505,18 +506,19 @@ export function VideoCanvas({ project, currentTimeMs: propTimeMs }: VideoCanvasP
     const rect = container.getBoundingClientRect();
     const clickX = e.clientX - rect.left;
     const clickY = e.clientY - rect.top;
-    setCursorScreenPos({ x: clickX, y: clickY });
+    const u = Math.min(1, Math.max(0, clickX / (rect.width || 1)));
+    const v = Math.min(1, Math.max(0, clickY / (rect.height || 1)));
+    setCursorScreenPos({ x: u * 100, y: v * 100 });
 
     if (!isDrawingStroke || strokePointsRef.current.length === 0) return;
     e.preventDefault();
     e.stopPropagation();
 
-    const videoCoords = screenToVideoCoordinates(
-      clickX,
-      clickY,
-      rect.width,
-      rect.height,
-      camera,
+    const videoCoords = viewportToVideoPoint(
+      u,
+      v,
+      videoAspectRef.current,
+      viewAspectRef.current,
     );
 
     const lastPt = strokePointsRef.current[strokePointsRef.current.length - 1]!;
@@ -550,7 +552,10 @@ export function VideoCanvas({ project, currentTimeMs: propTimeMs }: VideoCanvasP
     if (pts.length === 1) {
       // Single tap / click: add individual waypoint
       addTraceWaypoint(pts[0]!);
-      setClickShiftMarker({ x: e.clientX, y: e.clientY, id: Date.now() });
+      const rect = viewportRef.current?.getBoundingClientRect();
+      const u = rect ? Math.min(1, Math.max(0, (e.clientX - rect.left) / (rect.width || 1))) : 0.5;
+      const v = rect ? Math.min(1, Math.max(0, (e.clientY - rect.top) / (rect.height || 1))) : 0.5;
+      setClickShiftMarker({ x: u * 100, y: v * 100, id: Date.now() });
       setTimeout(() => setClickShiftMarker(null), 600);
     } else {
       // Freehand stroke drawn! Smooth and resample to clean camera path
@@ -580,17 +585,18 @@ export function VideoCanvas({ project, currentTimeMs: propTimeMs }: VideoCanvasP
     const rect = container.getBoundingClientRect();
     const clickX = e.clientX - rect.left;
     const clickY = e.clientY - rect.top;
+    const u = Math.min(1, Math.max(0, clickX / (rect.width || 1)));
+    const v = Math.min(1, Math.max(0, clickY / (rect.height || 1)));
 
-    const videoCoords = screenToVideoCoordinates(
-      clickX,
-      clickY,
-      rect.width,
-      rect.height,
-      camera,
+    const videoCoords = viewportToVideoPoint(
+      u,
+      v,
+      videoAspectRef.current,
+      viewAspectRef.current,
     );
 
     useEditor.getState().shiftCameraTarget(videoCoords.x, videoCoords.y);
-    setClickShiftMarker({ x: clickX, y: clickY, id: Date.now() });
+    setClickShiftMarker({ x: u * 100, y: v * 100, id: Date.now() });
     setTimeout(() => setClickShiftMarker(null), 600);
   };
 
@@ -630,6 +636,7 @@ export function VideoCanvas({ project, currentTimeMs: propTimeMs }: VideoCanvasP
   ]);
   const computeCameraRef = useRef(computeCamera);
   computeCameraRef.current = computeCamera;
+  const cameraStageRef = useRef<HTMLDivElement>(null);
   const zoomLayerRef = useRef<HTMLDivElement>(null);
   const cursorOverlayRef = useRef<HTMLDivElement>(null);
   const glareOverlayRef = useRef<HTMLDivElement>(null);
@@ -678,16 +685,16 @@ export function VideoCanvas({ project, currentTimeMs: propTimeMs }: VideoCanvasP
     video.volume = Math.max(0, Math.min(1, clipVolume));
   }, [isClipMuted, clipVolume]);
 
-  // When playback starts, immediately seed the zoom layer transform via DOM so
+  // When playback starts, immediately seed the whole canvas camera stage transform via DOM so
   // there is no single-frame blank between React removing the inline style and
   // the first rAF frame writing the correct value.
   useEffect(() => {
     if (!isPlaying) return;
-    const layer = zoomLayerRef.current;
-    if (!layer) return;
+    const stage = cameraStageRef.current;
+    if (!stage) return;
     const cam = computeCameraRef.current(currentTimeMs);
     const mapped = mapVideoPointToViewport(cam.x, cam.y, videoAspectRef.current, viewAspectRef.current);
-    layer.style.transform = `scale(${cam.scale}) translate3d(${(0.5 - mapped.x) * 100}%, ${(0.5 - mapped.y) * 100}%, 0)`;
+    stage.style.transform = `scale(${cam.scale}) translate3d(${(0.5 - mapped.x) * 100}%, ${(0.5 - mapped.y) * 100}%, 0)`;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isPlaying]);
 
@@ -733,16 +740,16 @@ export function VideoCanvas({ project, currentTimeMs: propTimeMs }: VideoCanvasP
         return;
       }
 
-      // Smooth 60fps camera without React: write transform straight to the layer
-      const layer = zoomLayerRef.current;
-      if (layer) {
+      // Smooth 60fps camera without React: write transform straight to the whole canvas camera stage
+      const stage = cameraStageRef.current;
+      if (stage) {
         const cam = computeCameraRef.current(frameMs);
         // Apply viewport aspect-ratio correction to prevent camera shaking when
         // video aspect ≠ viewport aspect (the React render path uses camView, so rAF must too)
         const vAspect = videoAspectRef.current;
         const vpAspect = viewAspectRef.current;
         const mapped = mapVideoPointToViewport(cam.x, cam.y, vAspect, vpAspect);
-        layer.style.transform = `scale(${cam.scale}) translate3d(${(0.5 - mapped.x) * 100}%, ${(0.5 - mapped.y) * 100}%, 0)`;
+        stage.style.transform = `scale(${cam.scale}) translate3d(${(0.5 - mapped.x) * 100}%, ${(0.5 - mapped.y) * 100}%, 0)`;
 
         // Drive cursor overlay at 60fps via direct DOM — avoids React 12Hz throttle lag
         const cursorEl = cursorOverlayRef.current;
@@ -1084,16 +1091,28 @@ export function VideoCanvas({ project, currentTimeMs: propTimeMs }: VideoCanvasP
         </div>
       )}
 
-      {/* 3D Tilt Wrapper: maintains 3D perspective physics for entire chassis & screen */}
+      {/* Whole Canvas Camera Stage: zooms and shifts the entire framed video screen across the canvas */}
       <div
-        ref={tiltWrapperRef}
-        className="relative flex items-center justify-center pointer-events-none transition-transform duration-300 shrink-0"
+        ref={cameraStageRef}
+        className="relative flex items-center justify-center will-change-transform shrink-0"
         style={{
           ...frameDimensions,
-          transform: `perspective(${tilt3D.perspective}px) rotateX(${tilt3D.rotateX}deg) rotateY(${tilt3D.rotateY}deg) rotateZ(${tilt3D.rotateZ}deg)`,
-          transformStyle: "preserve-3d",
+          transform: isPlaying
+            ? undefined
+            : `scale(${camera.scale}) translate3d(${(0.5 - camView.x) * 100}%, ${(0.5 - camView.y) * 100}%, 0)`,
+          transformOrigin: "center center",
+          transition: isPlaying ? "none" : "transform 0.1s ease-out",
         }}
       >
+        {/* 3D Tilt Wrapper: maintains 3D perspective physics for entire chassis & screen */}
+        <div
+          ref={tiltWrapperRef}
+          className="relative flex items-center justify-center size-full pointer-events-none transition-transform duration-300"
+          style={{
+            transform: `perspective(${tilt3D.perspective}px) rotateX(${tilt3D.rotateX}deg) rotateY(${tilt3D.rotateY}deg) rotateZ(${tilt3D.rotateZ}deg)`,
+            transformStyle: "preserve-3d",
+          }}
+        >
         {/* Physical Smartphone / Tablet Chassis Body with Real Hardware Edges */}
         <div
           className={`relative flex flex-col items-center justify-center size-full pointer-events-auto transition-all duration-300 select-none ${
@@ -1441,7 +1460,7 @@ export function VideoCanvas({ project, currentTimeMs: propTimeMs }: VideoCanvasP
           </>
         )}
 
-        {/* Dynamic Zooming Video Container: zero latency with hardware accelerated 3D transform */}
+        {/* Screen Video Container: 1:1 uncropped inside device frame */}
         <div
           ref={zoomLayerRef}
           className={`relative ${
@@ -1452,16 +1471,7 @@ export function VideoCanvas({ project, currentTimeMs: propTimeMs }: VideoCanvasP
             looks.windowFrame !== "ipad"
               ? "flex-1 min-h-0 w-full"
               : "size-full"
-          } origin-center will-change-transform overflow-hidden`}
-          style={{
-            // When playing, rAF is the SOLE owner of this transform (60fps via direct DOM write).
-            // Setting undefined here prevents React re-renders (throttled to ~12fps via setCurrentTime)
-            // from overwriting the rAF value with a stale frame → eliminates camera shake/flicker.
-            transform: isPlaying
-              ? undefined
-              : `scale(${camera.scale}) translate3d(${(0.5 - camView.x) * 100}%, ${(0.5 - camView.y) * 100}%, 0)`,
-            transition: isPlaying ? "none" : "transform 0.1s ease-out",
-          }}
+          } overflow-hidden`}
         >
           {resolvedMediaSrc ? (
             <video
@@ -1658,8 +1668,8 @@ export function VideoCanvas({ project, currentTimeMs: propTimeMs }: VideoCanvasP
             key={clickShiftMarker.id}
             className="pointer-events-none absolute -translate-x-1/2 -translate-y-1/2 z-40 transition-opacity duration-300"
             style={{
-              left: `${clickShiftMarker.x}px`,
-              top: `${clickShiftMarker.y}px`,
+              left: `${clickShiftMarker.x}%`,
+              top: `${clickShiftMarker.y}%`,
             }}
           >
             <div className="size-6 rounded-full border border-white/80 bg-white/20 shadow-md" />
@@ -1801,7 +1811,7 @@ export function VideoCanvas({ project, currentTimeMs: propTimeMs }: VideoCanvasP
             {isDrawingStroke && cursorScreenPos && (
               <div
                 className="absolute pointer-events-none -translate-x-1/2 -translate-y-9 z-50 flex items-center gap-1.5 rounded-full bg-black/90 border border-white/40 px-2.5 py-1 text-[10px] font-semibold text-white shadow-xl whitespace-nowrap"
-                style={{ left: cursorScreenPos.x, top: cursorScreenPos.y }}
+                style={{ left: `${cursorScreenPos.x}%`, top: `${cursorScreenPos.y}%` }}
               >
                 <Pencil className="size-3 text-white" />
                 <span>Drawing Camera Path...</span>
@@ -1991,6 +2001,7 @@ export function VideoCanvas({ project, currentTimeMs: propTimeMs }: VideoCanvasP
         })}
           </div>
         </div>
+      </div>
       </div>
     </div>
   );

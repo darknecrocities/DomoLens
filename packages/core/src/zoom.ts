@@ -1968,6 +1968,28 @@ export function mapVideoPointToViewport(
 }
 
 /**
+ * Inverts viewport-relative normalized coordinates [0, 1] back to video-relative [0, 1].
+ * Exact inverse of mapVideoPointToViewport.
+ */
+export function viewportToVideoPoint(
+  x: number,
+  y: number,
+  videoAspect: number | null | undefined,
+  viewAspect: number | null | undefined,
+): { x: number; y: number } {
+  if (!videoAspect || !viewAspect || !isFinite(videoAspect) || !isFinite(viewAspect)) {
+    return { x, y };
+  }
+  if (videoAspect > viewAspect) {
+    return { x: Math.min(1, Math.max(0, 0.5 + (x - 0.5) * (videoAspect / viewAspect))), y };
+  }
+  if (videoAspect < viewAspect) {
+    return { x, y: Math.min(1, Math.max(0, 0.5 + (y - 0.5) * (viewAspect / videoAspect))) };
+  }
+  return { x, y };
+}
+
+/**
  * Returns the recorded cursor trajectory, or, when none was captured (imported
  * clips), a fallback path that glides the cursor between the recorded clicks so
  * the overlay cursor still moves instead of sitting frozen at the center.
