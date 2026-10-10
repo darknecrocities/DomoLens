@@ -94,6 +94,16 @@ static CONSECUTIVE_CAPTURE_ERRORS: std::sync::atomic::AtomicU32 = std::sync::ato
 static STREAM_SERVER_ACTIVE: AtomicBool = AtomicBool::new(false);
 static ACTIVE_STREAM_URL: Mutex<Option<String>> = Mutex::new(None);
 static STREAM_CHILD_PIDS: Mutex<Vec<u32>> = Mutex::new(Vec::new());
+static TOUCH_MONITOR_ACTIVE: AtomicBool = AtomicBool::new(false);
+static TOUCH_CHILD_PID: Mutex<Option<u32>> = Mutex::new(None);
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct MobileTouchPayload {
+    pub x: f64,
+    pub y: f64,
+    pub event_type: String,
+    pub timestamp_ms: i64,
+}
 
 fn get_data_dir() -> PathBuf {
     if let Some(dirs) = directories::ProjectDirs::from("com", "domolens", "desktop") {
@@ -1142,8 +1152,185 @@ fn find_ffmpeg_binary() -> Option<PathBuf> {
 }
 
 #[tauri::command]
+fn stop_device_touch_monitor() -> Result<(), String> {
+    TOUCH_MONITOR_ACTIVE.store(false, Ordering::SeqCst);
+    if let Ok(mut pid_guard) = TOUCH_CHILD_PID.lock() {
+        if let Some(pid) = pid_guard.take() {
+            #[cfg(unix)]
+            unsafe {
+                libc::kill(pid as i32, libc::SIGKILL);
+            }
+        }
+    }
+    Ok(())
+}
+
+#[tauri::command]
+fn start_device_touch_monitor(
+    app_handle: tauri::AppHandle,
+    serial: String,
+    width: Option<u32>,
+    height: Option<u32>,
+) -> Result<(), String> {
+    let _ = stop_device_touch_monitor();
+
+    let adb_path = find_adb_binary().ok_or_else(|| "ADB binary not found".to_string())?;
+
+    TOUCH_MONITOR_ACTIVE.store(true, Ordering::SeqCst);
+
+    let dev_w = width.unwrap_or(1080) as f64;
+    let dev_h = height.unwrap_or(2400) as f64;
+
+    std::thread::spawn(move || {
+        use std::io::BufRead;
+
+        let mut child = match std::process::Command::new(&adb_path)
+            .args(["-s", &serial, "exec-out", "getevent", "-l"])
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::null())
+            .spawn()
+        {
+            Ok(c) => c,
+            Err(e) => {
+                eprintln!("[mobile_touch] Failed to spawn adb getevent: {}", e);
+                TOUCH_MONITOR_ACTIVE.store(false, Ordering::SeqCst);
+                return;
+            }
+        };
+
+        let child_pid = child.id();
+        if let Ok(mut guard) = TOUCH_CHILD_PID.lock() {
+            *guard = Some(child_pid);
+        }
+
+        let stdout = match child.stdout.take() {
+            Some(s) => s,
+            None => return,
+        };
+
+        let reader = std::io::BufReader::new(stdout);
+        let mut cur_x: Option<f64> = None;
+        let mut cur_y: Option<f64> = None;
+        let mut is_touching = false;
+        let mut was_touching = false;
+        let mut pending_down = false;
+        let mut pending_up = false;
+        let mut max_w = (dev_w - 1.0).max(1079.0);
+        let mut max_h = (dev_h - 1.0).max(2339.0);
+        let mut last_emit_ms = 0i64;
+
+        for line_res in reader.lines() {
+            if !TOUCH_MONITOR_ACTIVE.load(Ordering::SeqCst) {
+                break;
+            }
+
+            let line = match line_res {
+                Ok(l) => l,
+                Err(_) => break,
+            };
+
+            // Parse ABS_MT_POSITION_X
+            if line.contains("ABS_MT_POSITION_X") {
+                if let Some(token) = line.split_whitespace().last() {
+                    if let Ok(val) = u32::from_str_radix(token.trim(), 16) {
+                        if (val as f64) > max_w {
+                            max_w = (val as f64) + 1.0;
+                        }
+                        cur_x = Some(((val as f64) / max_w).clamp(0.0, 1.0));
+                    }
+                }
+            } else if line.contains("ABS_MT_POSITION_Y") {
+                if let Some(token) = line.split_whitespace().last() {
+                    if let Ok(val) = u32::from_str_radix(token.trim(), 16) {
+                        if (val as f64) > max_h {
+                            max_h = (val as f64) + 1.0;
+                        }
+                        cur_y = Some(((val as f64) / max_h).clamp(0.0, 1.0));
+                    }
+                }
+            } else if line.contains("ABS_MT_TRACKING_ID") {
+                if line.contains("ffffffff") {
+                    is_touching = false;
+                    pending_up = true;
+                } else {
+                    is_touching = true;
+                    pending_down = true;
+                }
+            } else if line.contains("BTN_TOUCH") {
+                if line.contains("DOWN") {
+                    is_touching = true;
+                    pending_down = true;
+                } else if line.contains("UP") {
+                    is_touching = false;
+                    pending_up = true;
+                }
+            } else if line.contains("SYN_REPORT") {
+                let now_ms = std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .map(|d| d.as_millis() as i64)
+                    .unwrap_or(0);
+
+                let x = cur_x.unwrap_or(0.5);
+                let y = cur_y.unwrap_or(0.5);
+
+                if pending_down || (is_touching && !was_touching) {
+                    was_touching = true;
+                    pending_down = false;
+                    pending_up = false;
+                    last_emit_ms = now_ms;
+                    let _ = app_handle.emit(
+                        "mobile-touch",
+                        MobileTouchPayload {
+                            x,
+                            y,
+                            event_type: "down".to_string(),
+                            timestamp_ms: now_ms,
+                        },
+                    );
+                } else if pending_up || (!is_touching && was_touching) {
+                    was_touching = false;
+                    pending_up = false;
+                    pending_down = false;
+                    let _ = app_handle.emit(
+                        "mobile-touch",
+                        MobileTouchPayload {
+                            x,
+                            y,
+                            event_type: "up".to_string(),
+                            timestamp_ms: now_ms,
+                        },
+                    );
+                } else if is_touching {
+                    if now_ms - last_emit_ms >= 20 {
+                        last_emit_ms = now_ms;
+                        let _ = app_handle.emit(
+                            "mobile-touch",
+                            MobileTouchPayload {
+                                x,
+                                y,
+                                event_type: "move".to_string(),
+                                timestamp_ms: now_ms,
+                            },
+                        );
+                    }
+                }
+            }
+        }
+
+        #[cfg(unix)]
+        unsafe {
+            libc::kill(child_pid as i32, libc::SIGKILL);
+        }
+        let _ = child.wait();
+    });
+
+    Ok(())
+}
+
+#[tauri::command]
 fn stop_mobile_stream() -> Result<(), String> {
     STREAM_SERVER_ACTIVE.store(false, Ordering::SeqCst);
+    let _ = stop_device_touch_monitor();
     if let Ok(mut url_guard) = ACTIVE_STREAM_URL.lock() {
         *url_guard = None;
     }
@@ -1159,8 +1346,9 @@ fn stop_mobile_stream() -> Result<(), String> {
 }
 
 #[tauri::command]
-fn start_mobile_stream(serial: String, width: Option<u32>, height: Option<u32>) -> Result<String, String> {
+fn start_mobile_stream(app_handle: tauri::AppHandle, serial: String, width: Option<u32>, height: Option<u32>) -> Result<String, String> {
     let _ = stop_mobile_stream();
+    let _ = start_device_touch_monitor(app_handle, serial.clone(), width, height);
 
     let adb_path = find_adb_binary().ok_or_else(|| "ADB binary not found".to_string())?;
     let ffmpeg_path = find_ffmpeg_binary().ok_or_else(|| "FFmpeg not found. Please install FFmpeg (brew install ffmpeg)".to_string())?;
@@ -1878,7 +2066,9 @@ pub fn run() {
             keep_device_alive,
             start_mobile_stream,
             stop_mobile_stream,
-            get_mobile_stream_url
+            get_mobile_stream_url,
+            start_device_touch_monitor,
+            stop_device_touch_monitor
         ])
         .on_window_event(|window, event| {
             if let tauri::WindowEvent::CloseRequested { api, .. } = event {

@@ -146,4 +146,90 @@ describe("Mobile Recording Engine & Transport", () => {
 
     globalThis.sessionStorage = originalStorage;
   });
+
+  it("ensures mobile recordings in editor have clean phone frame (windowFrame none, radius 28, aspect 9:16)", async () => {
+    const { useEditor } = await import("../store/editor");
+    const { useProjects } = await import("../store/projects");
+    const mobileSummary: import("@domolens/core").ProjectSummary = {
+      id: "proj-mobile-test",
+      name: "Samsung Galaxy A55 Recording",
+      source: "recording",
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+      durationMs: 12000,
+      width: 1080,
+      height: 2340,
+      thumbnail: null,
+      media: null,
+    };
+
+    useProjects.setState({ projects: [mobileSummary] });
+    await useEditor.getState().loadProject("proj-mobile-test");
+    const proj = useEditor.getState().project;
+    expect(proj).not.toBeNull();
+    expect(proj?.looks.windowFrame).toBe("none");
+    expect(proj?.looks.borderRadius).toBe(28);
+    expect(proj?.looks.padding).toBe(24);
+    expect(proj?.looks.aspectRatio).toBe("9:16");
+  });
+
+  it("self-heals legacy mobile recordings that had terminal window frame or empty zoom blocks", async () => {
+    const { useEditor } = await import("../store/editor");
+    const { platform } = await import("../platform");
+    const legacyMobileProject: import("@domolens/core").ProjectData = {
+      summary: {
+        id: "legacy-mobile-proj",
+        name: "Legacy Samsung A55 Recording",
+        source: "recording",
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+        durationMs: 14000,
+        width: 1080,
+        height: 2340,
+        thumbnail: null,
+        media: null,
+      },
+      clicks: [],
+      interactions: [],
+      cursorTrajectory: [],
+      zoomBlocks: [],
+      keyframes: [],
+      textOverlays: [],
+      audioTracks: [],
+      clips: [],
+      looks: {
+        ...useEditor.getState().project?.looks!,
+        windowFrame: "terminal" as any,
+        borderRadius: 16,
+        padding: 32,
+        aspectRatio: "16:9",
+      },
+      audioSettings: {
+        clickSoundEnabled: true,
+        clickSoundVolume: 1,
+        clickSoundPreset: "click",
+        typingSoundEnabled: true,
+        typingSoundVolume: 1,
+        typingSoundPreset: "creamy",
+        musicDuckingEnabled: true,
+        duckingAmount: 0.3,
+      },
+    };
+
+    await platform.saveFullProject?.(legacyMobileProject as any);
+    await useEditor.getState().loadProject("legacy-mobile-proj");
+
+    const healed = useEditor.getState().project;
+    expect(healed).not.toBeNull();
+    // macOS terminal frame replaced with clean mobile phone frame
+    expect(healed?.looks.windowFrame).toBe("none");
+    expect(healed?.looks.borderRadius).toBe(28);
+    expect(healed?.looks.padding).toBe(24);
+    expect(healed?.looks.aspectRatio).toBe("9:16");
+
+    // Zero zooms self-healed into active zoom blocks & keyframes
+    expect(healed?.zoomBlocks.length).toBeGreaterThanOrEqual(1);
+    expect(healed?.keyframes?.length ?? 0).toBeGreaterThanOrEqual(2);
+  });
 });
+

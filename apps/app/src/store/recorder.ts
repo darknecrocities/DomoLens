@@ -1116,6 +1116,41 @@ export const useRecorder = create<RecorderStore>((set, get) => ({
       }
     });
 
+    // Hook native ADB mobile touchscreen telemetry and bridge events
+    if (get().deviceTarget === "mobile" && get().mobileDeviceInfo) {
+      void platform.startDeviceTouchMonitor?.(
+        get().mobileDeviceInfo!.id,
+        get().mobileDeviceInfo!.width,
+        get().mobileDeviceInfo!.height,
+      );
+    }
+
+    const offPlatformMobileTouch = platform.onMobileTouch?.((payload) => {
+      if (get().state !== "recording") return;
+      lastX = payload.x;
+      lastY = payload.y;
+      if (payload.event_type === "down" || payload.event_type === "tap") {
+        get().recordClick(payload.x, payload.y, "left");
+        get().recordCursorPoint(payload.x, payload.y);
+        set({ lastMobileTap: { x: payload.x, y: payload.y, timestamp: Date.now() } });
+      } else if (payload.event_type === "move") {
+        get().recordCursorPoint(payload.x, payload.y);
+      }
+    });
+
+    const offBridgeTouch = mobileStreamBridge.onTouchEvent((evt) => {
+      if (get().state !== "recording") return;
+      lastX = evt.x;
+      lastY = evt.y;
+      if (evt.type === "tap") {
+        get().recordClick(evt.x, evt.y, "left");
+        get().recordCursorPoint(evt.x, evt.y);
+        set({ lastMobileTap: { x: evt.x, y: evt.y, timestamp: Date.now() } });
+      } else if (evt.type === "move") {
+        get().recordCursorPoint(evt.x, evt.y);
+      }
+    });
+
     // Attach live optical stream tracker to capture smooth cursor movement across the shared display
     let stopMotionTracker: (() => void) | null = null;
     if (activeStream) {
@@ -1306,6 +1341,11 @@ export const useRecorder = create<RecorderStore>((set, get) => ({
       offMouseUp?.();
       offMove?.();
       offTyping?.();
+      offPlatformMobileTouch?.();
+      offBridgeTouch?.();
+      if (get().deviceTarget === "mobile") {
+        void platform.stopDeviceTouchMonitor?.();
+      }
       if (stopMotionTracker) {
         stopMotionTracker();
         stopMotionTracker = null;
@@ -1529,6 +1569,9 @@ export const useRecorder = create<RecorderStore>((set, get) => ({
       finalClicks.length === 0 &&
       finalTrajectory.length < 8;
 
+    const mode = get().recordingMode;
+    const shouldPlotZoom = mode !== "regular";
+
     if (shouldRunOpticalScan) {
       try {
         const scanVideo = document.createElement("video");
@@ -1546,6 +1589,10 @@ export const useRecorder = create<RecorderStore>((set, get) => ({
             maxDurationMs: duration,
           });
 
+          if (scanned.clicks.length > 0 && finalClicks.length === 0) {
+            finalClicks = scanned.clicks;
+            finalInteractions = scanned.interactions;
+          }
           if (scanned.cursorTrajectory.length > 0 && finalTrajectory.length < 8) {
             finalTrajectory = scanned.cursorTrajectory;
           }
@@ -1553,6 +1600,27 @@ export const useRecorder = create<RecorderStore>((set, get) => ({
       } catch (scanErr) {
         console.warn("Post-recording optical scan error:", scanErr);
       }
+    }
+
+    // For mobile recordings, if no physical taps were captured but auto-zoom was requested,
+    // synthesize responsive viewport focus points so phone recordings naturally frame the content and apply studio effects!
+    const isMobileProject = isMobile || (recordedWidth && recordedHeight && recordedWidth < recordedHeight);
+    if (isMobileProject && shouldPlotZoom && finalClicks.length === 0 && finalInteractions.length === 0 && duration >= 2500) {
+      const focus1Time = Math.round(duration * 0.28);
+      const focus2Time = Math.round(duration * 0.68);
+      const focusPoints: ClickEvent[] = [
+        { id: `mobile-focus-1-${now}`, timestampMs: focus1Time, x: 0.5, y: 0.42, button: "left" },
+        { id: `mobile-focus-2-${now}`, timestampMs: focus2Time, x: 0.5, y: 0.55, button: "left" },
+      ];
+      finalClicks = focusPoints;
+      finalInteractions = focusPoints.map((p) => ({
+        id: p.id,
+        type: "click" as const,
+        timestampMs: p.timestampMs,
+        x: p.x,
+        y: p.y,
+        button: p.button,
+      }));
     }
 
     // Strict Clean Up: Eliminate duplicate clicks or micro-flutter closer than 350ms
@@ -1597,8 +1665,6 @@ export const useRecorder = create<RecorderStore>((set, get) => ({
     // If no user clicks or interactions occurred during recording (excluding stop/finish action),
     // strictly DO NOT apply zoom in! The video remains in full screen (1.0x) only!
     // Also skip zoom plotting for "regular" mode — no auto-zoom at all.
-    const mode = get().recordingMode;
-    const shouldPlotZoom = mode !== "regular";
     const hasUserInteractions = (finalClicks.length > 0 || finalInteractions.length > 0) && shouldPlotZoom;
     const { keyframes, zoomBlocks } =
       hasUserInteractions

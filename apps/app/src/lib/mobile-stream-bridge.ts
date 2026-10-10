@@ -74,6 +74,42 @@ class MobileStreamBridgeImpl {
   private liveStreamUrl: string | null = null;
   private streamUrlListeners = new Set<(url: string | null) => void>();
 
+  constructor() {
+    this.initTauriTouchListener();
+  }
+
+  private initTauriTouchListener(): void {
+    if (typeof window !== "undefined" && "__TAURI_INTERNALS__" in window) {
+      import("@tauri-apps/api/event").then(({ listen }) => {
+        listen<{ x: number; y: number; event_type: string; timestamp_ms: number }>("mobile-touch", (ev) => {
+          const { x, y, event_type, timestamp_ms } = ev.payload;
+          if (event_type === "down") {
+            this.emitTouchEvent({
+              type: "tap",
+              x,
+              y,
+              timestampMs: timestamp_ms || Date.now(),
+            });
+          } else if (event_type === "move") {
+            this.emitTouchEvent({
+              type: "move",
+              x,
+              y,
+              timestampMs: timestamp_ms || Date.now(),
+            });
+          } else if (event_type === "up") {
+            this.emitTouchEvent({
+              type: "release",
+              x,
+              y,
+              timestampMs: timestamp_ms || Date.now(),
+            });
+          }
+        }).catch(() => {});
+      }).catch(() => {});
+    }
+  }
+
   public async scanAdbDevices(): Promise<AdbDeviceItem[]> {
     if (typeof window !== "undefined" && "__TAURI_INTERNALS__" in window) {
       try {
@@ -170,6 +206,16 @@ class MobileStreamBridgeImpl {
     this.activeDevice = info;
     this.setupHardwareCaptureStream(info);
     void this.initHardwareStream(device);
+
+    if (typeof window !== "undefined" && "__TAURI_INTERNALS__" in window) {
+      import("@tauri-apps/api/core").then(({ invoke }) => {
+        invoke("start_device_touch_monitor", {
+          serial: device.serial,
+          width,
+          height,
+        }).catch(() => {});
+      }).catch(() => {});
+    }
 
     this.deviceListeners.forEach((cb) => cb(info));
     if (this.activeStream) {
@@ -781,6 +827,7 @@ class MobileStreamBridgeImpl {
     if (typeof window !== "undefined" && "__TAURI_INTERNALS__" in window) {
       import("@tauri-apps/api/core").then(({ invoke }) => {
         invoke("stop_mobile_stream").catch(() => {});
+        invoke("stop_device_touch_monitor").catch(() => {});
       }).catch(() => {});
     }
     this.liveStreamUrl = null;

@@ -71,6 +71,12 @@ export interface Platform {
   onGlobalMouseMove?(callback: (payload: { x: number; y: number; norm_x: number; norm_y: number }) => void): Off;
   /** Subscribes to global keystrokes outside the app anywhere on screen. */
   onGlobalTyping?(callback: (payload: { x: number; y: number; norm_x: number; norm_y: number }) => void): Off;
+  /** Subscribes to mobile touchscreen taps, moves, and releases. */
+  onMobileTouch?(callback: (payload: { x: number; y: number; event_type: string; timestamp_ms: number }) => void): Off;
+  /** Starts ADB getevent touch monitoring on physical Android device. */
+  startDeviceTouchMonitor?(serial: string, width?: number, height?: number): Promise<void>;
+  /** Stops ADB getevent touch monitoring. */
+  stopDeviceTouchMonitor?(): Promise<void>;
   /** Saves recorded video data to permanent storage on disk. */
   saveRecordingFile?(id: string, data: number[], ext: string): Promise<string>;
   /** Shows OS-level global floating recording HUD window and minimizes studio. */

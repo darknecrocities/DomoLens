@@ -526,8 +526,20 @@ export const useEditor = create<EditorState>((set, get) => ({
       }
 
       if (!parsed.looks) parsed.looks = { ...DEFAULT_LOOKS };
-      // Self-heal: If recording had windowFrame stripped to "none", restore MacBook terminal frame
-      if (parsed.summary.source === "recording" && (parsed.looks.windowFrame === "none" || !parsed.looks.windowFrame)) {
+      const isMobile =
+        (parsed.summary.width && parsed.summary.height && parsed.summary.width < parsed.summary.height) ||
+        parsed.looks.aspectRatio === "9:16";
+
+      if (isMobile) {
+        // Mobile recording: strictly clean phone frame (no desktop terminal bar), curved corners & portrait aspect ratio
+        if (parsed.looks.windowFrame === "terminal" || !parsed.looks.windowFrame) {
+          parsed.looks.windowFrame = "none";
+          parsed.looks.borderRadius = 28;
+          parsed.looks.padding = 24;
+          parsed.looks.aspectRatio = "9:16";
+        }
+      } else if (parsed.summary.source === "recording" && (parsed.looks.windowFrame === "none" || !parsed.looks.windowFrame)) {
+        // Desktop recording: restore MacBook terminal frame
         parsed.looks.windowFrame = "terminal";
         if (parsed.looks.padding === 0) parsed.looks.padding = 32;
         if (parsed.looks.borderRadius === 0) parsed.looks.borderRadius = 16;
@@ -563,6 +575,19 @@ export const useEditor = create<EditorState>((set, get) => ({
           }));
           const plotted = plotInteractionsToKeyframesAndZoomBlocks(
             pseudoInteractions,
+            duration,
+            { holdDurationMs: 1400, leadInMs: 450, scale: 1.85 },
+          );
+          parsed.zoomBlocks = plotted.zoomBlocks;
+          parsed.keyframes = plotted.keyframes;
+        } else if (isMobile && duration >= 2500) {
+          // Self-heal for past mobile recording that had 0 clicks captured
+          const focusPoints: InteractionEvent[] = [
+            { id: `heal-mob-1`, type: "click", timestampMs: Math.round(duration * 0.28), x: 0.5, y: 0.42, button: "left" },
+            { id: `heal-mob-2`, type: "click", timestampMs: Math.round(duration * 0.68), x: 0.5, y: 0.55, button: "left" },
+          ];
+          const plotted = plotInteractionsToKeyframesAndZoomBlocks(
+            focusPoints,
             duration,
             { holdDurationMs: 1400, leadInMs: 450, scale: 1.85 },
           );
@@ -707,11 +732,24 @@ export const useEditor = create<EditorState>((set, get) => ({
         summary.source === "recording"
           ? {
               ...DEFAULT_LOOKS,
-              windowFrame: "terminal" as const,
+              windowFrame:
+                summary.width && summary.height && summary.width < summary.height
+                  ? ("none" as const)
+                  : ("terminal" as const),
               fit: "contain" as const,
-              padding: 32,
-              borderRadius: 16,
+              padding:
+                summary.width && summary.height && summary.width < summary.height
+                  ? 24
+                  : 32,
+              borderRadius:
+                summary.width && summary.height && summary.width < summary.height
+                  ? 28
+                  : 16,
               shadow: "lift" as const,
+              aspectRatio:
+                summary.width && summary.height && summary.width < summary.height
+                  ? ("9:16" as const)
+                  : ("16:9" as const),
             }
           : DEFAULT_LOOKS,
       audioSettings: { ...DEFAULT_AUDIO_SETTINGS },
