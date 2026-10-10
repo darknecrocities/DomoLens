@@ -362,7 +362,6 @@ export function VideoCanvas({ project, currentTimeMs: propTimeMs }: VideoCanvasP
   const traceWaypoints = useEditor((s) => s.traceWaypoints);
   const addTraceWaypoint = useEditor((s) => s.addTraceWaypoint);
   const addTraceStroke = useEditor((s) => s.addTraceStroke);
-  const removeTraceWaypoint = useEditor((s) => s.removeTraceWaypoint);
   const setTraceShiftingMode = useEditor((s) => s.setTraceShiftingMode);
   const applyTraceShifting = useEditor((s) => s.applyTraceShifting);
   const followDrawnLine = useEditor((s) => s.followDrawnLine);
@@ -1355,85 +1354,99 @@ export function VideoCanvas({ project, currentTimeMs: propTimeMs }: VideoCanvasP
         {(isTraceShiftingMode || traceWaypoints.length > 0 || liveStrokePoints.length > 0) && (
           <div className="absolute inset-0 pointer-events-none z-35 overflow-hidden">
             <svg className="size-full">
+              <defs>
+                {/* Sleek directional arrowhead marker */}
+                <marker
+                  id="trace-arrowhead"
+                  markerWidth="8"
+                  markerHeight="8"
+                  refX="6"
+                  refY="4"
+                  orient="auto"
+                >
+                  <polygon points="0 1, 8 4, 0 7, 2 4" fill="#ffffff" />
+                </marker>
+                {/* Direction indicator backdrop arrow */}
+                <marker
+                  id="trace-arrowhead-bg"
+                  markerWidth="10"
+                  markerHeight="10"
+                  refX="7"
+                  refY="5"
+                  orient="auto"
+                >
+                  <polygon points="0 1, 10 5, 0 9, 2 5" fill="#000000" />
+                </marker>
+              </defs>
+
               {/* In-progress live freehand drawn stroke */}
               {liveStrokePoints.length > 1 && (
-                <path
-                  d={pointsToSmoothSvgPath(liveStrokePoints, (x, y) => mapPt(x, y))}
-                  fill="none"
-                  stroke="#ffffff"
-                  strokeWidth="3.5"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  style={{ filter: "drop-shadow(0 2px 8px rgba(0,0,0,0.9))" }}
-                />
+                <>
+                  <path
+                    d={pointsToSmoothSvgPath(liveStrokePoints, (x, y) => mapPt(x, y))}
+                    fill="none"
+                    stroke="#000000"
+                    strokeWidth="5"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    opacity="0.6"
+                  />
+                  <path
+                    d={pointsToSmoothSvgPath(liveStrokePoints, (x, y) => mapPt(x, y))}
+                    fill="none"
+                    stroke="#ffffff"
+                    strokeWidth="3"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    style={{ filter: "drop-shadow(0 2px 8px rgba(0,0,0,0.9))" }}
+                  />
+                </>
               )}
 
-              {/* Committed trajectory path with smooth bezier curves */}
+              {/* Committed trajectory path — sleek continuous line itself */}
               {traceWaypoints.length > 1 && (
-                <path
-                  d={pointsToSmoothSvgPath(traceWaypoints, (x, y) => mapPt(x, y))}
-                  fill="none"
-                  stroke="#ffffff"
-                  strokeWidth="3"
-                  strokeDasharray="8 5"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  style={{ filter: "drop-shadow(0 2px 6px rgba(0,0,0,0.85))" }}
-                />
+                <>
+                  {/* High contrast dark backdrop outline */}
+                  <path
+                    d={pointsToSmoothSvgPath(traceWaypoints, (x, y) => mapPt(x, y))}
+                    fill="none"
+                    stroke="#000000"
+                    strokeWidth="6"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    markerEnd="url(#trace-arrowhead-bg)"
+                    opacity="0.8"
+                  />
+                  {/* Main glowing white trajectory line */}
+                  <path
+                    d={pointsToSmoothSvgPath(traceWaypoints, (x, y) => mapPt(x, y))}
+                    fill="none"
+                    stroke="#ffffff"
+                    strokeWidth="2.75"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    markerEnd="url(#trace-arrowhead)"
+                    style={{ filter: "drop-shadow(0 2px 10px rgba(255,255,255,0.4))" }}
+                  />
+                </>
               )}
+
+              {/* Subtle trajectory origin dot (no numbered clutter) */}
+              {traceWaypoints.length > 0 && (() => {
+                const startPt = mapPt(traceWaypoints[0]!.x, traceWaypoints[0]!.y);
+                return (
+                  <circle
+                    cx={`${startPt.x * 100}%`}
+                    cy={`${startPt.y * 100}%`}
+                    r="4.5"
+                    fill="#ffffff"
+                    stroke="#000000"
+                    strokeWidth="2"
+                    style={{ filter: "drop-shadow(0 2px 6px rgba(0,0,0,0.8))" }}
+                  />
+                );
+              })()}
             </svg>
-
-            {/* Committed waypoints markers */}
-            {traceWaypoints.map((wp, idx) => {
-              const pt = mapPt(wp.x, wp.y);
-              const isStart = idx === 0;
-              const isEnd = idx === traceWaypoints.length - 1 && traceWaypoints.length > 1;
-
-              return (
-                <div
-                  key={wp.id}
-                  className="absolute -translate-x-1/2 -translate-y-1/2 flex flex-col items-center pointer-events-auto cursor-pointer group"
-                  style={{
-                    left: `${pt.x * 100}%`,
-                    top: `${pt.y * 100}%`,
-                  }}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    removeTraceWaypoint(wp.id);
-                  }}
-                  title={`Waypoint #${idx + 1}: (${Math.round(wp.x * 100)}%, ${Math.round(wp.y * 100)}%) - Click to remove`}
-                >
-                  <div
-                    className={`size-5 rounded-full border-2 flex items-center justify-center text-[9px] font-bold shadow-lg transition-transform group-hover:scale-125 ${
-                      isStart
-                        ? "bg-white text-black border-white ring-2 ring-white/40"
-                        : isEnd
-                        ? "bg-neutral-900 text-white border-white ring-2 ring-white/30"
-                        : "bg-black text-white border-neutral-300"
-                    }`}
-                  >
-                    {idx + 1}
-                  </div>
-
-                  {/* Role label badge for start and end */}
-                  {isStart && (
-                    <span className="text-[8px] font-bold tracking-wider text-black bg-white px-1.5 py-0.2 rounded-full mt-1 whitespace-nowrap shadow-md uppercase">
-                      Start (Zoom In)
-                    </span>
-                  )}
-                  {isEnd && (
-                    <span className="text-[8px] font-bold tracking-wider text-white bg-black/90 border border-white/30 px-1.5 py-0.2 rounded-full mt-1 whitespace-nowrap shadow-md uppercase">
-                      End (Zoom Out)
-                    </span>
-                  )}
-                  {!isStart && !isEnd && (
-                    <span className="text-[9px] font-mono text-white/90 bg-black/80 px-1 rounded mt-0.5 whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity">
-                      {Math.round(wp.x * 100)}%, {Math.round(wp.y * 100)}%
-                    </span>
-                  )}
-                </div>
-              );
-            })}
 
             {/* Live indicator following cursor during active stroke */}
             {isDrawingStroke && cursorScreenPos && (
@@ -1442,7 +1455,7 @@ export function VideoCanvas({ project, currentTimeMs: propTimeMs }: VideoCanvasP
                 style={{ left: cursorScreenPos.x, top: cursorScreenPos.y }}
               >
                 <Pencil className="size-3 text-white" />
-                <span>Drawing Camera Path ({liveStrokePoints.length} pts)</span>
+                <span>Drawing Camera Path...</span>
               </div>
             )}
           </div>
@@ -1454,10 +1467,10 @@ export function VideoCanvas({ project, currentTimeMs: propTimeMs }: VideoCanvasP
             <span className="size-2 rounded-full bg-white animate-ping shrink-0" />
             <span className="text-xs font-semibold text-white">
               {isDrawingStroke
-                ? `Drawing camera path (${liveStrokePoints.length} points)...`
+                ? "Drawing camera path..."
                 : traceWaypoints.length > 0
-                ? `Camera Path: ${traceWaypoints.length} nodes ready`
-                : "Drag across video screen to draw camera path"}
+                ? "Trajectory Line Ready"
+                : "Drag across video screen to draw line"}
             </span>
             <div className="h-3 w-px bg-white/20 mx-0.5" />
             <button

@@ -1405,9 +1405,9 @@ export const useEditor = create<EditorState>((set, get) => ({
       y: Math.max(0, Math.min(1, p.y)),
       scale,
     }));
-    set((s) => ({
-      traceWaypoints: [...s.traceWaypoints, ...newWaypoints],
-    }));
+    set({
+      traceWaypoints: newWaypoints,
+    });
   },
 
   removeTraceWaypoint: (id) => {
@@ -1490,18 +1490,40 @@ export const useEditor = create<EditorState>((set, get) => ({
         cumDists.push(cumDists[i - 1]! + Math.hypot(p1.x - p0.x, p1.y - p0.y));
       }
       const totalDist = cumDists[cumDists.length - 1]!;
+      const lastPt = waypoints[waypoints.length - 1]!;
 
-      for (let idx = 1; idx < waypoints.length; idx++) {
-        const pt = waypoints[idx]!;
-        const stepProgress = totalDist > 0.001 ? cumDists[idx]! / totalDist : idx / (waypoints.length - 1);
-        const ptTime = Math.round(intermediateStart + stepProgress * intermediateSpan);
+      // Keep timeline clean and motion buttery-smooth: sample into 2 to 5 smooth segments max
+      const numSegments = Math.max(2, Math.min(5, Math.round(intermediateSpan / 450)));
+
+      for (let s = 1; s <= numSegments; s++) {
+        const targetProgress = s / numSegments;
+        const targetDist = targetProgress * totalDist;
+
+        // Sample exact interpolated coordinate along the drawn path curve
+        let ptX = lastPt.x;
+        let ptY = lastPt.y;
+        for (let j = 1; j < cumDists.length; j++) {
+          if (cumDists[j]! >= targetDist || j === cumDists.length - 1) {
+            const segStart = cumDists[j - 1]!;
+            const segEnd = cumDists[j]!;
+            const segSpan = segEnd - segStart;
+            const segRatio = segSpan > 0.0001 ? (targetDist - segStart) / segSpan : 1;
+            const wp0 = waypoints[j - 1]!;
+            const wp1 = waypoints[j]!;
+            ptX = wp0.x + (wp1.x - wp0.x) * segRatio;
+            ptY = wp0.y + (wp1.y - wp0.y) * segRatio;
+            break;
+          }
+        }
+
+        const ptTime = Math.round(intermediateStart + targetProgress * intermediateSpan);
         newKfs.push({
-          id: `kf-trace-p${idx}-${now}`,
+          id: `kf-trace-p${s}-${now}`,
           timeMs: ptTime,
-          scale: pt.scale ?? peakScale,
-          targetX: pt.x,
-          targetY: pt.y,
-          easing: "cubic",
+          scale: peakScale,
+          targetX: ptX,
+          targetY: ptY,
+          easing: "linear", // LINEAR progress along uniform arc-length = constant speed glide with zero throttling or stutter!
         });
       }
     }

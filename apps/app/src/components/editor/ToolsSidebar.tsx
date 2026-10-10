@@ -115,7 +115,6 @@ export function ToolsSidebar() {
   const setTraceShiftingMode = useEditor((s) => s.setTraceShiftingMode);
   const traceWaypoints = useEditor((s) => s.traceWaypoints);
   const addTraceWaypoint = useEditor((s) => s.addTraceWaypoint);
-  const removeTraceWaypoint = useEditor((s) => s.removeTraceWaypoint);
   const clearTraceWaypoints = useEditor((s) => s.clearTraceWaypoints);
   const applyTraceShifting = useEditor((s) => s.applyTraceShifting);
   const followDrawnLine = useEditor((s) => s.followDrawnLine);
@@ -360,7 +359,7 @@ export function ToolsSidebar() {
                   <span className="font-semibold text-white text-xs">Trace Shifting (Draw to Zoom)</span>
                 </div>
                 <span className="rounded bg-neutral-800 border border-neutral-700 px-1.5 py-0.5 text-[9px] font-mono text-neutral-300">
-                  {traceWaypoints.length > 0 ? `${traceWaypoints.length} Nodes` : "Freehand / Line"}
+                  {traceWaypoints.length > 0 ? "Line Ready" : "Freehand Path"}
                 </span>
               </div>
               <p className="text-[11px] text-fg-muted leading-relaxed">
@@ -436,36 +435,20 @@ export function ToolsSidebar() {
                   </div>
                 </div>
 
-                {/* Waypoints Counter & Chips */}
+                {/* Clean Trajectory Line Status */}
                 {traceWaypoints.length > 0 && (
-                  <div className="space-y-1.5 pt-1 border-t border-ink-800">
-                    <div className="flex items-center justify-between text-[10px]">
-                      <span className="text-fg-muted font-medium">Path Waypoints ({traceWaypoints.length}):</span>
-                      <button
-                        type="button"
-                        onClick={clearTraceWaypoints}
-                        className="text-[9px] text-neutral-400 hover:text-white underline"
-                      >
-                        Clear Waypoints
-                      </button>
-                    </div>
-                    <div className="flex flex-wrap gap-1 max-h-24 overflow-y-auto">
-                      {traceWaypoints.map((wp, idx) => (
-                        <span
-                          key={wp.id}
-                          className="inline-flex items-center gap-1 rounded bg-neutral-800 border border-neutral-700 px-1.5 py-0.5 text-[9px] font-mono text-white"
-                        >
-                          <span>#{idx + 1}: ({Math.round(wp.x * 100)}%, {Math.round(wp.y * 100)}%)</span>
-                          <button
-                            type="button"
-                            onClick={() => removeTraceWaypoint(wp.id)}
-                            className="text-neutral-400 hover:text-white ml-0.5"
-                          >
-                            ×
-                          </button>
-                        </span>
-                      ))}
-                    </div>
+                  <div className="flex items-center justify-between pt-1 border-t border-ink-800 text-[10px]">
+                    <span className="text-fg-muted font-medium flex items-center gap-1.5">
+                      <span className="size-1.5 rounded-full bg-white shadow-[0_0_8px_rgba(255,255,255,0.8)]" />
+                      Trajectory Line Active
+                    </span>
+                    <button
+                      type="button"
+                      onClick={clearTraceWaypoints}
+                      className="text-[9px] text-neutral-400 hover:text-white underline"
+                    >
+                      Clear Line
+                    </button>
                   </div>
                 )}
 
@@ -529,7 +512,7 @@ export function ToolsSidebar() {
                     className="w-full rounded-lg border border-neutral-700 bg-neutral-800 py-1.5 text-center text-xs font-semibold text-neutral-200 hover:text-white hover:bg-neutral-700 transition-colors flex items-center justify-center gap-1.5 disabled:opacity-40"
                   >
                     <Sparkles className="size-3 text-white" />
-                    Save Path to Timeline ({traceWaypoints.length || 0} Points)
+                    Save Path to Timeline
                   </button>
                 </div>
               </div>

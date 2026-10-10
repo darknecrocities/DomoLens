@@ -657,7 +657,8 @@ export function calculateCameraAtTime(
       const k2 = sortedKf[k + 1]!;
       if (timeMs >= k1.timeMs && timeMs <= k2.timeMs) {
         const span = k2.timeMs - k1.timeMs;
-        const progress = span > 0 ? evaluateCameraEasing((timeMs - k1.timeMs) / span, options?.cameraPhysics || "smooth") : 1;
+        const easingToUse = k1.easing === "linear" ? "linear" : k1.easing === "spring" ? "spring" : (options?.cameraPhysics || "smooth");
+        const progress = span > 0 ? evaluateCameraEasing((timeMs - k1.timeMs) / span, easingToUse) : 1;
         let scale = k1.scale + (k2.scale - k1.scale) * progress;
         const baseTargetX = k1.targetX + (k2.targetX - k1.targetX) * progress;
         const baseTargetY = k1.targetY + (k2.targetY - k1.targetY) * progress;

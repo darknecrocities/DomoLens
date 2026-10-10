@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import {
   ArrowLeftToLine,
   ArrowRightToLine,
+  Clock,
   Diamond,
   Film,
   Hand,
@@ -57,8 +58,90 @@ function TimelinePlayhead({ durationMs }: { durationMs: number }) {
   );
 }
 
+function TimelineTimeRuler({
+  durationMs,
+  timelineZoom,
+  onSeek,
+}: {
+  durationMs: number;
+  timelineZoom: number;
+  onSeek: (clientX: number) => void;
+}) {
+  const durationSec = Math.max(0.1, durationMs / 1000);
+
+  // Dynamic step intervals: adapt to timeline zoom level and total duration
+  const candidateSteps = [0.1, 0.25, 0.5, 1, 2, 5, 10, 15, 30, 60, 120, 300];
+  const targetMajorTicks = Math.max(5, Math.min(30, Math.round(14 * timelineZoom)));
+  const rawStep = durationSec / targetMajorTicks;
+  const stepSec = candidateSteps.find((s) => s >= rawStep) || candidateSteps[candidateSteps.length - 1]!;
+
+  const totalTicks = Math.ceil(durationSec / stepSec);
+  const ticks: Array<{ timeSec: number; percent: number; label: string; isMajor: boolean }> = [];
+
+  for (let i = 0; i <= totalTicks; i++) {
+    const timeSec = i * stepSec;
+    if (timeSec > durationSec + 0.001) break;
+    const percent = (timeSec / durationSec) * 100;
+    const minutes = Math.floor(timeSec / 60);
+    const seconds = timeSec % 60;
+    const label =
+      stepSec < 1
+        ? `${minutes}:${seconds.toFixed(1).padStart(4, "0")}`
+        : `${minutes}:${String(Math.floor(seconds)).padStart(2, "0")}`;
+
+    ticks.push({ timeSec, percent, label, isMajor: true });
+
+    // Add minor ticks between major ticks
+    if (i < totalTicks) {
+      const minorCount = stepSec >= 5 ? 4 : stepSec >= 1 ? 1 : 0;
+      for (let m = 1; m <= minorCount; m++) {
+        const minorTimeSec = timeSec + (stepSec * m) / (minorCount + 1);
+        if (minorTimeSec < durationSec) {
+          ticks.push({
+            timeSec: minorTimeSec,
+            percent: (minorTimeSec / durationSec) * 100,
+            label: "",
+            isMajor: false,
+          });
+        }
+      }
+    }
+  }
+
+  return (
+    <div
+      onPointerDown={(e) => {
+        e.stopPropagation();
+        onSeek(e.clientX);
+      }}
+      title="Dynamic video time measurement - Click or drag to scrub playhead"
+      className="relative h-6 w-full rounded-md bg-ink-900/60 border border-ink-800/80 overflow-hidden select-none cursor-pointer group flex items-end pb-0.5"
+    >
+      {ticks.map((t, idx) => (
+        <div
+          key={`ruler-tick-${idx}-${t.percent.toFixed(2)}`}
+          className="absolute -translate-x-1/2 flex flex-col items-center pointer-events-none"
+          style={{ left: `${Math.max(0.5, Math.min(99.5, t.percent))}%`, bottom: 0 }}
+        >
+          {t.isMajor ? (
+            <>
+              <span className="text-[9px] font-mono text-neutral-400 group-hover:text-neutral-200 transition-colors font-semibold tracking-tighter leading-none mb-1">
+                {t.label}
+              </span>
+              <div className="w-px h-2 bg-neutral-500/80 group-hover:bg-neutral-300" />
+            </>
+          ) : (
+            <div className="w-px h-1 bg-neutral-700/60 group-hover:bg-neutral-500" />
+          )}
+        </div>
+      ))}
+    </div>
+  );
+}
+
 export function Timeline({ project }: TimelineProps) {
   const durationMs = useEditor((s) => s.durationMs);
+  const currentTimeMs = useEditor((s) => s.currentTimeMs);
   const isPlaying = useEditor((s) => s.isPlaying);
   const selectedBlockId = useEditor((s) => s.selectedBlockId);
   const selectedClipId = useEditor((s) => s.selectedClipId);
@@ -644,6 +727,17 @@ export function Timeline({ project }: TimelineProps) {
           style={{ width: `${timelineTrackHeaderWidth}px` }}
           className="flex flex-col gap-1.5 shrink-0 select-none py-1 pr-1"
         >
+          {/* TIME MEASUREMENT HEADER (Directly on top of Keyframes) */}
+          <div className="h-6 flex items-center justify-between px-2 rounded-md bg-ink-900/40 text-[10px] font-mono font-semibold uppercase tracking-wider text-neutral-400 select-none">
+            <div className="flex items-center gap-1.5 min-w-0">
+              <Clock className="size-3 text-neutral-400 shrink-0" />
+              <span className="truncate text-neutral-400">Time</span>
+            </div>
+            <span className="text-[9px] font-mono text-neutral-200 font-bold">
+              {formatDuration(currentTimeMs)}
+            </span>
+          </div>
+
           {/* TRACK 1: KEYFRAMES HEADER */}
           <div className="h-7 flex items-center justify-between px-2 rounded-md bg-ink-900/60 text-[10px] font-semibold uppercase tracking-wider text-fg-muted group">
             <div className="flex items-center gap-1.5 min-w-0">
@@ -808,6 +902,13 @@ export function Timeline({ project }: TimelineProps) {
             style={{ width: `${Math.round(timelineZoom * 100)}%` }}
             className="relative min-w-full flex flex-col gap-1.5 p-2 touch-none"
           >
+          {/* DYNAMIC TIME MEASUREMENT RULER (Directly on top of Keyframes) */}
+          <TimelineTimeRuler
+            durationMs={durationMs}
+            timelineZoom={timelineZoom}
+            onSeek={seekFromPointer}
+          />
+
           {/* TRACK 1: KEYFRAMES TRACK (Diamond Nodes) */}
           <div
             onDoubleClick={(e) => {
