@@ -147,20 +147,20 @@ export function UpdateModal() {
           <div className="space-y-4">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <div className="size-2 rounded-full bg-sky-400 animate-ping" />
+                <div className="size-2 rounded-full bg-white animate-pulse" />
                 <span className="text-sm font-semibold text-white">
                   Downloading DomoLens v{updateInfo?.version || ""}...
                 </span>
               </div>
-              <span className="font-mono text-sm font-bold text-sky-400">
+              <span className="font-mono text-sm font-bold text-white tabular">
                 {downloadProgress}%
               </span>
             </div>
 
-            {/* Animated Gradient Progress Bar */}
-            <div className="relative h-3 w-full overflow-hidden rounded-full border border-white/10 bg-white/5 p-[1px]">
+            {/* Monochromatic Progress Bar */}
+            <div className="relative h-2.5 w-full overflow-hidden rounded-full border border-white/10 bg-neutral-900 p-[1px]">
               <div
-                className="h-full rounded-full bg-gradient-to-r from-neutral-400 via-sky-400 to-emerald-400 transition-all duration-300 ease-out shadow-[0_0_12px_rgba(56,189,248,0.5)]"
+                className="h-full rounded-full bg-white transition-all duration-300 ease-out shadow-[0_0_12px_rgba(255,255,255,0.7)]"
                 style={{ width: `${Math.max(downloadProgress, 3)}%` }}
               />
             </div>
