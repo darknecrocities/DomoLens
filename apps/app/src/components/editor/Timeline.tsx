@@ -11,6 +11,7 @@ import {
   MousePointer,
   Music,
   Pause,
+  Pencil,
   Play,
   Plus,
   Redo2,
@@ -85,6 +86,7 @@ export function Timeline({ project }: TimelineProps) {
   const trimLeftAtPlayhead = useEditor((s) => s.trimLeftAtPlayhead ?? s.trimLeftAtCurrentTime);
   const trimRightAtPlayhead = useEditor((s) => s.trimRightAtPlayhead ?? s.trimRightAtCurrentTime);
   const addSfxTrackAtCurrentTime = useEditor((s) => s.addSfxTrackAtCurrentTime);
+  const addMusicTrackAtCurrentTime = useEditor((s) => s.addMusicTrackAtCurrentTime);
   const deleteAudioTrack = useEditor((s) => s.deleteAudioTrack);
   const updateAudioTrack = useEditor((s) => s.updateAudioTrack);
   const addAudioTrack = useEditor((s) => s.addAudioTrack);
@@ -146,6 +148,14 @@ export function Timeline({ project }: TimelineProps) {
     }
   };
 
+  const handleAddMusic = (presetId = "lofi-focus", name = "Lo-Fi Warmth") => {
+    if (addMusicTrackAtCurrentTime) {
+      addMusicTrackAtCurrentTime(presetId, name);
+    } else {
+      addAudioTrack(name, `music://${presetId}`, "music");
+    }
+  };
+
   const auditionSfx = (track: AudioTrack) => {
     const nameLower = track.name.toLowerCase();
     const vol = track.volume ?? 0.7;
@@ -162,25 +172,45 @@ export function Timeline({ project }: TimelineProps) {
     }
   };
 
-  const handleSfxPointerDown = (e: React.PointerEvent, sfxItem: AudioTrack) => {
+  const handleAudioPointerDown = (
+    e: React.PointerEvent,
+    trackItem: AudioTrack,
+    action: "move" | "trim-left" | "trim-right" = "move",
+  ) => {
     if ((e.target as HTMLElement).closest("button")) return;
     e.stopPropagation();
-    selectAudio(sfxItem.id);
-    setCurrentTime(sfxItem.startTimeMs);
-    auditionSfx(sfxItem);
+    selectAudio(trackItem.id);
+    if (action === "move") {
+      setCurrentTime(trackItem.startTimeMs);
+      if (trackItem.type === "sfx") {
+        auditionSfx(trackItem);
+      }
+    }
 
     const startX = e.clientX;
-    const origStart = sfxItem.startTimeMs;
-    const clipDur = sfxItem.durationMs;
+    const origStart = trackItem.startTimeMs;
+    const origDur = trackItem.durationMs;
     const trackW = trackContainerRef.current?.clientWidth || 1;
 
     const onMove = (me: PointerEvent) => {
       const deltaRatio = (me.clientX - startX) / trackW;
-      const newStart = Math.max(
-        0,
-        Math.min(durationMs - clipDur, Math.round(origStart + deltaRatio * durationMs)),
-      );
-      updateAudioTrack(sfxItem.id, { startTimeMs: newStart });
+      const deltaMs = Math.round(deltaRatio * durationMs);
+
+      if (action === "move") {
+        const newStart = Math.max(
+          0,
+          Math.min(durationMs - origDur, origStart + deltaMs),
+        );
+        updateAudioTrack(trackItem.id, { startTimeMs: newStart });
+      } else if (action === "trim-left") {
+        const maxStart = origStart + origDur - 300;
+        const newStart = Math.max(0, Math.min(maxStart, origStart + deltaMs));
+        const newDur = Math.max(300, origDur - (newStart - origStart));
+        updateAudioTrack(trackItem.id, { startTimeMs: newStart, durationMs: newDur });
+      } else if (action === "trim-right") {
+        const newDur = Math.max(300, Math.min(durationMs - origStart, origDur + deltaMs));
+        updateAudioTrack(trackItem.id, { durationMs: newDur });
+      }
     };
 
     const onUp = () => {
@@ -190,6 +220,10 @@ export function Timeline({ project }: TimelineProps) {
 
     window.addEventListener("pointermove", onMove);
     window.addEventListener("pointerup", onUp);
+  };
+
+  const handleSfxPointerDown = (e: React.PointerEvent, sfxItem: AudioTrack) => {
+    handleAudioPointerDown(e, sfxItem, "move");
   };
 
   // Keyboard shortcut listener: V (Select), C/S (Split), H (Pan), Q (Trim Left), W (Trim Right)
@@ -214,6 +248,9 @@ export function Timeline({ project }: TimelineProps) {
       } else if (key === "h") {
         e.preventDefault();
         setActiveTimelineTool("pan");
+      } else if (key === "d") {
+        e.preventDefault();
+        setActiveTimelineTool("draw");
       } else if (key === "q") {
         e.preventDefault();
         trimLeftAtPlayhead();
@@ -392,8 +429,8 @@ export function Timeline({ project }: TimelineProps) {
             onClick={() => setActiveTimelineTool("pan")}
             className={`flex items-center gap-1.5 rounded-md px-2 py-1 text-xs font-medium transition-all ${
               activeTimelineTool === "pan"
-                ? "bg-amber-500 text-black font-semibold shadow-sm"
-                : "text-neutral-400 hover:text-amber-400 hover:bg-ink-800"
+                ? "bg-white text-black font-semibold shadow-sm"
+                : "text-neutral-400 hover:text-white hover:bg-ink-800"
             }`}
             data-tutorial-target="tl-pan"
             title="Hand / Pan Tool (H) - Drag to pan horizontally across zoomed timeline"
@@ -403,6 +440,25 @@ export function Timeline({ project }: TimelineProps) {
             <Hand className="size-3.5 shrink-0" />
             <span className="hidden lg:inline">Pan</span>
             <kbd className="hidden xl:inline text-[9px] font-mono opacity-60">H</kbd>
+          </button>
+
+          {/* Draw / Trajectory Tool (D) */}
+          <button
+            type="button"
+            onClick={() => setActiveTimelineTool("draw")}
+            className={`flex items-center gap-1.5 rounded-md px-2 py-1 text-xs font-medium transition-all ${
+              activeTimelineTool === "draw"
+                ? "bg-white text-black font-semibold shadow-sm"
+                : "text-neutral-400 hover:text-white hover:bg-ink-800"
+            }`}
+            data-tutorial-target="tl-draw"
+            title="Draw Camera Path Tool (D) - Drag on video screen to sketch zoom and camera shift trajectory"
+            aria-label="Draw camera path tool (D)"
+            aria-pressed={activeTimelineTool === "draw"}
+          >
+            <Pencil className="size-3.5 shrink-0" />
+            <span className="hidden lg:inline">Draw</span>
+            <kbd className="hidden xl:inline text-[9px] font-mono opacity-60">D</kbd>
           </button>
         </div>
 
@@ -607,14 +663,38 @@ export function Timeline({ project }: TimelineProps) {
             </button>
           </div>
 
-          {/* TRACK 1B: DEDICATED SFX HEADER (Directly Below Keyframes) */}
+          {/* TRACK 1A: DEDICATED MUSIC HEADER (Directly Below Keyframes, on top of SFX) */}
+          <div
+            data-tutorial-target="timeline-music-track"
+            className="h-7 flex items-center justify-between px-2 rounded-md bg-ink-900/60 text-[10px] font-semibold uppercase tracking-wider text-fg-muted group"
+          >
+            <div className="flex items-center gap-1.5 min-w-0">
+              <Music className="size-3 text-white shrink-0" />
+              <span className="truncate text-white">Music</span>
+            </div>
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                handleAddMusic();
+              }}
+              className="flex items-center gap-0.5 px-1.5 py-0.5 rounded hover:bg-white/10 text-neutral-200 hover:text-white border border-neutral-700 hover:border-white transition-colors"
+              title="Add background music at playhead (+ Music)"
+              aria-label="Add background music at playhead"
+            >
+              <Plus className="size-2.5" />
+              <span className="text-[9px] font-bold">Music</span>
+            </button>
+          </div>
+
+          {/* TRACK 1B: DEDICATED SFX HEADER (Directly Below Music) */}
           <div
             data-tutorial-target="timeline-sfx-track"
             className="h-7 flex items-center justify-between px-2 rounded-md bg-ink-900/60 text-[10px] font-semibold uppercase tracking-wider text-fg-muted group"
           >
             <div className="flex items-center gap-1.5 min-w-0">
-              <Volume2 className="size-3 text-cyan-400 shrink-0" />
-              <span className="truncate text-cyan-300">SFX</span>
+              <Volume2 className="size-3 text-neutral-300 shrink-0" />
+              <span className="truncate text-neutral-300">SFX</span>
             </div>
             <button
               type="button"
@@ -622,7 +702,7 @@ export function Timeline({ project }: TimelineProps) {
                 e.stopPropagation();
                 handleAddSfx();
               }}
-              className="flex items-center gap-0.5 px-1 py-0.5 rounded hover:bg-cyan-950/60 text-cyan-400 hover:text-cyan-200 border border-cyan-800/60 hover:border-cyan-500 transition-colors"
+              className="flex items-center gap-0.5 px-1.5 py-0.5 rounded hover:bg-white/10 text-neutral-200 hover:text-white border border-neutral-700 hover:border-white transition-colors"
               title="Add sound effect at playhead (+ SFX)"
               aria-label="Add sound effect at playhead"
             >
@@ -683,15 +763,7 @@ export function Timeline({ project }: TimelineProps) {
             </button>
           </div>
 
-          {/* TRACK 5: MUSIC TRACK HEADER */}
-          {musicTracks.length > 0 && (
-            <div className="h-7 flex items-center gap-1.5 px-2 rounded-md bg-ink-900/60 text-[10px] font-semibold uppercase tracking-wider text-neutral-400">
-              <Music className="size-3 text-neutral-300 shrink-0" />
-              <span className="truncate">Music</span>
-            </div>
-          )}
-
-          {/* TRACK 6: MARKERS HEADER */}
+          {/* TRACK 5: MARKERS HEADER */}
           <div className="h-3 flex items-center gap-1 px-2 text-[9px] font-semibold uppercase tracking-wider text-fg-faint">
             <MousePointer className="size-2.5 text-neutral-500 shrink-0" />
             <span className="truncate">Events</span>
@@ -791,27 +863,23 @@ export function Timeline({ project }: TimelineProps) {
                         isSelected
                           ? "bg-white border-white ring-2 ring-white/60 shadow-lg scale-110"
                           : kf.sound === "typing"
-                          ? "bg-amber-400 border-amber-200 shadow-amber-500/40 shadow"
+                          ? "bg-neutral-300 border-white shadow-sm"
                           : kf.sound === "click"
-                          ? "bg-cyan-400 border-cyan-200 shadow-cyan-500/40 shadow"
+                          ? "bg-neutral-100 border-white shadow-sm"
                           : kf.effect
-                          ? "bg-fuchsia-400 border-fuchsia-200 shadow"
-                          : "bg-neutral-200 border-neutral-400"
+                          ? "bg-neutral-400 border-neutral-200 shadow-sm"
+                          : "bg-neutral-500 border-neutral-600"
                       }`}
                     />
                     {kf.sound && (
                       <div
-                        className={`absolute -bottom-3 left-1/2 -translate-x-1/2 pointer-events-none flex items-center justify-center rounded px-1 py-0.2 shadow-sm text-[8px] font-bold ${
-                          kf.sound === "typing"
-                            ? "bg-amber-500/90 text-black border border-amber-300"
-                            : "bg-cyan-500/90 text-black border border-cyan-300"
-                        }`}
+                        className="absolute -bottom-3 left-1/2 -translate-x-1/2 pointer-events-none flex items-center justify-center rounded px-1 py-0.2 shadow-sm text-[8px] font-bold bg-black text-white border border-white/50"
                         title={`SFX: ${kf.sound} (${kf.soundPreset || (kf.sound === "typing" ? "mechanical" : "bop")})`}
                       >
                         {kf.sound === "typing" ? (
-                          <Keyboard className="size-2 text-black shrink-0" />
+                          <Keyboard className="size-2 text-white shrink-0" />
                         ) : (
-                          <MousePointer className="size-2 text-black shrink-0" />
+                          <MousePointer className="size-2 text-white shrink-0" />
                         )}
                       </div>
                     )}
@@ -833,7 +901,135 @@ export function Timeline({ project }: TimelineProps) {
               })}
           </div>
 
-          {/* TRACK 1B: DEDICATED SFX TRACK (Directly Below Keyframes) */}
+          {/* TRACK 1A: DEDICATED MUSIC TRACK (Directly Below Keyframes, on top of SFX) */}
+          <div
+            data-tutorial-target="timeline-music-lane"
+            onDoubleClick={(e) => {
+              e.stopPropagation();
+              const rect = e.currentTarget.getBoundingClientRect();
+              const clickX = e.clientX - rect.left;
+              const ratio = Math.max(0, Math.min(1, clickX / (rect.width || 1)));
+              const targetTime = Math.round(ratio * durationMs);
+              setCurrentTime(targetTime);
+              handleAddMusic("lofi-focus", "Lo-Fi Warmth");
+            }}
+            title="Music Track - Double-click or click + Music to add background music"
+            className="relative h-7 rounded-md bg-ink-900/90 border border-ink-800/80 overflow-hidden flex items-center"
+          >
+            {musicTracks.length === 0 ? (
+              <div className="w-full text-center text-[10px] text-fg-faint/60 italic select-none">
+                Double-click or click + Music to add background music
+              </div>
+            ) : (
+              musicTracks.map((musicItem) => {
+                const left = getPositionPercent(musicItem.startTimeMs);
+                const width = Math.max(3, getPositionPercent(musicItem.startTimeMs + musicItem.durationMs) - left);
+                const isSelected = selectedAudioId === musicItem.id;
+                const dbVal =
+                  typeof musicItem.gainDb === "number"
+                    ? musicItem.gainDb
+                    : Math.round(20 * Math.log10(musicItem.volume ?? 0.5) * 10) / 10;
+                const fadeInPercent =
+                  musicItem.fadeInMs && musicItem.durationMs > 0
+                    ? Math.min(45, (musicItem.fadeInMs / musicItem.durationMs) * 100)
+                    : 0;
+                const fadeOutPercent =
+                  musicItem.fadeOutMs && musicItem.durationMs > 0
+                    ? Math.min(45, (musicItem.fadeOutMs / musicItem.durationMs) * 100)
+                    : 0;
+
+                return (
+                  <div
+                    key={musicItem.id}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      selectAudio(musicItem.id);
+                    }}
+                    onPointerDown={(e) => handleAudioPointerDown(e, musicItem, "move")}
+                    title={`Music: ${musicItem.name} (${formatDuration(musicItem.durationMs)}) • ${
+                      dbVal >= 0 ? "+" : ""
+                    }${dbVal.toFixed(1)} dB • Fade In: ${(
+                      (musicItem.fadeInMs ?? 0) / 1000
+                    ).toFixed(1)}s • Fade Out: ${(
+                      (musicItem.fadeOutMs ?? 0) / 1000
+                    ).toFixed(1)}s`}
+                    className={`absolute top-0.5 bottom-0.5 flex items-center justify-between rounded px-2 text-[10px] cursor-grab active:cursor-grabbing transition-all select-none border shadow-sm group ${
+                      isSelected
+                        ? "border-white bg-white/25 text-white ring-1 ring-white/60 shadow-md z-20 font-bold"
+                        : "border-neutral-700 bg-neutral-900 text-neutral-200 hover:border-neutral-500"
+                    }`}
+                    style={{ left: `${left}%`, width: `${width}%` }}
+                  >
+                    {/* Fade In visual indicator triangle */}
+                    {fadeInPercent > 0 && (
+                      <div
+                        className="pointer-events-none absolute left-0 top-0 bottom-0 bg-gradient-to-r from-black/70 to-transparent z-10"
+                        style={{ width: `${fadeInPercent}%` }}
+                      />
+                    )}
+
+                    {/* Fade Out visual indicator triangle */}
+                    {fadeOutPercent > 0 && (
+                      <div
+                        className="pointer-events-none absolute right-0 top-0 bottom-0 bg-gradient-to-l from-black/70 to-transparent z-10"
+                        style={{ width: `${fadeOutPercent}%` }}
+                      />
+                    )}
+
+                    {/* Left Trim Handle */}
+                    {isSelected && (
+                      <div
+                        onPointerDown={(e) => handleAudioPointerDown(e, musicItem, "trim-left")}
+                        className="absolute left-0 top-0 bottom-0 w-2 cursor-col-resize hover:bg-white/40 flex items-center justify-center z-30 group/handle"
+                        title="Drag to trim start time"
+                      >
+                        <div className="w-0.5 h-3 bg-white rounded-full" />
+                      </div>
+                    )}
+
+                    {/* Content */}
+                    <div className="flex items-center gap-1.5 min-w-0 truncate z-20">
+                      <Music className="size-2.5 text-white shrink-0" />
+                      <span className="truncate font-medium">{musicItem.name}</span>
+                    </div>
+
+                    <div className="flex items-center gap-1 shrink-0 ml-1 z-20">
+                      <span className="font-mono text-[9px] px-1 py-0.2 rounded bg-black/60 text-white border border-white/10">
+                        {dbVal >= 0 ? "+" : ""}{dbVal.toFixed(1)} dB
+                      </span>
+                      {isSelected && (
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            deleteAudioTrack(musicItem.id);
+                          }}
+                          className="p-0.5 rounded text-neutral-300 hover:text-white hover:bg-black/50 transition-colors"
+                          title="Delete music track"
+                          aria-label="Delete music track"
+                        >
+                          <Trash2 className="size-2.5 text-danger" />
+                        </button>
+                      )}
+                    </div>
+
+                    {/* Right Trim Handle */}
+                    {isSelected && (
+                      <div
+                        onPointerDown={(e) => handleAudioPointerDown(e, musicItem, "trim-right")}
+                        className="absolute right-0 top-0 bottom-0 w-2 cursor-col-resize hover:bg-white/40 flex items-center justify-center z-30 group/handle"
+                        title="Drag to trim duration"
+                      >
+                        <div className="w-0.5 h-3 bg-white rounded-full" />
+                      </div>
+                    )}
+                  </div>
+                );
+              })
+            )}
+          </div>
+
+          {/* TRACK 1B: DEDICATED SFX TRACK (Directly Below Music) */}
           <div
             data-tutorial-target="timeline-sfx-lane"
             onDoubleClick={(e) => {
@@ -857,11 +1053,10 @@ export function Timeline({ project }: TimelineProps) {
                 const left = getPositionPercent(sfxItem.startTimeMs);
                 const width = Math.max(2.5, getPositionPercent(sfxItem.startTimeMs + sfxItem.durationMs) - left);
                 const isSelected = selectedAudioId === sfxItem.id;
-                const isTyping =
-                  sfxItem.name.toLowerCase().includes("typ") ||
-                  sfxItem.name.toLowerCase().includes("key") ||
-                  sfxItem.name.toLowerCase().includes("switch");
-                const volPercent = Math.round((sfxItem.volume ?? 0.7) * 100);
+                const dbVal =
+                  typeof sfxItem.gainDb === "number"
+                    ? sfxItem.gainDb
+                    : Math.round(20 * Math.log10(sfxItem.volume ?? 0.7) * 10) / 10;
 
                 return (
                   <div
@@ -872,30 +1067,28 @@ export function Timeline({ project }: TimelineProps) {
                       auditionSfx(sfxItem);
                     }}
                     onPointerDown={(e) => handleSfxPointerDown(e, sfxItem)}
-                    title={`SFX: ${sfxItem.name} (${formatDuration(sfxItem.durationMs)}) - Volume: ${volPercent}% - Click to audition, drag to reposition`}
+                    title={`SFX: ${sfxItem.name} (${formatDuration(sfxItem.durationMs)}) • ${dbVal >= 0 ? "+" : ""}${dbVal.toFixed(1)} dB • Click to audition, drag to reposition`}
                     className={`absolute top-0.5 bottom-0.5 flex items-center justify-between rounded px-2 text-[10px] cursor-grab active:cursor-grabbing transition-all select-none border shadow-sm group ${
                       isSelected
                         ? "border-white bg-white/25 text-white ring-1 ring-white/60 shadow-md z-20 font-bold"
-                        : isTyping
-                        ? "border-amber-500/70 bg-amber-500/20 text-amber-200 hover:border-amber-400"
-                        : "border-cyan-500/70 bg-cyan-500/20 text-cyan-200 hover:border-cyan-400"
+                        : "border-neutral-700 bg-neutral-900 text-neutral-200 hover:border-neutral-500"
                     }`}
                     style={{ left: `${left}%`, width: `${width}%` }}
                   >
-                    {/* Visual 4-bar equalizer icon */}
+                    {/* Visual 4-bar monochrome equalizer icon */}
                     <div className="flex items-center gap-1 min-w-0 truncate">
                       <div className="flex items-end gap-0.5 h-2.5 shrink-0" aria-label="Acoustic waveform">
-                        <span className={`w-0.5 h-1.5 rounded-full ${isTyping ? "bg-amber-400" : "bg-cyan-400"}`} />
-                        <span className={`w-0.5 h-2.5 rounded-full ${isTyping ? "bg-amber-300" : "bg-cyan-300"}`} />
-                        <span className={`w-0.5 h-1.5 rounded-full ${isTyping ? "bg-amber-400" : "bg-cyan-400"}`} />
-                        <span className={`w-0.5 h-2 rounded-full ${isTyping ? "bg-amber-300" : "bg-cyan-300"}`} />
+                        <span className="w-0.5 h-1.5 rounded-full bg-neutral-400" />
+                        <span className="w-0.5 h-2.5 rounded-full bg-white" />
+                        <span className="w-0.5 h-1.5 rounded-full bg-neutral-400" />
+                        <span className="w-0.5 h-2 rounded-full bg-white" />
                       </div>
                       <span className="truncate font-medium">{sfxItem.name}</span>
                     </div>
 
                     <div className="flex items-center gap-1 shrink-0 ml-1">
-                      <span className="font-mono text-[9px] px-1 py-0.2 rounded bg-black/50 opacity-80">
-                        {volPercent}%
+                      <span className="font-mono text-[9px] px-1 py-0.2 rounded bg-black/60 text-white border border-white/10">
+                        {dbVal >= 0 ? "+" : ""}{dbVal.toFixed(1)} dB
                       </span>
                       {isSelected && (
                         <button
@@ -904,7 +1097,7 @@ export function Timeline({ project }: TimelineProps) {
                             e.stopPropagation();
                             deleteAudioTrack(sfxItem.id);
                           }}
-                          className="p-0.5 rounded text-neutral-300 hover:text-white hover:bg-black/40 transition-colors"
+                          className="p-0.5 rounded text-neutral-300 hover:text-white hover:bg-black/50 transition-colors"
                           title="Delete SFX clip (Delete)"
                           aria-label="Delete sound effect"
                         >
@@ -1408,80 +1601,6 @@ export function Timeline({ project }: TimelineProps) {
               })
             )}
           </div>
-
-          {/* TRACK 5: MUSIC TRACK */}
-          {musicTracks.length > 0 && (
-            <div className="relative h-7 rounded-md bg-ink-900/80 border border-ink-800/70 overflow-hidden">
-              {musicTracks.map((a) => {
-                const left = getPositionPercent(a.startTimeMs);
-                const width = Math.max(3, getPositionPercent(a.startTimeMs + a.durationMs) - left);
-                const isSelected = selectedAudioId === a.id;
-
-                return (
-                  <div
-                    key={a.id}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      selectAudio(a.id);
-                    }}
-                    onPointerDown={(e) => {
-                      if (
-                        (e.target as HTMLElement).closest(".group\\/handle") ||
-                        (e.target as HTMLElement).closest("button")
-                      ) {
-                        return;
-                      }
-                      e.stopPropagation();
-                      selectAudio(a.id);
-                      const startX = e.clientX;
-                      const origStart = a.startTimeMs;
-                      const trackDur = a.durationMs;
-                      const trackW = trackContainerRef.current?.clientWidth || 1;
-
-                      const onMove = (me: PointerEvent) => {
-                        const deltaRatio = (me.clientX - startX) / trackW;
-                        const newStart = Math.max(
-                          0,
-                          Math.min(durationMs - trackDur, Math.round(origStart + deltaRatio * durationMs)),
-                        );
-                        updateAudioTrack(a.id, { startTimeMs: newStart });
-                      };
-                      const onUp = () => {
-                        window.removeEventListener("pointermove", onMove);
-                        window.removeEventListener("pointerup", onUp);
-                      };
-                      window.addEventListener("pointermove", onMove);
-                      window.addEventListener("pointerup", onUp);
-                    }}
-                    className={`absolute top-0.5 bottom-0.5 flex items-center justify-between rounded border px-2 text-[10px] cursor-grab active:cursor-grabbing transition-all ${
-                      isSelected
-                        ? "border-emerald-400 bg-emerald-500/20 text-white z-10 font-bold"
-                        : "border-neutral-700 bg-neutral-800 text-neutral-300 hover:border-neutral-500"
-                    }`}
-                    style={{ left: `${left}%`, width: `${width}%` }}
-                  >
-                    <div className="flex items-center gap-1 min-w-0 truncate">
-                      <Music className="size-2.5 mr-1 shrink-0 text-emerald-400" />
-                      <span className="truncate">{a.name}</span>
-                    </div>
-                    {isSelected && (
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          deleteAudioTrack(a.id);
-                        }}
-                        className="p-0.5 rounded text-neutral-300 hover:text-white hover:bg-black/40 transition-colors shrink-0"
-                        title="Delete audio track"
-                      >
-                        <Trash2 className="size-2.5 text-danger" />
-                      </button>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          )}
 
           {/* TRACK 6: CLICK & TYPING MARKERS */}
           <div className="relative h-3 w-full">

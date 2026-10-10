@@ -13,6 +13,8 @@ import {
   Check,
   Heart,
   User,
+  Pencil,
+  Play,
 } from "lucide-react";
 import {
   calculateActiveEffectsState,
@@ -24,6 +26,8 @@ import {
   smoothCursorTrajectory,
   mapVideoPointToViewport,
   ensureCursorTrajectory,
+  processDrawnTracePath,
+  pointsToSmoothSvgPath,
   TEXT_CARD_STYLE_DEFINITIONS,
   type CursorAvatar,
   type CursorStyle,
@@ -80,16 +84,16 @@ export function CanvasCursorSvg({ cursorStyle }: { cursorStyle: CursorStyle }) {
     case "sleek-dot":
       return (
         <svg viewBox="0 0 20 20" className="size-5 drop-shadow-md">
-          <circle cx="10" cy="10" r="8" fill="rgba(99, 102, 241, 0.2)" stroke="rgba(99, 102, 241, 0.5)" strokeWidth="1.5" />
-          <circle cx="10" cy="10" r="3.5" fill="#ffffff" stroke="#6366f1" strokeWidth="1.5" />
+          <circle cx="10" cy="10" r="8" fill="rgba(255, 255, 255, 0.2)" stroke="rgba(255, 255, 255, 0.6)" strokeWidth="1.5" />
+          <circle cx="10" cy="10" r="3.5" fill="#ffffff" stroke="#000000" strokeWidth="1.5" />
         </svg>
       );
     case "laser-dot":
       return (
-        <svg viewBox="0 0 16 16" className="size-4 filter drop-shadow-[0_0_8px_rgba(239,68,68,0.9)]">
-          <circle cx="8" cy="8" r="7" fill="rgba(239, 68, 68, 0.35)" />
-          <circle cx="8" cy="8" r="4.5" fill="#ef4444" />
-          <circle cx="8" cy="8" r="2" fill="#ffffff" />
+        <svg viewBox="0 0 16 16" className="size-4 filter drop-shadow-[0_0_8px_rgba(255,255,255,0.9)]">
+          <circle cx="8" cy="8" r="7" fill="rgba(255, 255, 255, 0.35)" />
+          <circle cx="8" cy="8" r="4.5" fill="#ffffff" />
+          <circle cx="8" cy="8" r="2" fill="#000000" />
         </svg>
       );
     case "ring":
@@ -109,26 +113,26 @@ export function CanvasCursorSvg({ cursorStyle }: { cursorStyle: CursorStyle }) {
     case "focus-reticle":
       return (
         <svg viewBox="0 0 24 24" className="size-6 drop-shadow-md">
-          <path d="M4 8 L4 4 L8 4 M16 4 L20 4 L20 8 M4 16 L4 20 L8 20 M16 20 L20 20 L20 16" stroke="#38bdf8" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" fill="none" />
-          <circle cx="12" cy="12" r="2" fill="#38bdf8" />
+          <path d="M4 8 L4 4 L8 4 M16 4 L20 4 L20 8 M4 16 L4 20 L8 20 M16 20 L20 20 L20 16" stroke="#ffffff" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" fill="none" />
+          <circle cx="12" cy="12" r="2" fill="#ffffff" />
         </svg>
       );
     case "sonar-pulse":
       return (
         <svg viewBox="0 0 24 24" className="size-6 drop-shadow-md">
-          <circle cx="12" cy="12" r="9.5" stroke="rgba(16, 185, 129, 0.6)" strokeWidth="1" strokeDasharray="3 2" fill="rgba(16, 185, 129, 0.1)" />
-          <circle cx="12" cy="12" r="4.5" stroke="#10b981" strokeWidth="1.2" fill="rgba(16, 185, 129, 0.2)" />
-          <path d="M12 0 L12 3 M12 21 L12 24 M0 12 L3 12 M21 12 L24 12" stroke="#34d399" strokeWidth="1.2" strokeLinecap="round" />
-          <circle cx="12" cy="12" r="2" fill="#34d399" />
+          <circle cx="12" cy="12" r="9.5" stroke="rgba(255, 255, 255, 0.6)" strokeWidth="1" strokeDasharray="3 2" fill="rgba(255, 255, 255, 0.1)" />
+          <circle cx="12" cy="12" r="4.5" stroke="#ffffff" strokeWidth="1.2" fill="rgba(255, 255, 255, 0.2)" />
+          <path d="M12 0 L12 3 M12 21 L12 24 M0 12 L3 12 M21 12 L24 12" stroke="#ffffff" strokeWidth="1.2" strokeLinecap="round" />
+          <circle cx="12" cy="12" r="2" fill="#ffffff" />
         </svg>
       );
     case "obsidian-glow":
       return (
-        <svg viewBox="0 0 24 24" className="size-6 filter drop-shadow-[0_0_8px_rgba(168,85,247,0.85)]">
+        <svg viewBox="0 0 24 24" className="size-6 filter drop-shadow-[0_0_8px_rgba(255,255,255,0.7)]">
           <path
             d="M0 0 L0 18 L5 13.5 L9 22 L12 20.5 L8 12.5 L14.5 12.5 Z"
             fill="#09090b"
-            stroke="#c084fc"
+            stroke="#ffffff"
             strokeWidth="1.5"
             strokeLinejoin="round"
           />
@@ -136,10 +140,10 @@ export function CanvasCursorSvg({ cursorStyle }: { cursorStyle: CursorStyle }) {
       );
     case "neon-laser":
       return (
-        <svg viewBox="0 0 24 24" className="size-6 filter drop-shadow-[0_0_8px_rgba(6,182,212,0.8)]">
-          <path d="M2 2 L8 22 L12 14 Z" fill="#06b6d4" />
-          <path d="M2 2 L12 14 L20 12 Z" fill="#ec4899" />
-          <path d="M2 2 L8 22 L12 14 L20 12 Z M2 2 L12 14" stroke="#ffffff" strokeWidth="1" strokeLinejoin="round" fill="none" />
+        <svg viewBox="0 0 24 24" className="size-6 filter drop-shadow-[0_0_8px_rgba(255,255,255,0.8)]">
+          <path d="M2 2 L8 22 L12 14 Z" fill="#ffffff" />
+          <path d="M2 2 L12 14 L20 12 Z" fill="#71717a" />
+          <path d="M2 2 L8 22 L12 14 L20 12 Z M2 2 L12 14" stroke="#000000" strokeWidth="1" strokeLinejoin="round" fill="none" />
         </svg>
       );
     case "spotlight-glow":
@@ -148,25 +152,24 @@ export function CanvasCursorSvg({ cursorStyle }: { cursorStyle: CursorStyle }) {
           <defs>
             <radialGradient id="canvasSpotlightGlowGrad" cx="50%" cy="50%" r="50%">
               <stop offset="0%" stopColor="#ffffff" stopOpacity="0.45" />
-              <stop offset="50%" stopColor="#f59e0b" stopOpacity="0.2" />
-              <stop offset="100%" stopColor="#f59e0b" stopOpacity="0" />
+              <stop offset="100%" stopColor="#ffffff" stopOpacity="0" />
             </radialGradient>
           </defs>
           <circle cx="16" cy="16" r="14" fill="url(#canvasSpotlightGlowGrad)" />
-          <circle cx="16" cy="16" r="3.5" fill="#ffffff" stroke="#f59e0b" strokeWidth="1.5" />
+          <circle cx="16" cy="16" r="3.5" fill="#ffffff" stroke="#000000" strokeWidth="1.5" />
         </svg>
       );
     case "aurora-trail":
       return (
-        <svg viewBox="0 0 24 24" className="size-6 filter drop-shadow-[0_0_8px_rgba(45,212,191,0.7)]">
+        <svg viewBox="0 0 24 24" className="size-6 filter drop-shadow-[0_0_8px_rgba(255,255,255,0.7)]">
           <defs>
             <linearGradient id="canvasAuroraGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-              <stop offset="0%" stopColor="#2dd4bf" />
-              <stop offset="100%" stopColor="#a855f7" />
+              <stop offset="0%" stopColor="#ffffff" />
+              <stop offset="100%" stopColor="#71717a" />
             </linearGradient>
           </defs>
-          <path d="M10 16 Q14 18 19 21" stroke="#a855f7" strokeWidth="1.5" strokeLinecap="round" opacity="0.7" fill="none" />
-          <path d="M13 13 Q17 14 22 16" stroke="#2dd4bf" strokeWidth="1.5" strokeLinecap="round" opacity="0.6" fill="none" />
+          <path d="M10 16 Q14 18 19 21" stroke="#ffffff" strokeWidth="1.5" strokeLinecap="round" opacity="0.7" fill="none" />
+          <path d="M13 13 Q17 14 22 16" stroke="#a1a1aa" strokeWidth="1.5" strokeLinecap="round" opacity="0.6" fill="none" />
           <path d="M2 2 L5 18 L10 13 L17 11 Z" fill="url(#canvasAuroraGrad)" stroke="#ffffff" strokeWidth="1.2" strokeLinejoin="round" />
         </svg>
       );
@@ -175,9 +178,8 @@ export function CanvasCursorSvg({ cursorStyle }: { cursorStyle: CursorStyle }) {
         <svg viewBox="0 0 24 24" className="size-6 drop-shadow-md">
           <defs>
             <linearGradient id="canvasGradientBeamGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-              <stop offset="0%" stopColor="#ff7a1a" />
-              <stop offset="50%" stopColor="#ec4899" />
-              <stop offset="100%" stopColor="#6366f1" />
+              <stop offset="0%" stopColor="#ffffff" />
+              <stop offset="100%" stopColor="#52525b" />
             </linearGradient>
           </defs>
           <path
@@ -192,18 +194,18 @@ export function CanvasCursorSvg({ cursorStyle }: { cursorStyle: CursorStyle }) {
     case "precision-pen":
       return (
         <svg viewBox="0 0 24 24" className="size-6 drop-shadow-md">
-          <path d="M2 2 L9 5 L16 13 L13 16 L5 9 Z" fill="#e2e8f0" stroke="#0f172a" strokeWidth="1.2" strokeLinejoin="round" />
-          <path d="M13 16 L16 13 L20 17 L17 20 Z" fill="#eab308" stroke="#0f172a" strokeWidth="1.2" strokeLinejoin="round" />
-          <line x1="2" y1="2" x2="8" y2="8" stroke="#0f172a" strokeWidth="1.2" />
-          <circle cx="8" cy="8" r="1.5" fill="#0f172a" />
+          <path d="M2 2 L9 5 L16 13 L13 16 L5 9 Z" fill="#ffffff" stroke="#000000" strokeWidth="1.2" strokeLinejoin="round" />
+          <path d="M13 16 L16 13 L20 17 L17 20 Z" fill="#71717a" stroke="#000000" strokeWidth="1.2" strokeLinejoin="round" />
+          <line x1="2" y1="2" x2="8" y2="8" stroke="#000000" strokeWidth="1.2" />
+          <circle cx="8" cy="8" r="1.5" fill="#000000" />
         </svg>
       );
     case "highlighter":
       return (
-        <svg viewBox="0 0 24 24" className="size-6 filter drop-shadow-[0_0_6px_rgba(250,204,21,0.5)]">
-          <path d="M2 2 L6 1 L9 6 L4 8 Z" fill="#fde047" stroke="#ca8a04" strokeWidth="1" strokeLinejoin="round" />
-          <path d="M4 8 L9 6 L12 10 L7 12 Z" fill="#334155" stroke="#0f172a" strokeWidth="1" strokeLinejoin="round" />
-          <path d="M7 12 L12 10 L19 19 L14 21 Z" fill="#facc15" stroke="#0f172a" strokeWidth="1" strokeLinejoin="round" />
+        <svg viewBox="0 0 24 24" className="size-6 filter drop-shadow-[0_0_6px_rgba(255,255,255,0.5)]">
+          <path d="M2 2 L6 1 L9 6 L4 8 Z" fill="#ffffff" stroke="#000000" strokeWidth="1" strokeLinejoin="round" />
+          <path d="M4 8 L9 6 L12 10 L7 12 Z" fill="#3f3f46" stroke="#000000" strokeWidth="1" strokeLinejoin="round" />
+          <path d="M7 12 L12 10 L19 19 L14 21 Z" fill="#a1a1aa" stroke="#000000" strokeWidth="1" strokeLinejoin="round" />
         </svg>
       );
     case "tactile-pointer":
@@ -355,6 +357,17 @@ export function VideoCanvas({ project, currentTimeMs: propTimeMs }: VideoCanvasP
   const currentTimeMs = propTimeMs ?? storeTimeMs;
   const { summary, zoomBlocks, looks, clicks, keyframes, effects } = project;
   const isPlaying = useEditor((s) => s.isPlaying);
+
+  const isTraceShiftingMode = useEditor((s) => s.isTraceShiftingMode);
+  const traceWaypoints = useEditor((s) => s.traceWaypoints);
+  const addTraceWaypoint = useEditor((s) => s.addTraceWaypoint);
+  const addTraceStroke = useEditor((s) => s.addTraceStroke);
+  const removeTraceWaypoint = useEditor((s) => s.removeTraceWaypoint);
+  const setTraceShiftingMode = useEditor((s) => s.setTraceShiftingMode);
+  const applyTraceShifting = useEditor((s) => s.applyTraceShifting);
+  const followDrawnLine = useEditor((s) => s.followDrawnLine);
+  const clearTraceWaypoints = useEditor((s) => s.clearTraceWaypoints);
+
   const videoRef = useRef<HTMLVideoElement>(null);
   const viewportRef = useRef<HTMLDivElement>(null);
   const prevTimeRef = useRef(currentTimeMs);
@@ -362,7 +375,119 @@ export function VideoCanvas({ project, currentTimeMs: propTimeMs }: VideoCanvasP
   const lastClickSfxPlaybackTimeRef = useRef<number>(-999999);
   const [clickShiftMarker, setClickShiftMarker] = useState<{ x: number; y: number; id: number } | null>(null);
 
+  // Live freehand drawing state
+  const [isDrawingStroke, setIsDrawingStroke] = useState(false);
+  const [liveStrokePoints, setLiveStrokePoints] = useState<Array<{ x: number; y: number }>>([]);
+  const strokePointsRef = useRef<Array<{ x: number; y: number }>>([]);
+  const [cursorScreenPos, setCursorScreenPos] = useState<{ x: number; y: number } | null>(null);
+
+  const handlePointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (!isTraceShiftingMode) return;
+    e.preventDefault();
+    e.stopPropagation();
+
+    const container = viewportRef.current;
+    if (!container) return;
+
+    try {
+      e.currentTarget.setPointerCapture(e.pointerId);
+    } catch {}
+
+    const rect = container.getBoundingClientRect();
+    const clickX = e.clientX - rect.left;
+    const clickY = e.clientY - rect.top;
+
+    const videoCoords = screenToVideoCoordinates(
+      clickX,
+      clickY,
+      rect.width,
+      rect.height,
+      camera,
+    );
+
+    strokePointsRef.current = [videoCoords];
+    setLiveStrokePoints([videoCoords]);
+    setCursorScreenPos({ x: clickX, y: clickY });
+    setIsDrawingStroke(true);
+  };
+
+  const handlePointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (!isTraceShiftingMode) return;
+    const container = viewportRef.current;
+    if (!container) return;
+
+    const rect = container.getBoundingClientRect();
+    const clickX = e.clientX - rect.left;
+    const clickY = e.clientY - rect.top;
+    setCursorScreenPos({ x: clickX, y: clickY });
+
+    if (!isDrawingStroke || strokePointsRef.current.length === 0) return;
+    e.preventDefault();
+    e.stopPropagation();
+
+    const videoCoords = screenToVideoCoordinates(
+      clickX,
+      clickY,
+      rect.width,
+      rect.height,
+      camera,
+    );
+
+    const lastPt = strokePointsRef.current[strokePointsRef.current.length - 1]!;
+    const dist = Math.hypot(videoCoords.x - lastPt.x, videoCoords.y - lastPt.y);
+
+    // Keep points spaced with organic interval (at least ~0.012 distance)
+    if (dist >= 0.012) {
+      strokePointsRef.current.push(videoCoords);
+      setLiveStrokePoints([...strokePointsRef.current]);
+    }
+  };
+
+  const handlePointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (!isTraceShiftingMode || !isDrawingStroke) return;
+    e.preventDefault();
+    e.stopPropagation();
+
+    try {
+      e.currentTarget.releasePointerCapture(e.pointerId);
+    } catch {}
+
+    setIsDrawingStroke(false);
+    setCursorScreenPos(null);
+
+    const pts = strokePointsRef.current;
+    strokePointsRef.current = [];
+    setLiveStrokePoints([]);
+
+    if (pts.length === 0) return;
+
+    if (pts.length === 1) {
+      // Single tap / click: add individual waypoint
+      addTraceWaypoint(pts[0]!);
+      setClickShiftMarker({ x: e.clientX, y: e.clientY, id: Date.now() });
+      setTimeout(() => setClickShiftMarker(null), 600);
+    } else {
+      // Freehand stroke drawn! Smooth and resample to clean camera path
+      const smoothed = processDrawnTracePath(pts, {
+        maxPoints: 16,
+        smoothingPasses: 1,
+        minDistance: 0.015,
+      });
+      addTraceStroke(smoothed);
+    }
+  };
+
+  const handlePointerCancel = () => {
+    setIsDrawingStroke(false);
+    setCursorScreenPos(null);
+    strokePointsRef.current = [];
+    setLiveStrokePoints([]);
+  };
+
   const handleCanvasClick = (e: React.MouseEvent<HTMLDivElement>) => {
+    // If in trace mode, handled by pointer events
+    if (isTraceShiftingMode) return;
+
     const container = viewportRef.current;
     if (!container) return;
 
@@ -820,7 +945,13 @@ export function VideoCanvas({ project, currentTimeMs: propTimeMs }: VideoCanvasP
         ref={viewportRef}
         data-tutorial-target="canvas-player"
         onClick={handleCanvasClick}
-        className="relative flex flex-col max-h-full max-w-full overflow-hidden bg-ink-950 cursor-crosshair group select-none transition-transform duration-300"
+        onPointerDown={handlePointerDown}
+        onPointerMove={handlePointerMove}
+        onPointerUp={handlePointerUp}
+        onPointerCancel={handlePointerCancel}
+        className={`relative flex flex-col max-h-full max-w-full overflow-hidden bg-ink-950 ${
+          isTraceShiftingMode ? "cursor-crosshair ring-2 ring-white/60 touch-none" : "cursor-crosshair"
+        } group select-none transition-transform duration-300`}
         style={{
           aspectRatio: viewportAspectRatio,
           borderRadius: `${looks.borderRadius}px`,
@@ -828,8 +959,18 @@ export function VideoCanvas({ project, currentTimeMs: propTimeMs }: VideoCanvasP
           transform: `perspective(${tilt3D.perspective}px) rotateX(${tilt3D.rotateX}deg) rotateY(${tilt3D.rotateY}deg) rotateZ(${tilt3D.rotateZ}deg)`,
           transformStyle: "preserve-3d",
         }}
-        title="Click anywhere to shift camera focal center"
+        title={isTraceShiftingMode ? "Click & drag on video to draw zoom trajectory line" : "Click anywhere to shift camera focal center"}
       >
+        {/* Dedicated Transparent Drawing Capture Surface in Trace Mode */}
+        {isTraceShiftingMode && (
+          <div
+            className="absolute inset-0 z-35 cursor-crosshair select-none touch-none"
+            onPointerDown={handlePointerDown}
+            onPointerMove={handlePointerMove}
+            onPointerUp={handlePointerUp}
+            onPointerCancel={handlePointerCancel}
+          />
+        )}
         {/* Specular Glass Glare Sheen Overlay */}
         {looks.tiltGlare && (
           <div
@@ -866,9 +1007,9 @@ export function VideoCanvas({ project, currentTimeMs: propTimeMs }: VideoCanvasP
             {looks.windowFrame === "macos" && (
               <div className="relative w-full shrink-0 h-7 z-30 flex items-center justify-between px-3 bg-[#1e1e20]/90 backdrop-blur-md border-b border-white/10 select-none pointer-events-none">
                 <div className="flex items-center gap-1.5 shrink-0">
-                  <span className="size-2.5 rounded-full bg-[#ff5f56] border border-black/20" />
-                  <span className="size-2.5 rounded-full bg-[#ffbd2e] border border-black/20" />
-                  <span className="size-2.5 rounded-full bg-[#27c93f] border border-black/20" />
+                  <span className="size-2.5 rounded-full bg-neutral-600 border border-neutral-700" />
+                  <span className="size-2.5 rounded-full bg-neutral-500 border border-neutral-700" />
+                  <span className="size-2.5 rounded-full bg-neutral-400 border border-neutral-700" />
                 </div>
                 <div className="w-12 shrink-0" />
               </div>
@@ -878,8 +1019,8 @@ export function VideoCanvas({ project, currentTimeMs: propTimeMs }: VideoCanvasP
             {looks.windowFrame === "windows" && (
               <div className="relative w-full shrink-0 h-8 z-30 flex items-center justify-between px-2 bg-[#1f1f1f] border-b border-white/10 select-none pointer-events-none">
                 <div className="flex items-center gap-1.5 h-full pt-1">
-                  <div className="flex items-center gap-2 bg-[#2d2d2d] text-white px-2.5 py-1 rounded-t text-[11px] font-mono border-t-2 border-sky-400 shadow-sm">
-                    <span className="text-sky-400 font-bold text-xs select-none">&gt;_</span>
+                  <div className="flex items-center gap-2 bg-[#2d2d2d] text-white px-2.5 py-1 rounded-t text-[11px] font-mono border-t-2 border-white/60 shadow-sm">
+                    <span className="text-white font-bold text-xs select-none">&gt;_</span>
                     <span className="text-neutral-400 text-[10px] ml-1">✕</span>
                   </div>
                   <span className="text-neutral-400 text-xs px-1 select-none">+</span>
@@ -902,9 +1043,9 @@ export function VideoCanvas({ project, currentTimeMs: propTimeMs }: VideoCanvasP
             {looks.windowFrame === "terminal" && (
               <div className="relative w-full shrink-0 h-7 z-30 flex items-center justify-between px-3 bg-[#18181a] border-b border-white/10 select-none pointer-events-none">
                 <div className="flex items-center gap-1.5 shrink-0">
-                  <span className="size-2.5 rounded-full bg-[#ff5f56] border border-black/20" />
-                  <span className="size-2.5 rounded-full bg-[#ffbd2e] border border-black/20" />
-                  <span className="size-2.5 rounded-full bg-[#27c93f] border border-black/20" />
+                  <span className="size-2.5 rounded-full bg-neutral-600 border border-neutral-700" />
+                  <span className="size-2.5 rounded-full bg-neutral-500 border border-neutral-700" />
+                  <span className="size-2.5 rounded-full bg-neutral-400 border border-neutral-700" />
                 </div>
                 <div className="w-12 shrink-0" />
               </div>
@@ -946,9 +1087,9 @@ export function VideoCanvas({ project, currentTimeMs: propTimeMs }: VideoCanvasP
               <div className="relative w-full shrink-0 h-7 z-30 flex items-center justify-between px-3 bg-[#242426]/95 backdrop-blur-md border-b border-white/10 select-none pointer-events-none">
                 <div className="flex items-center gap-2.5">
                   <div className="flex items-center gap-1.5 shrink-0">
-                    <span className="size-2.5 rounded-full bg-[#ff5f56] border border-black/20" />
-                    <span className="size-2.5 rounded-full bg-[#ffbd2e] border border-black/20" />
-                    <span className="size-2.5 rounded-full bg-[#27c93f] border border-black/20" />
+                    <span className="size-2.5 rounded-full bg-neutral-600 border border-neutral-700" />
+                    <span className="size-2.5 rounded-full bg-neutral-500 border border-neutral-700" />
+                    <span className="size-2.5 rounded-full bg-neutral-400 border border-neutral-700" />
                   </div>
                   <div className="flex items-center gap-1.5 text-neutral-400 text-[10px] font-semibold pl-1">
                     <span>‹</span>
@@ -1210,6 +1351,179 @@ export function VideoCanvas({ project, currentTimeMs: propTimeMs }: VideoCanvasP
           </div>
         )}
 
+        {/* Editor-Only Interactive Ghost Trajectory Path (Never rendered on final export) */}
+        {(isTraceShiftingMode || traceWaypoints.length > 0 || liveStrokePoints.length > 0) && (
+          <div className="absolute inset-0 pointer-events-none z-35 overflow-hidden">
+            <svg className="size-full">
+              {/* In-progress live freehand drawn stroke */}
+              {liveStrokePoints.length > 1 && (
+                <path
+                  d={pointsToSmoothSvgPath(liveStrokePoints, (x, y) => mapPt(x, y))}
+                  fill="none"
+                  stroke="#ffffff"
+                  strokeWidth="3.5"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  style={{ filter: "drop-shadow(0 2px 8px rgba(0,0,0,0.9))" }}
+                />
+              )}
+
+              {/* Committed trajectory path with smooth bezier curves */}
+              {traceWaypoints.length > 1 && (
+                <path
+                  d={pointsToSmoothSvgPath(traceWaypoints, (x, y) => mapPt(x, y))}
+                  fill="none"
+                  stroke="#ffffff"
+                  strokeWidth="3"
+                  strokeDasharray="8 5"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  style={{ filter: "drop-shadow(0 2px 6px rgba(0,0,0,0.85))" }}
+                />
+              )}
+            </svg>
+
+            {/* Committed waypoints markers */}
+            {traceWaypoints.map((wp, idx) => {
+              const pt = mapPt(wp.x, wp.y);
+              const isStart = idx === 0;
+              const isEnd = idx === traceWaypoints.length - 1 && traceWaypoints.length > 1;
+
+              return (
+                <div
+                  key={wp.id}
+                  className="absolute -translate-x-1/2 -translate-y-1/2 flex flex-col items-center pointer-events-auto cursor-pointer group"
+                  style={{
+                    left: `${pt.x * 100}%`,
+                    top: `${pt.y * 100}%`,
+                  }}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    removeTraceWaypoint(wp.id);
+                  }}
+                  title={`Waypoint #${idx + 1}: (${Math.round(wp.x * 100)}%, ${Math.round(wp.y * 100)}%) - Click to remove`}
+                >
+                  <div
+                    className={`size-5 rounded-full border-2 flex items-center justify-center text-[9px] font-bold shadow-lg transition-transform group-hover:scale-125 ${
+                      isStart
+                        ? "bg-white text-black border-white ring-2 ring-white/40"
+                        : isEnd
+                        ? "bg-neutral-900 text-white border-white ring-2 ring-white/30"
+                        : "bg-black text-white border-neutral-300"
+                    }`}
+                  >
+                    {idx + 1}
+                  </div>
+
+                  {/* Role label badge for start and end */}
+                  {isStart && (
+                    <span className="text-[8px] font-bold tracking-wider text-black bg-white px-1.5 py-0.2 rounded-full mt-1 whitespace-nowrap shadow-md uppercase">
+                      Start (Zoom In)
+                    </span>
+                  )}
+                  {isEnd && (
+                    <span className="text-[8px] font-bold tracking-wider text-white bg-black/90 border border-white/30 px-1.5 py-0.2 rounded-full mt-1 whitespace-nowrap shadow-md uppercase">
+                      End (Zoom Out)
+                    </span>
+                  )}
+                  {!isStart && !isEnd && (
+                    <span className="text-[9px] font-mono text-white/90 bg-black/80 px-1 rounded mt-0.5 whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity">
+                      {Math.round(wp.x * 100)}%, {Math.round(wp.y * 100)}%
+                    </span>
+                  )}
+                </div>
+              );
+            })}
+
+            {/* Live indicator following cursor during active stroke */}
+            {isDrawingStroke && cursorScreenPos && (
+              <div
+                className="absolute pointer-events-none -translate-x-1/2 -translate-y-9 z-50 flex items-center gap-1.5 rounded-full bg-black/90 border border-white/40 px-2.5 py-1 text-[10px] font-semibold text-white shadow-xl whitespace-nowrap"
+                style={{ left: cursorScreenPos.x, top: cursorScreenPos.y }}
+              >
+                <Pencil className="size-3 text-white" />
+                <span>Drawing Camera Path ({liveStrokePoints.length} pts)</span>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Trace Shifting Mode Active Canvas Banner */}
+        {isTraceShiftingMode ? (
+          <div className="absolute top-3 left-1/2 -translate-x-1/2 flex items-center gap-2 rounded-full bg-black/95 border border-white/40 px-3.5 py-1.5 backdrop-blur-md z-40 shadow-2xl select-none">
+            <span className="size-2 rounded-full bg-white animate-ping shrink-0" />
+            <span className="text-xs font-semibold text-white">
+              {isDrawingStroke
+                ? `Drawing camera path (${liveStrokePoints.length} points)...`
+                : traceWaypoints.length > 0
+                ? `Camera Path: ${traceWaypoints.length} nodes ready`
+                : "Drag across video screen to draw camera path"}
+            </span>
+            <div className="h-3 w-px bg-white/20 mx-0.5" />
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                followDrawnLine();
+              }}
+              disabled={traceWaypoints.length === 0}
+              className="rounded-full bg-white text-black font-bold px-3 py-1 text-[10px] hover:bg-neutral-200 transition-colors disabled:opacity-40 flex items-center gap-1 shadow-sm"
+              title="Play camera zooming and following this drawn line"
+            >
+              <Play className="size-2.5 fill-black" />
+              <span>Follow Line</span>
+            </button>
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                applyTraceShifting();
+              }}
+              disabled={traceWaypoints.length === 0}
+              className="rounded-full border border-white/50 text-white font-medium px-2.5 py-1 text-[10px] hover:bg-white/10 transition-colors disabled:opacity-40"
+              title="Save camera path to timeline"
+            >
+              Apply
+            </button>
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                clearTraceWaypoints();
+              }}
+              className="text-[10px] text-neutral-400 hover:text-white px-1.5 transition-colors"
+              title="Clear all waypoints to draw again"
+            >
+              Clear
+            </button>
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                setTraceShiftingMode(false);
+              }}
+              className="text-[10px] text-neutral-400 hover:text-white px-1"
+              title="Exit draw mode"
+            >
+              ✕
+            </button>
+          </div>
+        ) : (
+          /* Subtle Canvas Quick-Entry Button when NOT in draw mode */
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              setTraceShiftingMode(true);
+            }}
+            className="absolute top-2.5 right-2.5 z-30 flex items-center gap-1.5 rounded-full bg-black/75 hover:bg-black border border-white/20 hover:border-white/60 px-2.5 py-1 text-[10px] font-medium text-white shadow-lg backdrop-blur-md transition-all opacity-80 hover:opacity-100"
+            title="Draw zoom and camera shift trajectory on video screen (D)"
+          >
+            <Pencil className="size-3 text-white" />
+            <span>Draw Path</span>
+          </button>
+        )}
+
         {/* Dynamic Kinetic Text Cards on Video */}
         {project.textOverlays?.map((textOverlay) => {
           const motion = evaluateTextOverlayMotion(textOverlay, currentTimeMs);
@@ -1263,7 +1577,7 @@ export function VideoCanvas({ project, currentTimeMs: propTimeMs }: VideoCanvasP
                     data-testid={`text-kicker-${textOverlay.id}`}
                     className="text-[10px] font-bold tracking-wider leading-none select-none mb-1 opacity-90"
                     style={{
-                      color: looks.brandAccentColor || (isTerminal ? "#4ade80" : "#a5b4fc"),
+                      color: looks.brandAccentColor || "#ffffff",
                       letterSpacing: textOverlay.typography?.letterSpacing || "0.08em",
                       textTransform: textOverlay.typography?.kickerTransform || "uppercase",
                       fontFamily,

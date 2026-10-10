@@ -1986,3 +1986,132 @@ export function ensureCursorTrajectory(
   }
   return pts;
 }
+
+/**
+ * Smooths and resamples a freehand drawn stroke of points into a clean, uniform camera path.
+ * 1. Filters duplicate/micro-jitter points.
+ * 2. Applies Chaikin curve subdivision for smooth curvature without sharp corners.
+ * 3. Parameterizes by cumulative arc-length for uniform, physically smooth camera velocity.
+ */
+export function processDrawnTracePath(
+  rawPoints: Array<{ x: number; y: number }>,
+  options?: {
+    maxPoints?: number;
+    smoothingPasses?: number;
+    minDistance?: number;
+  },
+): Array<{ x: number; y: number }> {
+  if (!rawPoints || rawPoints.length <= 2) {
+    return rawPoints ? [...rawPoints] : [];
+  }
+
+  const minDistance = options?.minDistance ?? 0.012;
+  const maxPoints = options?.maxPoints ?? 16;
+  const smoothingPasses = options?.smoothingPasses ?? 1;
+
+  // 1. Distance filter: keep points that have meaningful spacing
+  const filtered: Array<{ x: number; y: number }> = [rawPoints[0]!];
+  for (let i = 1; i < rawPoints.length - 1; i++) {
+    const prev = filtered[filtered.length - 1]!;
+    const cur = rawPoints[i]!;
+    const dist = Math.hypot(cur.x - prev.x, cur.y - prev.y);
+    if (dist >= minDistance) {
+      filtered.push(cur);
+    }
+  }
+  filtered.push(rawPoints[rawPoints.length - 1]!);
+
+  if (filtered.length <= 2) {
+    return filtered;
+  }
+
+  // 2. Chaikin curve smoothing
+  let smoothed = filtered;
+  for (let pass = 0; pass < smoothingPasses; pass++) {
+    const next: Array<{ x: number; y: number }> = [smoothed[0]!];
+    for (let i = 0; i < smoothed.length - 1; i++) {
+      const p0 = smoothed[i]!;
+      const p1 = smoothed[i + 1]!;
+      next.push({
+        x: 0.75 * p0.x + 0.25 * p1.x,
+        y: 0.75 * p0.y + 0.25 * p1.y,
+      });
+      next.push({
+        x: 0.25 * p0.x + 0.75 * p1.x,
+        y: 0.25 * p0.y + 0.75 * p1.y,
+      });
+    }
+    next.push(smoothed[smoothed.length - 1]!);
+    smoothed = next;
+  }
+
+  // 3. Arc-length uniform resampling
+  const cumDists: number[] = [0];
+  for (let i = 1; i < smoothed.length; i++) {
+    const p0 = smoothed[i - 1]!;
+    const p1 = smoothed[i]!;
+    cumDists.push(cumDists[i - 1]! + Math.hypot(p1.x - p0.x, p1.y - p0.y));
+  }
+  const totalLength = cumDists[cumDists.length - 1]!;
+
+  if (totalLength < 0.01) {
+    return smoothed;
+  }
+
+  const numSamplePoints = Math.min(
+    maxPoints,
+    Math.max(4, Math.round(totalLength / 0.05)),
+  );
+
+  const resampled: Array<{ x: number; y: number }> = [smoothed[0]!];
+  for (let s = 1; s < numSamplePoints - 1; s++) {
+    const targetDist = (s / (numSamplePoints - 1)) * totalLength;
+    let segIdx = 0;
+    while (segIdx < cumDists.length - 1 && cumDists[segIdx + 1]! < targetDist) {
+      segIdx++;
+    }
+    const d0 = cumDists[segIdx]!;
+    const d1 = cumDists[segIdx + 1]!;
+    const segSpan = Math.max(0.0001, d1 - d0);
+    const alpha = Math.max(0, Math.min(1, (targetDist - d0) / segSpan));
+    const p0 = smoothed[segIdx]!;
+    const p1 = smoothed[segIdx + 1]!;
+    resampled.push({
+      x: p0.x + alpha * (p1.x - p0.x),
+      y: p0.y + alpha * (p1.y - p0.y),
+    });
+  }
+  resampled.push(smoothed[smoothed.length - 1]!);
+
+  return resampled;
+}
+
+/**
+ * Converts an array of points into a smooth SVG bezier path 'd' attribute.
+ */
+export function pointsToSmoothSvgPath(
+  points: Array<{ x: number; y: number }>,
+  mapFn?: (x: number, y: number) => { x: number; y: number },
+): string {
+  if (!points || points.length === 0) return "";
+  const pts = mapFn ? points.map((p) => mapFn(p.x, p.y)) : points;
+  if (pts.length === 1) {
+    return `M ${pts[0]!.x} ${pts[0]!.y}`;
+  }
+  if (pts.length === 2) {
+    return `M ${pts[0]!.x} ${pts[0]!.y} L ${pts[1]!.x} ${pts[1]!.y}`;
+  }
+
+  let d = `M ${pts[0]!.x} ${pts[0]!.y}`;
+  for (let i = 1; i < pts.length - 1; i++) {
+    const cur = pts[i]!;
+    const next = pts[i + 1]!;
+    const midX = (cur.x + next.x) / 2;
+    const midY = (cur.y + next.y) / 2;
+    d += ` Q ${cur.x} ${cur.y}, ${midX} ${midY}`;
+  }
+  const last = pts[pts.length - 1]!;
+  d += ` L ${last.x} ${last.y}`;
+  return d;
+}
+

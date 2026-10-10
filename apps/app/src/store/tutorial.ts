@@ -59,8 +59,6 @@ export const TUTORIAL_STEPS: TutorialStep[] = [
     "32 backgrounds: gradients, glass, monochrome, beige, white and more. All appear in export.", tab: "looks", padding: 8, borderRadius: 12 },
   { id: "tab-cursor", targetKey: "tab-cursor", title: "Cursor Tab", badge: "Tour", description:
     "Pick from 23 tracked cursor styles, resize them and add a user avatar.", tab: "cursor", padding: 8, borderRadius: 12 },
-  { id: "tab-export", targetKey: "tab-export", title: "Export Tab", badge: "Tour", description:
-    "Choose resolution and format. Canvas and video render together.", tab: "export", padding: 8, borderRadius: 12 },
   { id: "tools-collapse", targetKey: "tools-collapse", title: "Collapse Panel", badge: "Tour", description:
     "Collapse the tools panel when you need more canvas space.", padding: 8, borderRadius: 12 },
   { id: "export-button", targetKey: "export-button", title: "Export", badge: "Tour", description:

@@ -142,3 +142,116 @@ export const TYPING_SOUND_PROFILES: Record<Exclude<TypingSoundPreset, "none">, M
     noiseGain: 0.4,
   },
 };
+
+/**
+ * Converts linear volume multiplier (0.0 to 2.0+) to decibels (dB).
+ * Unity gain (1.0) = 0.0 dB. 0.5 ≈ -6.0 dB. 2.0 ≈ +6.0 dB.
+ */
+export function volumeToDb(volume: number): number {
+  if (volume <= 0.0001) return -48;
+  const db = 20 * Math.log10(volume);
+  return Math.round(db * 10) / 10;
+}
+
+/**
+ * Converts decibels (dB) to linear volume multiplier.
+ * 0.0 dB = 1.0. -6.0 dB ≈ 0.5. +6.0 dB ≈ 2.0. <= -48 dB = 0.
+ */
+export function dbToVolume(db: number): number {
+  if (db <= -45) return 0;
+  const linear = Math.pow(10, db / 20);
+  return Math.round(linear * 1000) / 1000;
+}
+
+/**
+ * Background music preset definitions with acoustic styles.
+ */
+export interface MusicPreset {
+  id: string;
+  name: string;
+  description: string;
+  tempoBpm: number;
+  durationMs: number;
+  genre: "lofi" | "ambient" | "cinematic" | "tech" | "corporate";
+}
+
+export const BACKGROUND_MUSIC_PRESETS: MusicPreset[] = [
+  {
+    id: "lofi-focus",
+    name: "Lo-Fi Warmth",
+    description: "Warm mellow keys, gentle vinyl crackle, and soft hip-hop groove",
+    tempoBpm: 82,
+    durationMs: 60000,
+    genre: "lofi",
+  },
+  {
+    id: "ambient-tech",
+    name: "Ambient Tech Glow",
+    description: "Subtle futuristic synthesizer pad with crystal reverb",
+    tempoBpm: 95,
+    durationMs: 60000,
+    genre: "ambient",
+  },
+  {
+    id: "cinematic-pulse",
+    name: "Cinematic Pulse",
+    description: "Deep driving minimalist pulse building steady momentum",
+    tempoBpm: 110,
+    durationMs: 60000,
+    genre: "cinematic",
+  },
+  {
+    id: "clean-presentation",
+    name: "Clean Minimal",
+    description: "Crisp neutral acoustic background tailored for product walkthroughs",
+    tempoBpm: 100,
+    durationMs: 60000,
+    genre: "corporate",
+  },
+];
+
+/**
+ * Computes instantaneous track volume at any given time (ms) factoring in:
+ * - Base track volume
+ * - Decibel gain adjustment
+ * - Fade-In envelope
+ * - Fade-Out envelope
+ * - Mute state
+ */
+export function calculateTrackVolumeAtTime(
+  track: import("./project").AudioTrack,
+  timeMs: number,
+): number {
+  if (track.muted) return 0;
+  const trackStart = track.startTimeMs;
+  const trackEnd = track.startTimeMs + track.durationMs;
+
+  if (timeMs < trackStart || timeMs > trackEnd) {
+    return 0;
+  }
+
+  // Base gain from volume or gainDb
+  let baseGain = track.volume ?? 1.0;
+  if (typeof track.gainDb === "number") {
+    baseGain = dbToVolume(track.gainDb);
+  }
+
+  const fadeInMs = Math.max(0, track.fadeInMs ?? 0);
+  const fadeOutMs = Math.max(0, track.fadeOutMs ?? 0);
+
+  let fadeMultiplier = 1.0;
+
+  // Fade In calculation
+  if (fadeInMs > 0 && timeMs < trackStart + fadeInMs) {
+    const elapsed = timeMs - trackStart;
+    fadeMultiplier = Math.min(fadeMultiplier, Math.max(0, elapsed / fadeInMs));
+  }
+
+  // Fade Out calculation
+  if (fadeOutMs > 0 && timeMs > trackEnd - fadeOutMs) {
+    const remaining = trackEnd - timeMs;
+    fadeMultiplier = Math.min(fadeMultiplier, Math.max(0, remaining / fadeOutMs));
+  }
+
+  return Math.max(0, Math.min(2.0, baseGain * fadeMultiplier));
+}

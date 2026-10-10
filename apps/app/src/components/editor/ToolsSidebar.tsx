@@ -4,7 +4,6 @@ import {
   Type,
   Paintbrush,
   MousePointer,
-  Download,
   ChevronRight,
   ChevronLeft,
   Plus,
@@ -26,11 +25,18 @@ import {
   Crown,
   Heart,
   User,
+  Music,
+  VolumeX,
+  Upload,
+  Pencil,
 } from "lucide-react";
 import {
   formatDuration,
   BACKGROUND_CATEGORIES,
   BACKGROUND_PRESETS,
+  BACKGROUND_MUSIC_PRESETS,
+  volumeToDb,
+  dbToVolume,
   CURSOR_PRESETS,
   DEFAULT_CURSOR_AVATAR,
   type CursorAvatar,
@@ -94,13 +100,31 @@ export function ToolsSidebar() {
   const selectEffect = useEditor((s) => s.selectEffect);
   const selectText = useEditor((s) => s.selectText);
   const selectBlock = useEditor((s) => s.selectBlock);
-  const setExportModalOpen = useEditor((s) => s.setExportModalOpen);
   const toolsSidebarWidth = useEditor((s) => s.toolsSidebarWidth);
   const resetLayoutDimensions = useEditor((s) => s.resetLayoutDimensions);
+
+  const selectedAudioId = useEditor((s) => s.selectedAudioId);
+  const selectAudio = useEditor((s) => s.selectAudio);
+  const updateAudioTrack = useEditor((s) => s.updateAudioTrack);
+  const deleteAudioTrack = useEditor((s) => s.deleteAudioTrack);
+  const addMusicTrackAtCurrentTime = useEditor((s) => s.addMusicTrackAtCurrentTime);
+  const addAudioTrack = useEditor((s) => s.addAudioTrack);
+  const applyAudioVolumeToAll = useEditor((s) => s.applyAudioVolumeToAll);
+
+  const isTraceShiftingMode = useEditor((s) => s.isTraceShiftingMode);
+  const setTraceShiftingMode = useEditor((s) => s.setTraceShiftingMode);
+  const traceWaypoints = useEditor((s) => s.traceWaypoints);
+  const addTraceWaypoint = useEditor((s) => s.addTraceWaypoint);
+  const removeTraceWaypoint = useEditor((s) => s.removeTraceWaypoint);
+  const clearTraceWaypoints = useEditor((s) => s.clearTraceWaypoints);
+  const applyTraceShifting = useEditor((s) => s.applyTraceShifting);
+  const followDrawnLine = useEditor((s) => s.followDrawnLine);
 
   const [holdDurationSec, setHoldDurationSec] = useState(1.0);
   const [shiftDurationSec, setShiftDurationSec] = useState(0.75);
   const [zoomScale, setZoomScale] = useState(1.85);
+  const [traceDurationSec, setTraceDurationSec] = useState(2.8);
+  const [traceScale, setTraceScale] = useState(1.85);
   const [selectedBgCategory, setSelectedBgCategory] = useState<string>("all");
 
   const [bottomPanelHeight, setBottomPanelHeight] = useState<number>(() => {
@@ -148,13 +172,13 @@ export function ToolsSidebar() {
     { id: "audio", label: "Audio", icon: <Volume2 className="size-3.5" /> },
     { id: "looks", label: "Canvas", icon: <Paintbrush className="size-3.5" /> },
     { id: "cursor", label: "Cursor", icon: <MousePointer className="size-3.5" /> },
-    { id: "export", label: "Export", icon: <Download className="size-3.5" /> },
   ];
 
   const selectedBlock = project?.zoomBlocks.find((b) => b.id === selectedBlockId);
   const selectedKeyframe = project?.keyframes?.find((kf) => kf.id === selectedKeyframeId);
   const selectedEffect = project?.effects?.find((e) => e.id === selectedEffectId);
   const selectedText = project?.textOverlays?.find((t) => t.id === selectedTextId);
+  const selectedAudio = project?.audioTracks?.find((a) => a.id === selectedAudioId);
 
   return (
     <aside
@@ -327,6 +351,421 @@ export function ToolsSidebar() {
                 </button>
               </div>
             </div>
+
+            {/* TRACE SHIFTING ANIMATION (PATH TRAJECTORY) */}
+            <div className="rounded-xl border border-neutral-700 bg-neutral-900 p-3 shadow-sm space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Pencil className="size-4 text-white" />
+                  <span className="font-semibold text-white text-xs">Trace Shifting (Draw to Zoom)</span>
+                </div>
+                <span className="rounded bg-neutral-800 border border-neutral-700 px-1.5 py-0.5 text-[9px] font-mono text-neutral-300">
+                  {traceWaypoints.length > 0 ? `${traceWaypoints.length} Nodes` : "Freehand / Line"}
+                </span>
+              </div>
+              <p className="text-[11px] text-fg-muted leading-relaxed">
+                Draw or drag a line directly on the video screen. The zoom camera smoothly zooms in, follows that line, and zooms back out. The trajectory line is an editor guide and is never rendered on the video.
+              </p>
+
+              <div className="space-y-2 bg-ink-950/60 rounded-lg p-2.5 border border-ink-800">
+                {/* Drawing Mode Toggle Button */}
+                <button
+                  type="button"
+                  onClick={() => setTraceShiftingMode(!isTraceShiftingMode)}
+                  className={`w-full rounded-lg py-2 px-3 text-xs font-bold transition-all flex items-center justify-center gap-2 ${
+                    isTraceShiftingMode
+                      ? "bg-white text-black ring-2 ring-white/50 shadow-md"
+                      : "border border-neutral-700 bg-neutral-800 text-neutral-100 hover:text-white hover:bg-neutral-700"
+                  }`}
+                >
+                  <Pencil className="size-3.5" />
+                  {isTraceShiftingMode ? "Drawing Mode Active (Drag on Screen)" : "✏️ Draw on Video Screen"}
+                </button>
+
+                {isTraceShiftingMode && (
+                  <div className="rounded-lg border border-neutral-700 bg-neutral-950 p-2 text-[10px] text-neutral-300 leading-snug flex items-start gap-1.5">
+                    <span className="size-1.5 rounded-full bg-white mt-1 shrink-0 animate-ping" />
+                    <span>
+                      <strong>Press and drag</strong> across the video canvas to draw any line or path. As you draw, the camera trajectory renders in real time.
+                    </span>
+                  </div>
+                )}
+
+                {/* Preset Motion Lines */}
+                <div className="space-y-1 pt-1 border-t border-ink-800">
+                  <span className="text-[10px] text-fg-faint block">Quick Trajectory Presets:</span>
+                  <div className="grid grid-cols-3 gap-1">
+                    {[
+                      {
+                        label: "Horizontal Scan",
+                        points: [
+                          { x: 0.20, y: 0.50 },
+                          { x: 0.50, y: 0.50 },
+                          { x: 0.80, y: 0.50 },
+                        ],
+                      },
+                      {
+                        label: "Top-to-Bottom",
+                        points: [
+                          { x: 0.50, y: 0.25 },
+                          { x: 0.50, y: 0.50 },
+                          { x: 0.50, y: 0.75 },
+                        ],
+                      },
+                      {
+                        label: "Hero Focus Loop",
+                        points: [
+                          { x: 0.50, y: 0.38 },
+                          { x: 0.65, y: 0.42 },
+                          { x: 0.50, y: 0.38 },
+                        ],
+                      },
+                    ].map((preset) => (
+                      <button
+                        key={preset.label}
+                        type="button"
+                        onClick={() => {
+                          clearTraceWaypoints();
+                          preset.points.forEach((pt) => addTraceWaypoint(pt));
+                        }}
+                        className="rounded bg-ink-800 hover:bg-ink-700 border border-ink-700 py-1 px-1 text-[9px] text-neutral-300 hover:text-white transition-colors text-center"
+                      >
+                        {preset.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Waypoints Counter & Chips */}
+                {traceWaypoints.length > 0 && (
+                  <div className="space-y-1.5 pt-1 border-t border-ink-800">
+                    <div className="flex items-center justify-between text-[10px]">
+                      <span className="text-fg-muted font-medium">Path Waypoints ({traceWaypoints.length}):</span>
+                      <button
+                        type="button"
+                        onClick={clearTraceWaypoints}
+                        className="text-[9px] text-neutral-400 hover:text-white underline"
+                      >
+                        Clear Waypoints
+                      </button>
+                    </div>
+                    <div className="flex flex-wrap gap-1 max-h-24 overflow-y-auto">
+                      {traceWaypoints.map((wp, idx) => (
+                        <span
+                          key={wp.id}
+                          className="inline-flex items-center gap-1 rounded bg-neutral-800 border border-neutral-700 px-1.5 py-0.5 text-[9px] font-mono text-white"
+                        >
+                          <span>#{idx + 1}: ({Math.round(wp.x * 100)}%, {Math.round(wp.y * 100)}%)</span>
+                          <button
+                            type="button"
+                            onClick={() => removeTraceWaypoint(wp.id)}
+                            className="text-neutral-400 hover:text-white ml-0.5"
+                          >
+                            ×
+                          </button>
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Duration & Scale Sliders */}
+                <div className="space-y-2 pt-1 border-t border-ink-800">
+                  <div className="flex justify-between text-[11px]">
+                    <span className="text-fg-muted">Trajectory Duration:</span>
+                    <span className="font-mono text-white font-semibold">{traceDurationSec.toFixed(1)}s</span>
+                  </div>
+                  <input
+                    type="range"
+                    min="1.2"
+                    max="6.0"
+                    step="0.1"
+                    value={traceDurationSec}
+                    onChange={(e) => setTraceDurationSec(parseFloat(e.target.value))}
+                    className="w-full accent-white cursor-pointer h-1.5 bg-ink-800 rounded-lg"
+                  />
+
+                  <div className="flex justify-between text-[11px] pt-1">
+                    <span className="text-fg-muted">Peak Zoom Scale:</span>
+                    <span className="font-mono text-white font-semibold">{traceScale.toFixed(2)}x</span>
+                  </div>
+                  <input
+                    type="range"
+                    min="1.2"
+                    max="2.8"
+                    step="0.05"
+                    value={traceScale}
+                    onChange={(e) => setTraceScale(parseFloat(e.target.value))}
+                    className="w-full accent-white cursor-pointer h-1.5 bg-ink-800 rounded-lg"
+                  />
+                </div>
+
+                {/* Primary Test & Save Buttons */}
+                <div className="space-y-1.5 pt-1">
+                  <button
+                    type="button"
+                    onClick={() =>
+                      followDrawnLine({
+                        totalDurationMs: Math.round(traceDurationSec * 1000),
+                        peakScale: traceScale,
+                      })
+                    }
+                    disabled={traceWaypoints.length === 0}
+                    className="w-full rounded-lg bg-white py-2 text-center text-xs font-bold text-black hover:bg-neutral-200 transition-colors shadow-sm flex items-center justify-center gap-1.5 disabled:opacity-40"
+                  >
+                    <Play className="size-3.5 fill-black" />
+                    ▶ Follow Drawn Line (Test Camera)
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() =>
+                      applyTraceShifting({
+                        totalDurationMs: Math.round(traceDurationSec * 1000),
+                        peakScale: traceScale,
+                      })
+                    }
+                    disabled={traceWaypoints.length === 0}
+                    className="w-full rounded-lg border border-neutral-700 bg-neutral-800 py-1.5 text-center text-xs font-semibold text-neutral-200 hover:text-white hover:bg-neutral-700 transition-colors flex items-center justify-center gap-1.5 disabled:opacity-40"
+                  >
+                    <Sparkles className="size-3 text-white" />
+                    Save Path to Timeline ({traceWaypoints.length || 0} Points)
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* AUTO-ZOOM KEYFRAME BREAKDOWN INSPECTOR */}
+            {(project?.zoomBlocks?.length ?? 0) > 0 && (() => {
+              const currentBlock = selectedBlock || project?.zoomBlocks[0]!;
+              const blockKeyframes = (project?.keyframes || []).filter(
+                (k) => k.timeMs >= currentBlock.startTimeMs - 50 && k.timeMs <= currentBlock.endTimeMs + 50,
+              );
+
+              return (
+                <div className="rounded-xl border border-neutral-700 bg-neutral-900 p-3 shadow-sm space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-1.5">
+                      <Sparkles className="size-3.5 text-white" />
+                      <span className="font-semibold text-white text-xs">Auto-Zoom Inspector</span>
+                    </div>
+                    <span className="text-[10px] font-mono text-neutral-400">
+                      {project?.zoomBlocks.length} Blocks
+                    </span>
+                  </div>
+
+                  {/* Auto-Zoom Blocks Tab Selector */}
+                  <div className="flex gap-1 overflow-x-auto pb-1 scrollbar-none text-[10px]">
+                    {project?.zoomBlocks.map((b, idx) => {
+                      const isSel = (selectedBlock?.id || project?.zoomBlocks[0]?.id) === b.id;
+                      return (
+                        <button
+                          key={b.id}
+                          type="button"
+                          onClick={() => {
+                            selectBlock(b.id);
+                            setCurrentTime(b.startTimeMs);
+                          }}
+                          className={`shrink-0 rounded-md px-2 py-1 font-medium transition-colors ${
+                            isSel
+                              ? "bg-white text-black font-bold shadow-sm"
+                              : "bg-ink-800 text-fg-muted hover:text-white hover:bg-ink-700 border border-ink-700"
+                          }`}
+                        >
+                          Zoom #{idx + 1} ({formatDuration(b.startTimeMs)})
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  {/* Selected Auto-Zoom Master Properties */}
+                  <div className="rounded-lg bg-ink-950/80 p-2.5 border border-ink-800 space-y-2">
+                    <div className="flex items-center justify-between text-[11px]">
+                      <span className="text-fg-muted font-medium">Zoom Interval:</span>
+                      <span className="font-mono text-white font-semibold">
+                        {formatDuration(currentBlock.startTimeMs)} → {formatDuration(currentBlock.endTimeMs)} ({Math.round((currentBlock.endTimeMs - currentBlock.startTimeMs) / 1000)}s)
+                      </span>
+                    </div>
+
+                    <div className="flex items-center justify-between text-[11px]">
+                      <span className="text-fg-muted">Target Scale:</span>
+                      <span className="font-mono text-white font-semibold">{currentBlock.scale.toFixed(2)}x</span>
+                    </div>
+                    <input
+                      type="range"
+                      min="1.2"
+                      max="2.8"
+                      step="0.05"
+                      value={currentBlock.scale}
+                      onChange={(e) => updateZoomBlock(currentBlock.id, { scale: parseFloat(e.target.value) })}
+                      className="w-full accent-white cursor-pointer h-1.5 bg-ink-800 rounded-lg"
+                    />
+
+                    <div className="flex items-center justify-between text-[11px] pt-1">
+                      <span className="text-fg-muted">Lead-in Shifting Speed:</span>
+                      <span className="font-mono text-white font-semibold">
+                        {currentBlock.shiftDurationMs ?? 750}ms
+                      </span>
+                    </div>
+                    <input
+                      type="range"
+                      min="300"
+                      max="1500"
+                      step="50"
+                      value={currentBlock.shiftDurationMs ?? 750}
+                      onChange={(e) => updateZoomBlock(currentBlock.id, { shiftDurationMs: parseInt(e.target.value, 10) })}
+                      className="w-full accent-white cursor-pointer h-1.5 bg-ink-800 rounded-lg"
+                    />
+
+                    {/* Keyframe Configurations on this Auto-Zoom */}
+                    <div className="pt-2 border-t border-ink-800 space-y-2">
+                      <div className="flex items-center justify-between text-[10px] font-semibold text-neutral-400 uppercase tracking-wider">
+                        <span>Keyframe Configurations ({blockKeyframes.length})</span>
+                        <span className="text-[9px] text-neutral-400">Click node to inspect</span>
+                      </div>
+
+                      {blockKeyframes.length === 0 ? (
+                        <p className="text-[10px] text-neutral-500 py-1 text-center">
+                          Keyframes synchronized to block boundaries.
+                        </p>
+                      ) : (
+                        <div className="space-y-1.5">
+                          {blockKeyframes.map((kf, kfIdx) => {
+                            const isLeadIn = kf.scale <= 1.05 && kf.timeMs <= currentBlock.startTimeMs + 80;
+                            const isPeak = kf.scale > 1.05;
+                            const isLeadOut = kf.scale <= 1.05 && kf.timeMs >= currentBlock.endTimeMs - 80;
+                            const nodeRole = isLeadIn
+                              ? "Lead-In Return (1.0x)"
+                              : isPeak
+                              ? `Focal Hold (${kf.scale.toFixed(1)}x)`
+                              : isLeadOut
+                              ? "Lead-Out Reset (1.0x)"
+                              : `Transit Step (${kf.scale.toFixed(1)}x)`;
+
+                            const isCurKf = selectedKeyframeId === kf.id;
+
+                            return (
+                              <div
+                                key={kf.id}
+                                className={`rounded-lg p-2 border transition-colors ${
+                                  isCurKf
+                                    ? "border-white bg-neutral-800/90 text-white"
+                                    : "border-neutral-800 bg-neutral-900/60 text-neutral-300 hover:border-neutral-700"
+                                }`}
+                              >
+                                <div
+                                  onClick={() => {
+                                    selectKeyframe(kf.id);
+                                    setCurrentTime(kf.timeMs);
+                                  }}
+                                  className="flex items-center justify-between cursor-pointer"
+                                >
+                                  <div className="flex items-center gap-1.5">
+                                    <Diamond className={`size-3 ${isCurKf ? "text-white fill-white" : "text-neutral-400"}`} />
+                                    <span className="text-[11px] font-semibold">{kfIdx + 1}. {nodeRole}</span>
+                                  </div>
+                                  <span className="font-mono text-[10px] text-neutral-400">
+                                    {formatDuration(kf.timeMs)}
+                                  </span>
+                                </div>
+
+                                {/* Expanded configurations if selected */}
+                                {isCurKf && (
+                                  <div className="mt-2 pt-2 border-t border-neutral-700/80 space-y-2 text-[10px]">
+                                    <div className="flex justify-between">
+                                      <span className="text-neutral-400">Scale:</span>
+                                      <span className="font-mono text-white font-semibold">{kf.scale.toFixed(2)}x</span>
+                                    </div>
+                                    <input
+                                      type="range"
+                                      min="1.0"
+                                      max="3.0"
+                                      step="0.05"
+                                      value={kf.scale}
+                                      onChange={(e) => updateKeyframe(kf.id, { scale: parseFloat(e.target.value) })}
+                                      className="w-full accent-white cursor-pointer h-1.5 bg-ink-800 rounded-lg"
+                                    />
+
+                                    <div className="flex justify-between">
+                                      <span className="text-neutral-400">Focal Target:</span>
+                                      <span className="font-mono text-white">
+                                        ({Math.round(kf.targetX * 100)}%, {Math.round(kf.targetY * 100)}%)
+                                      </span>
+                                    </div>
+                                    <div className="grid grid-cols-2 gap-1 pt-0.5">
+                                      <button
+                                        type="button"
+                                        onClick={() => updateKeyframe(kf.id, { targetX: 0.5, targetY: 0.38 })}
+                                        className="rounded bg-neutral-700 hover:bg-neutral-600 py-1 text-[9px] font-semibold text-white transition-colors"
+                                      >
+                                        Center Stage
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => updateKeyframe(kf.id, { targetX: 0.5, targetY: 0.50 })}
+                                        className="rounded bg-neutral-700 hover:bg-neutral-600 py-1 text-[9px] font-semibold text-white transition-colors"
+                                      >
+                                        Dead Center
+                                      </button>
+                                    </div>
+
+                                    <div className="flex gap-1.5 pt-1">
+                                      <button
+                                        type="button"
+                                        onClick={() => updateKeyframe(kf.id, { easing: "cubic" })}
+                                        className={`flex-1 rounded py-1 text-[9px] font-semibold ${
+                                          kf.easing === "cubic" ? "bg-white text-black font-bold" : "bg-neutral-700 text-neutral-300"
+                                        }`}
+                                      >
+                                        Cubic
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => updateKeyframe(kf.id, { easing: "spring" })}
+                                        className={`flex-1 rounded py-1 text-[9px] font-semibold ${
+                                          kf.easing === "spring" ? "bg-white text-black font-bold" : "bg-neutral-700 text-neutral-300"
+                                        }`}
+                                      >
+                                        Spring
+                                      </button>
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Master Action Buttons */}
+                    <div className="pt-2 border-t border-ink-800 flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() =>
+                          applyZoomBlockSettingsToAll({
+                            scale: currentBlock.scale,
+                            shiftDurationMs: currentBlock.shiftDurationMs ?? 750,
+                            shiftAnimation: currentBlock.shiftAnimation || "smooth",
+                          })
+                        }
+                        className="flex-1 rounded-lg border border-neutral-700 bg-neutral-800 py-1.5 text-center text-[10px] font-semibold text-white hover:bg-neutral-700 transition-colors"
+                      >
+                        Apply to All ({project?.zoomBlocks?.length ?? 1} Zooms)
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => deleteZoomBlock(currentBlock.id)}
+                        className="rounded-lg bg-neutral-800 hover:bg-neutral-700 p-1.5 text-neutral-300 hover:text-white border border-neutral-700"
+                        title="Delete this Auto-Zoom"
+                      >
+                        <Trash2 className="size-3.5" />
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              );
+            })()}
 
             {/* Manual Keyframe Controls */}
             <div className="space-y-2">
@@ -1308,9 +1747,209 @@ export function ToolsSidebar() {
         )}
 
         {/* TAB 3: AUDIO & MUSIC */}
-        {activeToolTab === "audio" && (
+        {activeToolTab === "audio" && (() => {
+          const musicTracks = (project?.audioTracks || []).filter((t) => t.type === "music" || !t.type);
+          const activeMusicTrack = musicTracks.find((t) => t.id === selectedAudioId) || musicTracks[0];
+
+          return (
           <div className="space-y-4">
-            {/* 0. Auto AFX Master Generator */}
+            {/* 1. Background Music & Soundtracks */}
+            <div className="rounded-xl border border-neutral-700 bg-neutral-900 p-3 shadow-sm space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Music className="size-4 text-white" />
+                  <span className="font-semibold text-white text-xs">Background Music & Soundtracks</span>
+                </div>
+                <span className="rounded bg-neutral-800 border border-neutral-700 px-1.5 py-0.5 text-[9px] font-mono text-neutral-300">
+                  {musicTracks.length} Active
+                </span>
+              </div>
+              <p className="text-[11px] text-fg-muted leading-relaxed">
+                Add cinematic background music tracks, adjust decibel gain (dB), and set smooth fade-in and fade-out curves.
+              </p>
+
+              {/* Music Presets Grid */}
+              <div className="space-y-1.5">
+                <span className="text-[10px] text-fg-faint block">Soundtrack Library:</span>
+                <div className="grid grid-cols-2 gap-1.5">
+                  {BACKGROUND_MUSIC_PRESETS.map((preset) => (
+                    <button
+                      key={preset.id}
+                      type="button"
+                      onClick={() => addMusicTrackAtCurrentTime(preset.id, preset.name)}
+                      className="rounded-lg border border-neutral-800 bg-ink-950/70 hover:bg-neutral-800 p-2 text-left transition-colors group"
+                      title={preset.description}
+                    >
+                      <div className="flex items-center justify-between">
+                        <span className="text-[11px] font-semibold text-white group-hover:text-white">
+                          {preset.name}
+                        </span>
+                        <Plus className="size-3 text-neutral-400 group-hover:text-white" />
+                      </div>
+                      <span className="text-[9px] text-neutral-400 block mt-0.5 line-clamp-1">
+                        {preset.genre} • {preset.tempoBpm} BPM
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Upload Custom Audio File */}
+              <div className="pt-1 border-t border-ink-800">
+                <label className="w-full flex items-center justify-center gap-1.5 rounded-lg border border-neutral-700 bg-neutral-800 hover:bg-neutral-700 py-1.5 px-3 text-xs font-semibold text-white cursor-pointer transition-colors">
+                  <Upload className="size-3.5" />
+                  <span>Upload Audio File (.mp3, .wav)</span>
+                  <input
+                    type="file"
+                    accept="audio/*"
+                    className="hidden"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (file) {
+                        const url = URL.createObjectURL(file);
+                        addAudioTrack(file.name.replace(/\.[^/.]+$/, ""), url, "music", {
+                          durationMs: 60000,
+                          gainDb: -6,
+                          fadeInMs: 1000,
+                          fadeOutMs: 1500,
+                        });
+                      }
+                    }}
+                  />
+                </label>
+              </div>
+
+              {/* Active Music Track Controls */}
+              {activeMusicTrack && (
+                <div className="space-y-2.5 bg-ink-950/80 rounded-lg p-2.5 border border-ink-800 pt-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[11px] font-semibold text-white truncate max-w-[150px]">
+                      {activeMusicTrack.name}
+                    </span>
+                    <div className="flex items-center gap-1">
+                      <button
+                        type="button"
+                        onClick={() => updateAudioTrack(activeMusicTrack.id, { muted: !activeMusicTrack.muted })}
+                        className={`rounded p-1 text-[9px] border transition-colors ${
+                          activeMusicTrack.muted
+                            ? "bg-white text-black border-white"
+                            : "bg-neutral-800 text-neutral-300 border-neutral-700 hover:text-white"
+                        }`}
+                        title={activeMusicTrack.muted ? "Unmute Track" : "Mute Track"}
+                      >
+                        {activeMusicTrack.muted ? <VolumeX className="size-3" /> : <Volume2 className="size-3" />}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => deleteAudioTrack(activeMusicTrack.id)}
+                        className="rounded p-1 text-danger hover:bg-danger/20 border border-neutral-800 transition-colors"
+                        title="Delete Track"
+                      >
+                        <Trash2 className="size-3" />
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Decibel Gain Adjustment */}
+                  <div className="space-y-1">
+                    <div className="flex items-center justify-between text-[11px]">
+                      <span className="text-fg-muted font-medium">Decibel Gain (dB):</span>
+                      <span className="font-mono text-white font-semibold">
+                        {(activeMusicTrack.gainDb ?? 0) > 0 ? "+" : ""}{(activeMusicTrack.gainDb ?? 0).toFixed(1)} dB ({Math.round(dbToVolume(activeMusicTrack.gainDb ?? 0) * 100)}%)
+                      </span>
+                    </div>
+                    <input
+                      type="range"
+                      min="-36"
+                      max="12"
+                      step="0.5"
+                      value={activeMusicTrack.gainDb ?? 0}
+                      onChange={(e) => {
+                        const db = parseFloat(e.target.value);
+                        updateAudioTrack(activeMusicTrack.id, {
+                          gainDb: db,
+                          volume: dbToVolume(db),
+                        });
+                      }}
+                      className="w-full accent-white cursor-pointer h-1.5 bg-ink-800 rounded-lg"
+                    />
+                    <div className="grid grid-cols-5 gap-1 pt-1">
+                      {[-18, -12, -6, 0, 3].map((dbVal) => (
+                        <button
+                          key={dbVal}
+                          type="button"
+                          onClick={() =>
+                            updateAudioTrack(activeMusicTrack.id, {
+                              gainDb: dbVal,
+                              volume: dbToVolume(dbVal),
+                            })
+                          }
+                          className={`rounded py-0.5 text-[9px] font-semibold border transition-colors ${
+                            Math.round(activeMusicTrack.gainDb ?? 0) === dbVal
+                              ? "bg-white text-black border-white font-bold"
+                              : "bg-neutral-800 text-neutral-400 border-neutral-700 hover:text-white"
+                          }`}
+                        >
+                          {dbVal > 0 ? `+${dbVal}` : dbVal} dB
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Fade In & Fade Out Envelopes */}
+                  <div className="grid grid-cols-2 gap-2 pt-1 border-t border-ink-800">
+                    <div className="space-y-1">
+                      <div className="flex justify-between text-[10px] text-fg-muted">
+                        <span>Fade In:</span>
+                        <span className="font-mono text-white">
+                          {(((activeMusicTrack.fadeInMs ?? 0) / 1000)).toFixed(1)}s
+                        </span>
+                      </div>
+                      <input
+                        type="range"
+                        min="0"
+                        max="5000"
+                        step="250"
+                        value={activeMusicTrack.fadeInMs ?? 0}
+                        onChange={(e) => updateAudioTrack(activeMusicTrack.id, { fadeInMs: parseInt(e.target.value, 10) })}
+                        className="w-full accent-white cursor-pointer h-1.5 bg-ink-800 rounded-lg"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <div className="flex justify-between text-[10px] text-fg-muted">
+                        <span>Fade Out:</span>
+                        <span className="font-mono text-white">
+                          {(((activeMusicTrack.fadeOutMs ?? 0) / 1000)).toFixed(1)}s
+                        </span>
+                      </div>
+                      <input
+                        type="range"
+                        min="0"
+                        max="5000"
+                        step="250"
+                        value={activeMusicTrack.fadeOutMs ?? 0}
+                        onChange={(e) => updateAudioTrack(activeMusicTrack.id, { fadeOutMs: parseInt(e.target.value, 10) })}
+                        className="w-full accent-white cursor-pointer h-1.5 bg-ink-800 rounded-lg"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Apply dB to All Audio Action Button */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const curDb = activeMusicTrack.gainDb ?? 0;
+                      applyAudioVolumeToAll(dbToVolume(curDb), curDb, "all");
+                    }}
+                    className="w-full rounded-lg bg-neutral-800 hover:bg-neutral-700 border border-neutral-700 py-1.5 text-center text-[10px] font-semibold text-white transition-colors"
+                  >
+                    Apply {activeMusicTrack.gainDb ?? 0} dB to All Audio
+                  </button>
+                </div>
+              )}
+            </div>
+
+            {/* 2. Auto AFX Master Generator */}
             <div className="rounded-xl border border-neutral-700 bg-neutral-900 p-3 shadow-sm">
               <div className="flex items-center gap-2 mb-1.5">
                 <Volume2 className="size-4 text-white" />
@@ -1374,9 +2013,9 @@ export function ToolsSidebar() {
                   </div>
 
                   <div className="flex items-center justify-between text-[11px] pt-1">
-                    <span className="text-fg-muted">Click Volume:</span>
+                    <span className="text-fg-muted">Click Volume & Gain:</span>
                     <span className="font-mono text-white font-semibold">
-                      {Math.round((project?.audioSettings?.clickSoundVolume ?? 0.7) * 100)}%
+                      {Math.round((project?.audioSettings?.clickSoundVolume ?? 0.7) * 100)}% ({volumeToDb(project?.audioSettings?.clickSoundVolume ?? 0.7).toFixed(1)} dB)
                     </span>
                   </div>
                   <input
@@ -1389,14 +2028,27 @@ export function ToolsSidebar() {
                     className="w-full accent-white cursor-pointer h-1.5 bg-ink-800 rounded-lg"
                   />
 
-                  <button
-                    type="button"
-                    onClick={() => playClickSoundPreview()}
-                    className="w-full mt-1 rounded-lg border border-ink-700 bg-ink-800/60 py-1 text-[11px] font-medium text-fg-muted hover:text-white hover:bg-ink-700 transition-colors flex items-center justify-center gap-1.5"
-                  >
-                    <Play className="size-3 fill-current" />
-                    <span>Test Click Bop</span>
-                  </button>
+                  <div className="flex items-center gap-2 mt-1">
+                    <button
+                      type="button"
+                      onClick={() => playClickSoundPreview()}
+                      className="flex-1 rounded-lg border border-ink-700 bg-ink-800/60 py-1 text-[11px] font-medium text-fg-muted hover:text-white hover:bg-ink-700 transition-colors flex items-center justify-center gap-1.5"
+                    >
+                      <Play className="size-3 fill-current" />
+                      <span>Test Click Bop</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const vol = project?.audioSettings?.clickSoundVolume ?? 0.7;
+                        applyAudioVolumeToAll(vol, volumeToDb(vol), "sfx");
+                      }}
+                      className="rounded-lg border border-neutral-700 bg-neutral-800 hover:bg-neutral-700 py-1 px-2 text-[10px] font-semibold text-neutral-300 hover:text-white transition-colors"
+                      title="Apply this click volume to all SFX tracks"
+                    >
+                      Apply to All SFX
+                    </button>
+                  </div>
                 </div>
               )}
             </div>
@@ -1456,9 +2108,9 @@ export function ToolsSidebar() {
                   </div>
 
                   <div className="flex items-center justify-between text-[11px] pt-1">
-                    <span className="text-fg-muted">Typing Volume:</span>
+                    <span className="text-fg-muted">Typing Volume & Gain:</span>
                     <span className="font-mono text-white font-semibold">
-                      {Math.round((project?.audioSettings?.typingSoundVolume ?? 0.6) * 100)}%
+                      {Math.round((project?.audioSettings?.typingSoundVolume ?? 0.6) * 100)}% ({volumeToDb(project?.audioSettings?.typingSoundVolume ?? 0.6).toFixed(1)} dB)
                     </span>
                   </div>
                   <input
@@ -1471,19 +2123,33 @@ export function ToolsSidebar() {
                     className="w-full accent-white cursor-pointer h-1.5 bg-ink-800 rounded-lg"
                   />
 
-                  <button
-                    type="button"
-                    onClick={() => playTypingSoundPreview()}
-                    className="w-full mt-1 rounded-lg border border-ink-700 bg-ink-800/60 py-1 text-[11px] font-medium text-fg-muted hover:text-white hover:bg-ink-700 transition-colors flex items-center justify-center gap-1.5"
-                  >
-                    <Play className="size-3 fill-current" />
-                    <span>Test Typing Burst</span>
-                  </button>
+                  <div className="flex items-center gap-2 mt-1">
+                    <button
+                      type="button"
+                      onClick={() => playTypingSoundPreview()}
+                      className="flex-1 rounded-lg border border-ink-700 bg-ink-800/60 py-1 text-[11px] font-medium text-fg-muted hover:text-white hover:bg-ink-700 transition-colors flex items-center justify-center gap-1.5"
+                    >
+                      <Play className="size-3 fill-current" />
+                      <span>Test Typing Burst</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const vol = project?.audioSettings?.typingSoundVolume ?? 0.6;
+                        applyAudioVolumeToAll(vol, volumeToDb(vol), "sfx");
+                      }}
+                      className="rounded-lg border border-neutral-700 bg-neutral-800 hover:bg-neutral-700 py-1 px-2 text-[10px] font-semibold text-neutral-300 hover:text-white transition-colors"
+                      title="Apply this typing volume to all SFX tracks"
+                    >
+                      Apply to All SFX
+                    </button>
+                  </div>
                 </div>
               )}
             </div>
           </div>
-        )}
+          );
+        })()}
 
         {/* TAB 4: CANVAS & LOOKS */}
         {activeToolTab === "looks" && (
@@ -2296,47 +2962,6 @@ export function ToolsSidebar() {
             </div>
           </div>
         )}
-
-        {/* TAB 6: EXPORT */}
-        {activeToolTab === "export" && (
-          <div className="space-y-4">
-            <span className="text-[11px] font-semibold uppercase tracking-wider text-fg-faint">
-              Export Rendering
-            </span>
-
-            <div className="space-y-2">
-              <div className="rounded-xl border border-ink-800 bg-ink-900 p-3 space-y-2">
-                <div className="flex justify-between text-xs">
-                  <span className="text-fg font-medium">Quality Profile</span>
-                  <span className="text-white font-bold">1080p 60 FPS</span>
-                </div>
-                <p className="text-[11px] text-fg-faint">
-                  Ultra-smooth spring camera motion with zero jitter and crisp UI text.
-                </p>
-              </div>
-
-              <div className="grid grid-cols-2 gap-2 text-center text-xs">
-                <div className="rounded-lg border border-ink-800 bg-ink-900/60 p-2">
-                  <span className="text-fg-faint text-[10px] block">Encoder</span>
-                  <span className="font-semibold text-fg">H.264 / MP4</span>
-                </div>
-                <div className="rounded-lg border border-ink-800 bg-ink-900/60 p-2">
-                  <span className="text-fg-faint text-[10px] block">Platform</span>
-                  <span className="font-semibold text-fg">Desktop & Mobile</span>
-                </div>
-              </div>
-
-              <button
-                type="button"
-                onClick={() => setExportModalOpen(true)}
-                className="w-full rounded-xl bg-white py-2.5 text-center text-xs font-bold text-black hover:bg-neutral-200 transition-colors shadow-sm flex items-center justify-center gap-2 mt-3"
-              >
-                <Download className="size-4" />
-                Render & Export Video
-              </button>
-            </div>
-          </div>
-        )}
       </div>
 
       {/* Resizable Horizontal Line Border between Tool Tabs and Bottom Inspector */}
@@ -2383,6 +3008,60 @@ export function ToolsSidebar() {
                 className="flex-1 rounded bg-danger/10 text-danger hover:bg-danger/20 py-1 text-[10px] font-semibold transition-colors text-center"
               >
                 Delete Block
+              </button>
+            </div>
+          </div>
+        ) : selectedAudio ? (
+          <div className="space-y-2">
+            <div className="flex items-center justify-between pb-1 border-b border-ink-800">
+              <span className="font-semibold text-white text-[11px] flex items-center gap-1.5 truncate">
+                <Volume2 className="size-3 text-white shrink-0" />
+                Audio: {selectedAudio.name}
+              </span>
+              <button
+                type="button"
+                onClick={() => selectAudio(null)}
+                className="text-[10px] text-neutral-400 hover:text-white"
+              >
+                Close
+              </button>
+            </div>
+            <div className="flex justify-between text-[10px] text-neutral-400">
+              <span>Gain: <b className="text-white font-mono">{(selectedAudio.gainDb ?? 0).toFixed(1)} dB</b></span>
+              <span>Fade: <b className="text-white font-mono">{(((selectedAudio.fadeInMs ?? 0) / 1000)).toFixed(1)}s in / {(((selectedAudio.fadeOutMs ?? 0) / 1000)).toFixed(1)}s out</b></span>
+            </div>
+            <input
+              type="range"
+              min="-36"
+              max="12"
+              step="0.5"
+              value={selectedAudio.gainDb ?? 0}
+              onChange={(e) => {
+                const db = parseFloat(e.target.value);
+                updateAudioTrack(selectedAudio.id, {
+                  gainDb: db,
+                  volume: dbToVolume(db),
+                });
+              }}
+              className="w-full accent-white cursor-pointer h-1.5 bg-ink-800 rounded-lg"
+            />
+            <div className="flex gap-1.5">
+              <button
+                type="button"
+                onClick={() => {
+                  const db = selectedAudio.gainDb ?? 0;
+                  applyAudioVolumeToAll(dbToVolume(db), db, "all");
+                }}
+                className="flex-1 rounded bg-neutral-800 hover:bg-neutral-700 border border-neutral-700 py-1 text-[10px] font-semibold text-white transition-colors text-center"
+              >
+                Apply dB to All
+              </button>
+              <button
+                type="button"
+                onClick={() => deleteAudioTrack(selectedAudio.id)}
+                className="rounded bg-danger/10 text-danger hover:bg-danger/20 px-2 py-1 text-[10px] font-semibold transition-colors text-center"
+              >
+                Delete
               </button>
             </div>
           </div>

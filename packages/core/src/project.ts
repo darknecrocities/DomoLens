@@ -572,6 +572,9 @@ export interface AudioTrack {
   durationMs: number;
   volume: number;
   muted: boolean;
+  fadeInMs?: number;
+  fadeOutMs?: number;
+  gainDb?: number;
 }
 
 export interface ProjectAiData {
