@@ -531,8 +531,8 @@ export const useEditor = create<EditorState>((set, get) => ({
         parsed.looks.aspectRatio === "9:16";
 
       if (isMobile) {
-        // Mobile recording: strictly clean phone frame (no desktop terminal bar), curved corners & portrait aspect ratio
-        if (parsed.looks.windowFrame === "terminal" || !parsed.looks.windowFrame) {
+        // Mobile recording: strictly clean phone frame (no desktop terminal or macos traffic lights), curved corners & portrait aspect ratio
+        if (parsed.looks.windowFrame === "terminal" || parsed.looks.windowFrame === "macos" || !parsed.looks.windowFrame) {
           parsed.looks.windowFrame = "none";
           parsed.looks.borderRadius = 28;
           parsed.looks.padding = 24;

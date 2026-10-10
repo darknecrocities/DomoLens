@@ -1085,7 +1085,7 @@ export function VideoCanvas({ project, currentTimeMs: propTimeMs }: VideoCanvasP
           />
         )}
 
-        {/* Modular Window Mockup Shell Bar */}
+        {/* Modular Window & Device Mockup Shell Bar */}
         {looks.windowFrame && looks.windowFrame !== "none" && (
           <>
             {/* macOS Window */}
@@ -1144,7 +1144,7 @@ export function VideoCanvas({ project, currentTimeMs: propTimeMs }: VideoCanvasP
                     <svg className="size-2.5 text-neutral-400 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                       <circle cx="12" cy="12" r="10" />
                       <line x1="2" y1="12" x2="22" y2="12" />
-                      <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
+                      <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
                     </svg>
                     <span className="text-neutral-400 text-[8px] ml-auto">✕</span>
                   </div>
@@ -1203,13 +1203,106 @@ export function VideoCanvas({ project, currentTimeMs: propTimeMs }: VideoCanvasP
                 <div className="w-10 shrink-0" />
               </div>
             )}
+
+            {/* Modern Laptop: Top Webcam Bezel */}
+            {looks.windowFrame === "laptop" && (
+              <div className="relative w-full shrink-0 h-4 z-30 flex items-center justify-center bg-[#18181b] border-b border-white/10 select-none pointer-events-none">
+                <div className="flex items-center gap-2">
+                  <span className="size-0.5 rounded-full bg-neutral-500" />
+                  <div className="size-2 rounded-full bg-black border border-neutral-700 flex items-center justify-center">
+                    <span className="size-0.5 rounded-full bg-blue-900" />
+                  </div>
+                  <span className="size-0.5 rounded-full bg-neutral-500" />
+                </div>
+              </div>
+            )}
+
+            {/* iPhone Pro: Dynamic Island & Home Bar Overlays */}
+            {looks.windowFrame === "iphone" && (
+              <>
+                <div className="pointer-events-none absolute top-1 inset-x-0 z-40 flex items-center justify-center">
+                  <div className="h-0.5 w-12 rounded-full bg-neutral-800" />
+                </div>
+                <div className="pointer-events-none absolute top-2.5 inset-x-0 z-40 flex items-center justify-center">
+                  <div className="h-5 w-24 rounded-full bg-black border border-white/15 shadow-lg flex items-center justify-between px-2.5">
+                    <div className="size-2 rounded-full bg-[#111] border border-white/10" />
+                    <div className="size-2.5 rounded-full bg-[#0a0a14] border border-neutral-700 flex items-center justify-center">
+                      <div className="size-1 rounded-full bg-blue-900/80" />
+                    </div>
+                  </div>
+                </div>
+                <div className="pointer-events-none absolute bottom-2 inset-x-0 z-40 flex items-center justify-center">
+                  <div className="h-1 w-28 rounded-full bg-white/70 shadow-sm" />
+                </div>
+                <div className="pointer-events-none absolute inset-0 rounded-[inherit] ring-1 ring-inset ring-white/15 z-40" />
+              </>
+            )}
+
+            {/* Android Flagship: Center Punch-Hole & Gesture Bar */}
+            {looks.windowFrame === "android" && (
+              <>
+                <div className="pointer-events-none absolute top-2.5 inset-x-0 z-40 flex items-center justify-center">
+                  <div className="size-3.5 rounded-full bg-black border border-neutral-700 shadow-md flex items-center justify-center">
+                    <div className="size-1.5 rounded-full bg-neutral-800 border border-neutral-600/50" />
+                  </div>
+                </div>
+                <div className="pointer-events-none absolute bottom-1.5 inset-x-0 z-40 flex items-center justify-center">
+                  <div className="h-1 w-20 rounded-full bg-white/50 shadow-sm" />
+                </div>
+                <div className="pointer-events-none absolute inset-0 rounded-[inherit] ring-1 ring-inset ring-white/10 z-40" />
+              </>
+            )}
+
+            {/* MacBook Pro: Top Notch */}
+            {looks.windowFrame === "macbook" && (
+              <div className="pointer-events-none absolute top-0 inset-x-0 z-40 flex items-center justify-center">
+                <div className="h-3.5 w-32 rounded-b-lg bg-[#141416] border-b border-x border-white/15 shadow-md flex items-center justify-center gap-2">
+                  <div className="size-1.5 rounded-full bg-black border border-neutral-700 flex items-center justify-center">
+                    <span className="size-0.5 rounded-full bg-blue-900" />
+                  </div>
+                  <div className="size-1 rounded-full bg-emerald-500/80" />
+                </div>
+              </div>
+            )}
+
+            {/* iPad Tablet: Top Camera & Home Indicator */}
+            {looks.windowFrame === "ipad" && (
+              <>
+                <div className="pointer-events-none absolute top-2 inset-x-0 z-40 flex items-center justify-center">
+                  <div className="size-2.5 rounded-full bg-black border border-neutral-700 shadow-sm flex items-center justify-center">
+                    <div className="size-1 rounded-full bg-blue-950" />
+                  </div>
+                </div>
+                <div className="pointer-events-none absolute bottom-2 inset-x-0 z-40 flex items-center justify-center">
+                  <div className="h-1 w-32 rounded-full bg-white/60 shadow-sm" />
+                </div>
+                <div className="pointer-events-none absolute inset-0 rounded-[inherit] ring-1 ring-inset ring-white/15 z-40" />
+              </>
+            )}
+
+            {/* iMac: Top Bezel Camera Dot */}
+            {looks.windowFrame === "imac" && (
+              <div className="pointer-events-none absolute top-1.5 inset-x-0 z-40 flex items-center justify-center">
+                <div className="size-2 rounded-full bg-black border border-neutral-700 flex items-center justify-center">
+                  <div className="size-0.5 rounded-full bg-blue-900" />
+                </div>
+              </div>
+            )}
           </>
         )}
 
         {/* Dynamic Zooming Video Container: zero latency with hardware accelerated 3D transform */}
         <div
           ref={zoomLayerRef}
-          className={`relative ${looks.windowFrame && looks.windowFrame !== "none" ? "flex-1 min-h-0 w-full" : "size-full"} origin-center will-change-transform overflow-hidden`}
+          className={`relative ${
+            looks.windowFrame &&
+            looks.windowFrame !== "none" &&
+            looks.windowFrame !== "iphone" &&
+            looks.windowFrame !== "android" &&
+            looks.windowFrame !== "ipad"
+              ? "flex-1 min-h-0 w-full"
+              : "size-full"
+          } origin-center will-change-transform overflow-hidden`}
           style={{
             // When playing, rAF is the SOLE owner of this transform (60fps via direct DOM write).
             // Setting undefined here prevents React re-renders (throttled to ~12fps via setCurrentTime)
@@ -1368,6 +1461,26 @@ export function VideoCanvas({ project, currentTimeMs: propTimeMs }: VideoCanvasP
             );
           })}
         </div>
+
+        {/* Bottom Hardware Chassis / Chin Elements */}
+        {looks.windowFrame === "macbook" && (
+          <div className="relative w-full shrink-0 h-3 z-30 flex items-center justify-center bg-gradient-to-b from-[#222225] to-[#141416] border-t border-white/10 select-none pointer-events-none">
+            <div className="w-12 h-1 bg-[#0d0d0f] rounded-b-sm border-b border-white/10" />
+          </div>
+        )}
+        {looks.windowFrame === "laptop" && (
+          <div className="relative w-full shrink-0 h-3 z-30 flex items-center justify-center bg-gradient-to-b from-[#252528] to-[#18181b] border-t border-neutral-700/80 select-none pointer-events-none">
+            <div className="w-20 h-0.5 bg-neutral-600/50 rounded-full" />
+          </div>
+        )}
+        {looks.windowFrame === "imac" && (
+          <div className="relative w-full shrink-0 h-7 z-30 flex flex-col items-center justify-between bg-gradient-to-b from-[#28282b] to-[#1c1c1e] border-t border-white/10 select-none pointer-events-none">
+            <div className="w-full flex-1 flex items-center justify-center">
+              <span className="size-1.5 rounded-full bg-white/20" />
+            </div>
+            <div className="w-16 h-1.5 bg-[#2c2c2f] rounded-t-sm border-t border-x border-white/10" />
+          </div>
+        )}
 
         {/* Dynamic Vignette Effect Overlay */}
         {effectsState.vignette > 0 && (

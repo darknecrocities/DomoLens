@@ -109,12 +109,13 @@ export function RecordScreen() {
     },
   ];
 
-  const mobileConnectionModes: Array<{ id: MobileConnectionType; label: string; desc: string; icon: typeof Cable }> = [
+  const mobileConnectionModes: Array<{ id: MobileConnectionType; label: string; desc: string; icon: typeof Cable; badge?: string }> = [
     {
       id: "usb",
       label: "USB Debugging (Direct Cable)",
       desc: "Ultra-fast direct connection via USB-C or Lightning cable with native ADB.",
       icon: Cable,
+      badge: "Recommended",
     },
     {
       id: "wifi",
@@ -513,11 +514,18 @@ export function RecordScreen() {
                             : "border-ink-700 bg-ink-900/60 hover:border-ink-600 hover:bg-ink-700/40"
                         }`}
                       >
-                        <div className="flex items-center gap-2 mb-1">
-                          <div className={`p-1.5 rounded-lg ${selected ? "bg-white text-black" : "bg-ink-800 text-fg-muted"}`}>
-                            <Icon className="size-3.5" />
+                        <div className="flex items-center justify-between w-full mb-1">
+                          <div className="flex items-center gap-2">
+                            <div className={`p-1.5 rounded-lg ${selected ? "bg-white text-black" : "bg-ink-800 text-fg-muted"}`}>
+                              <Icon className="size-3.5" />
+                            </div>
+                            <span className="text-xs font-bold text-white leading-tight">{cm.label}</span>
                           </div>
-                          <span className="text-xs font-bold text-white leading-tight">{cm.label}</span>
+                          {cm.badge && (
+                            <span className="px-1.5 py-0.5 rounded-full text-[9px] font-bold bg-white text-black tracking-wide uppercase shadow-sm">
+                              {cm.badge}
+                            </span>
+                          )}
                         </div>
                         <span className="text-[10px] text-fg-muted leading-tight">{cm.desc}</span>
                       </button>
@@ -536,6 +544,9 @@ export function RecordScreen() {
                           <div className="flex items-center gap-2 text-white font-bold text-sm">
                             <Cable className="size-4" />
                             <span>USB Debugging Link</span>
+                            <span className="px-1.5 py-0.5 rounded-full text-[9px] font-bold bg-white/20 text-white tracking-wide uppercase border border-white/20">
+                              Recommended
+                            </span>
                           </div>
                           <button
                             type="button"

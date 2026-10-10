@@ -2700,70 +2700,184 @@ export function ToolsSidebar() {
                 </div>
               </div>
 
-              {/* Quick Framing Presets: MacBook Terminal vs macOS Window vs Full Screen (Monochromatic) */}
-              <div className="grid grid-cols-3 gap-1 pt-1">
-                <button
-                  type="button"
-                  onClick={() =>
-                    updateLooks({
-                      padding: 32,
-                      borderRadius: 16,
-                      shadow: "lift",
-                      windowFrame: "terminal",
-                      fit: "contain",
-                    })
-                  }
-                  className={`rounded-lg py-1.5 px-1.5 text-[9.5px] font-semibold border transition-all truncate text-center ${
-                    project?.looks.windowFrame === "terminal"
-                      ? "border-white bg-white/20 text-white font-bold"
-                      : "border-ink-800 bg-ink-900/60 text-fg-muted hover:text-white hover:border-ink-700"
-                  }`}
-                  title="MacBook Terminal window frame with traffic lights and terminal title"
-                >
-                  MacBook Terminal
-                </button>
-                <button
-                  type="button"
-                  onClick={() =>
-                    updateLooks({
-                      padding: 32,
-                      borderRadius: 16,
-                      shadow: "lift",
-                      windowFrame: "macos",
-                      fit: "contain",
-                    })
-                  }
-                  className={`rounded-lg py-1.5 px-1.5 text-[9.5px] font-semibold border transition-all truncate text-center ${
-                    project?.looks.windowFrame === "macos"
-                      ? "border-white bg-white/20 text-white font-bold"
-                      : "border-ink-800 bg-ink-900/60 text-fg-muted hover:text-white hover:border-ink-700"
-                  }`}
-                  title="macOS studio window mockup frame"
-                >
-                  macOS Window
-                </button>
-                <button
-                  type="button"
-                  onClick={() =>
-                    updateLooks({
-                      padding: 0,
-                      borderRadius: 0,
-                      shadow: "none",
-                      windowFrame: "none",
-                      aspectRatio: "auto",
-                      fit: "contain",
-                    })
-                  }
-                  className={`rounded-lg py-1.5 px-1.5 text-[9.5px] font-semibold border transition-all truncate text-center ${
-                    (project?.looks.padding ?? 0) === 0 && project?.looks.windowFrame === "none"
-                      ? "border-white bg-white/20 text-white font-bold"
-                      : "border-ink-800 bg-ink-900/60 text-fg-muted hover:text-white hover:border-ink-700"
-                  }`}
-                  title="Make recording fill the whole screen edge-to-edge with zero margins"
-                >
-                  Full Screen (0 Margin)
-                </button>
-              </div>
+              {/* Quick Framing Presets: Adaptive for Mobile vs Laptop/Desktop */}
+              {(() => {
+                const isMobileProj =
+                  (project?.summary.width && project?.summary.height && project?.summary.width < project?.summary.height) ||
+                  project?.looks.aspectRatio === "9:16";
+                return (
+                  <div className={`grid ${isMobileProj ? "grid-cols-4" : "grid-cols-4"} gap-1 pt-1`}>
+                    {isMobileProj ? (
+                      <>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            updateLooks({
+                              padding: 24,
+                              borderRadius: 24,
+                              shadow: "lift",
+                              windowFrame: "android",
+                              fit: "contain",
+                            })
+                          }
+                          className={`rounded-lg py-1.5 px-1 text-[9px] font-semibold border transition-all truncate text-center ${
+                            project?.looks.windowFrame === "android"
+                              ? "border-white bg-white/20 text-white font-bold"
+                              : "border-ink-800 bg-ink-900/60 text-fg-muted hover:text-white hover:border-ink-700"
+                          }`}
+                          title="Android Flagship punch-hole phone frame"
+                        >
+                          Android
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            updateLooks({
+                              padding: 24,
+                              borderRadius: 36,
+                              shadow: "lift",
+                              windowFrame: "iphone",
+                              fit: "contain",
+                            })
+                          }
+                          className={`rounded-lg py-1.5 px-1 text-[9px] font-semibold border transition-all truncate text-center ${
+                            project?.looks.windowFrame === "iphone"
+                              ? "border-white bg-white/20 text-white font-bold"
+                              : "border-ink-800 bg-ink-900/60 text-fg-muted hover:text-white hover:border-ink-700"
+                          }`}
+                          title="iPhone Pro Dynamic Island phone frame"
+                        >
+                          iPhone Pro
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            updateLooks({
+                              padding: 24,
+                              borderRadius: 24,
+                              shadow: "lift",
+                              windowFrame: "ipad",
+                              fit: "contain",
+                            })
+                          }
+                          className={`rounded-lg py-1.5 px-1 text-[9px] font-semibold border transition-all truncate text-center ${
+                            project?.looks.windowFrame === "ipad"
+                              ? "border-white bg-white/20 text-white font-bold"
+                              : "border-ink-800 bg-ink-900/60 text-fg-muted hover:text-white hover:border-ink-700"
+                          }`}
+                          title="iPad Tablet symmetrical bezel frame"
+                        >
+                          iPad
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            updateLooks({
+                              padding: 0,
+                              borderRadius: 0,
+                              shadow: "none",
+                              windowFrame: "none",
+                              fit: "contain",
+                            })
+                          }
+                          className={`rounded-lg py-1.5 px-1 text-[9px] font-semibold border transition-all truncate text-center ${
+                            (project?.looks.padding ?? 0) === 0 && project?.looks.windowFrame === "none"
+                              ? "border-white bg-white/20 text-white font-bold"
+                              : "border-ink-800 bg-ink-900/60 text-fg-muted hover:text-white hover:border-ink-700"
+                          }`}
+                          title="Edge-to-edge clean screen (0 Margin)"
+                        >
+                          Raw (0 Margin)
+                        </button>
+                      </>
+                    ) : (
+                      <>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            updateLooks({
+                              padding: 32,
+                              borderRadius: 14,
+                              shadow: "lift",
+                              windowFrame: "macbook",
+                              fit: "contain",
+                            })
+                          }
+                          className={`rounded-lg py-1.5 px-1 text-[9px] font-semibold border transition-all truncate text-center ${
+                            project?.looks.windowFrame === "macbook"
+                              ? "border-white bg-white/20 text-white font-bold"
+                              : "border-ink-800 bg-ink-900/60 text-fg-muted hover:text-white hover:border-ink-700"
+                          }`}
+                          title="MacBook Pro notch & aluminum chassis"
+                        >
+                          MacBook Pro
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            updateLooks({
+                              padding: 32,
+                              borderRadius: 16,
+                              shadow: "lift",
+                              windowFrame: "terminal",
+                              fit: "contain",
+                            })
+                          }
+                          className={`rounded-lg py-1.5 px-1 text-[9px] font-semibold border transition-all truncate text-center ${
+                            project?.looks.windowFrame === "terminal"
+                              ? "border-white bg-white/20 text-white font-bold"
+                              : "border-ink-800 bg-ink-900/60 text-fg-muted hover:text-white hover:border-ink-700"
+                          }`}
+                          title="MacBook Terminal window frame with traffic lights"
+                        >
+                          Terminal
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            updateLooks({
+                              padding: 32,
+                              borderRadius: 16,
+                              shadow: "lift",
+                              windowFrame: "macos",
+                              fit: "contain",
+                            })
+                          }
+                          className={`rounded-lg py-1.5 px-1 text-[9px] font-semibold border transition-all truncate text-center ${
+                            project?.looks.windowFrame === "macos"
+                              ? "border-white bg-white/20 text-white font-bold"
+                              : "border-ink-800 bg-ink-900/60 text-fg-muted hover:text-white hover:border-ink-700"
+                          }`}
+                          title="macOS studio window mockup frame"
+                        >
+                          macOS Window
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            updateLooks({
+                              padding: 0,
+                              borderRadius: 0,
+                              shadow: "none",
+                              windowFrame: "none",
+                              aspectRatio: "auto",
+                              fit: "contain",
+                            })
+                          }
+                          className={`rounded-lg py-1.5 px-1 text-[9px] font-semibold border transition-all truncate text-center ${
+                            (project?.looks.padding ?? 0) === 0 && project?.looks.windowFrame === "none"
+                              ? "border-white bg-white/20 text-white font-bold"
+                              : "border-ink-800 bg-ink-900/60 text-fg-muted hover:text-white hover:border-ink-700"
+                          }`}
+                          title="Make recording fill the whole screen edge-to-edge with zero margins"
+                        >
+                          Full Screen
+                        </button>
+                      </>
+                    )}
+                  </div>
+                );
+              })()}
 
               {/* Framing Fit Mode */}
               <div className="pt-1">
@@ -2822,47 +2936,105 @@ export function ToolsSidebar() {
                 <input
                   type="range"
                   min="0"
-                  max="36"
+                  max="48"
                   value={project?.looks.borderRadius ?? 16}
                   onChange={(e) => updateLooks({ borderRadius: parseInt(e.target.value, 10) })}
                   className="w-full accent-white cursor-pointer h-1.5 bg-ink-800 rounded-lg mt-1"
                 />
               </div>
 
-              {/* Window Mockup Frame */}
-              <div className="pt-2 border-t border-ink-800/80">
-                <span className="block text-[11px] font-semibold text-white mb-1.5">
-                  Window Frame Shell
-                </span>
-                <div className="grid grid-cols-2 gap-1.5">
-                  {[
-                    { id: "macos" as const, label: "macOS Window", desc: "Cupertino traffic lights" },
-                    { id: "windows" as const, label: "Windows Terminal", desc: "Win 11 PowerShell with controls" },
-                    { id: "terminal" as const, label: "macOS Terminal", desc: "Dark zsh terminal prompt" },
-                    { id: "chrome" as const, label: "Google Chrome", desc: "Tab strip + Omnibox URL" },
-                    { id: "safari" as const, label: "Safari Browser", desc: "Unified address bar" },
-                    { id: "glass" as const, label: "Frosted Glass", desc: "Translucent glass shell" },
-                    { id: "none" as const, label: "Frameless", desc: "Edge-to-edge raw canvas" },
-                  ].map((wf) => {
-                    const isActive = (project?.looks.windowFrame || "macos") === wf.id;
-                    return (
-                      <button
-                        key={wf.id}
-                        type="button"
-                        onClick={() => updateLooks({ windowFrame: wf.id })}
-                        className={`rounded-lg py-1.5 px-2 text-left transition-all border ${
-                          isActive
-                            ? "bg-white text-black font-bold shadow-sm border-white"
-                            : "bg-ink-900 border-ink-800 text-fg-muted hover:text-white hover:bg-ink-800"
-                        }`}
-                      >
-                        <span className="block text-[11px] font-semibold leading-tight">{wf.label}</span>
-                        <span className={`block text-[9px] leading-tight mt-0.5 ${isActive ? "text-neutral-700 font-medium" : "text-fg-faint"}`}>
-                          {wf.desc}
-                        </span>
-                      </button>
-                    );
-                  })}
+              {/* Device Chassis & Window Mockup Frames */}
+              <div className="pt-2 border-t border-ink-800/80 space-y-3">
+                {/* 1. Physical Device Chassis */}
+                <div>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <span className="text-[11px] font-semibold text-white">
+                      Device Frames
+                    </span>
+                    <span className="text-[9px] font-medium text-neutral-400">
+                      Mobile, Laptop &amp; Tablet
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-1.5">
+                    {[
+                      { id: "iphone" as const, label: "iPhone Pro", desc: "Dynamic Island + home bar", defaultRadius: 36 },
+                      { id: "android" as const, label: "Android Flagship", desc: "Punch-hole + nav bar", defaultRadius: 24 },
+                      { id: "macbook" as const, label: "MacBook Pro", desc: "Camera notch + aluminum lip", defaultRadius: 14 },
+                      { id: "laptop" as const, label: "Modern Laptop", desc: "Webcam bezel + hinge deck", defaultRadius: 10 },
+                      { id: "ipad" as const, label: "iPad Tablet", desc: "Symmetrical front camera", defaultRadius: 24 },
+                      { id: "imac" as const, label: "iMac Display", desc: "Studio chin + stand neck", defaultRadius: 12 },
+                    ].map((df) => {
+                      const isActive = project?.looks.windowFrame === df.id;
+                      return (
+                        <button
+                          key={df.id}
+                          type="button"
+                          onClick={() =>
+                            updateLooks({
+                              windowFrame: df.id,
+                              borderRadius:
+                                project?.looks.borderRadius === 0 || !project?.looks.borderRadius
+                                  ? df.defaultRadius
+                                  : project.looks.borderRadius,
+                              shadow: (project?.looks.shadow ?? "none") === "none" ? "lift" : project?.looks.shadow,
+                            })
+                          }
+                          className={`rounded-lg py-1.5 px-2 text-left transition-all border ${
+                            isActive
+                              ? "bg-white text-black font-bold shadow-sm border-white"
+                              : "bg-ink-900 border-ink-800 text-fg-muted hover:text-white hover:bg-ink-800"
+                          }`}
+                        >
+                          <span className="block text-[11px] font-semibold leading-tight">{df.label}</span>
+                          <span className={`block text-[9px] leading-tight mt-0.5 ${isActive ? "text-neutral-700 font-medium" : "text-fg-faint"}`}>
+                            {df.desc}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* 2. Desktop Window Shells */}
+                <div>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <span className="text-[11px] font-semibold text-white">
+                      Window Shells
+                    </span>
+                    <span className="text-[9px] font-medium text-neutral-400">
+                      OS &amp; Browsers
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-1.5">
+                    {[
+                      { id: "macos" as const, label: "macOS Window", desc: "Cupertino traffic lights" },
+                      { id: "windows" as const, label: "Windows 11", desc: "Win 11 PowerShell tab + controls" },
+                      { id: "terminal" as const, label: "macOS Terminal", desc: "Dark zsh terminal prompt" },
+                      { id: "chrome" as const, label: "Google Chrome", desc: "Tab strip + Omnibox URL" },
+                      { id: "safari" as const, label: "Safari Browser", desc: "Unified address bar" },
+                      { id: "glass" as const, label: "Frosted Glass", desc: "Translucent glass shell" },
+                      { id: "none" as const, label: "Frameless", desc: "Edge-to-edge raw canvas" },
+                    ].map((wf) => {
+                      const isActive = (project?.looks.windowFrame || "macos") === wf.id;
+                      return (
+                        <button
+                          key={wf.id}
+                          type="button"
+                          onClick={() => updateLooks({ windowFrame: wf.id })}
+                          className={`rounded-lg py-1.5 px-2 text-left transition-all border ${
+                            isActive
+                              ? "bg-white text-black font-bold shadow-sm border-white"
+                              : "bg-ink-900 border-ink-800 text-fg-muted hover:text-white hover:bg-ink-800"
+                          }`}
+                        >
+                          <span className="block text-[11px] font-semibold leading-tight">{wf.label}</span>
+                          <span className={`block text-[9px] leading-tight mt-0.5 ${isActive ? "text-neutral-700 font-medium" : "text-fg-faint"}`}>
+                            {wf.desc}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
               </div>
             </CollapsibleCard>

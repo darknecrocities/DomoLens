@@ -114,6 +114,12 @@ export type WindowFrameStyle =
   | "chrome"
   | "glass"
   | "terminal"
+  | "iphone"
+  | "android"
+  | "macbook"
+  | "laptop"
+  | "ipad"
+  | "imac"
   | "none";
 
 export type CameraPhysicsPreset = "smooth" | "snappy" | "spring" | "linear";

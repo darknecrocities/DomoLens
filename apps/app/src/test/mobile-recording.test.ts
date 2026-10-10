@@ -231,5 +231,22 @@ describe("Mobile Recording Engine & Transport", () => {
     expect(healed?.zoomBlocks.length).toBeGreaterThanOrEqual(1);
     expect(healed?.keyframes?.length ?? 0).toBeGreaterThanOrEqual(2);
   });
+
+  it("supports full suite of device chassis mockups (iPhone, Android, MacBook, Laptop, iPad, iMac)", async () => {
+    const { useEditor } = await import("../store/editor");
+    const deviceStyles: import("@domolens/core").WindowFrameStyle[] = [
+      "iphone",
+      "android",
+      "macbook",
+      "laptop",
+      "ipad",
+      "imac",
+    ];
+
+    for (const style of deviceStyles) {
+      useEditor.getState().updateLooks({ windowFrame: style });
+      expect(useEditor.getState().project?.looks.windowFrame).toBe(style);
+    }
+  });
 });
 
