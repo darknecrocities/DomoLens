@@ -1190,6 +1190,11 @@ fn start_mobile_stream(serial: String, width: Option<u32>, height: Option<u32>) 
     };
     let size_arg = format!("{}x{}", target_w, target_h);
 
+    // Automatically enable native touch visualization on the mobile screen
+    let _ = std::process::Command::new(&adb_path)
+        .args(["-s", &serial, "shell", "settings", "put", "system", "show_touches", "1"])
+        .status();
+
     let serial_clone = serial.clone();
     let adb_clone = adb_path.clone();
     let ffmpeg_clone = ffmpeg_path.clone();
@@ -1198,108 +1203,112 @@ fn start_mobile_stream(serial: String, width: Option<u32>, height: Option<u32>) 
         while STREAM_SERVER_ACTIVE.load(Ordering::SeqCst) {
             match listener.accept() {
                 Ok((mut socket, _)) => {
-                    let mut req_buf = [0u8; 1024];
-                    let _ = socket.read(&mut req_buf);
+                    let serial_sub = serial_clone.clone();
+                    let adb_sub = adb_clone.clone();
+                    let ffmpeg_sub = ffmpeg_clone.clone();
+                    let size_sub = size_arg.clone();
 
-                    let header = "HTTP/1.1 200 OK\r\nContent-Type: multipart/x-mixed-replace; boundary=ffmpeg\r\nCache-Control: no-cache, no-store, must-revalidate\r\nPragma: no-cache\r\nAccess-Control-Allow-Origin: *\r\nConnection: close\r\n\r\n";
-                    if socket.write_all(header.as_bytes()).is_err() {
-                        continue;
-                    }
+                    std::thread::spawn(move || {
+                        let mut req_buf = [0u8; 1024];
+                        let _ = socket.read(&mut req_buf);
 
-                    while STREAM_SERVER_ACTIVE.load(Ordering::SeqCst) {
-                        let adb_child = match std::process::Command::new(&adb_clone)
-                            .args([
-                                "-s", &serial_clone,
-                                "exec-out",
-                                "screenrecord",
-                                "--output-format=h264",
-                                "--size", &size_arg,
-                                "--bit-rate", "4000000",
-                                "--time-limit", "180",
-                                "-"
-                            ])
-                            .stdout(std::process::Stdio::piped())
-                            .stderr(std::process::Stdio::null())
-                            .spawn()
-                        {
-                            Ok(c) => c,
-                            Err(e) => {
-                                eprintln!("[mobile_stream] Failed to spawn adb screenrecord: {}", e);
-                                break;
-                            }
-                        };
-
-                        let adb_pid = adb_child.id();
-                        let adb_stdout = match adb_child.stdout {
-                            Some(s) => s,
-                            None => break,
-                        };
-
-                        if let Ok(mut pids) = STREAM_CHILD_PIDS.lock() {
-                            pids.push(adb_pid);
+                        let header = "HTTP/1.1 200 OK\r\nContent-Type: multipart/x-mixed-replace; boundary=ffmpeg\r\nCache-Control: no-cache, no-store, must-revalidate\r\nPragma: no-cache\r\nAccess-Control-Allow-Origin: *\r\nConnection: close\r\n\r\n";
+                        if socket.write_all(header.as_bytes()).is_err() {
+                            return;
                         }
 
-                        let mut ffmpeg_child = match std::process::Command::new(&ffmpeg_clone)
-                            .args([
-                                "-fflags", "nobuffer",
-                                "-flags", "low_delay",
-                                "-probesize", "32",
-                                "-analyzeduration", "0",
-                                "-f", "h264",
-                                "-i", "pipe:0",
-                                "-c:v", "mjpeg",
-                                "-q:v", "3",
-                                "-f", "mpjpeg",
-                                "-"
-                            ])
-                            .stdin(adb_stdout)
-                            .stdout(std::process::Stdio::piped())
-                            .stderr(std::process::Stdio::null())
-                            .spawn()
-                        {
-                            Ok(c) => c,
-                            Err(e) => {
-                                eprintln!("[mobile_stream] Failed to spawn ffmpeg: {}", e);
-                                #[cfg(unix)]
-                                unsafe {
-                                    libc::kill(adb_pid as i32, libc::SIGKILL);
+                        while STREAM_SERVER_ACTIVE.load(Ordering::SeqCst) {
+                            let adb_child = match std::process::Command::new(&adb_sub)
+                                .args([
+                                    "-s", &serial_sub,
+                                    "exec-out",
+                                    "screenrecord",
+                                    "--output-format=h264",
+                                    "--size", &size_sub,
+                                    "--bit-rate", "4000000",
+                                    "--time-limit", "180",
+                                    "-"
+                                ])
+                                .stdout(std::process::Stdio::piped())
+                                .stderr(std::process::Stdio::null())
+                                .spawn()
+                            {
+                                Ok(c) => c,
+                                Err(e) => {
+                                    eprintln!("[mobile_stream] Failed to spawn adb screenrecord: {}", e);
+                                    break;
                                 }
-                                break;
+                            };
+
+                            let adb_pid = adb_child.id();
+                            let adb_stdout = match adb_child.stdout {
+                                Some(s) => s,
+                                None => break,
+                            };
+
+                            if let Ok(mut pids) = STREAM_CHILD_PIDS.lock() {
+                                pids.push(adb_pid);
                             }
-                        };
 
-                        let ffmpeg_pid = ffmpeg_child.id();
-                        if let Ok(mut pids) = STREAM_CHILD_PIDS.lock() {
-                            pids.push(ffmpeg_pid);
-                        }
-
-                        let mut socket_disconnected = false;
-                        if let Some(mut ffmpeg_out) = ffmpeg_child.stdout.take() {
-                            let mut buf = [0u8; 8192];
-                            while STREAM_SERVER_ACTIVE.load(Ordering::SeqCst) {
-                                match ffmpeg_out.read(&mut buf) {
-                                    Ok(0) => break,
-                                    Ok(n) => {
-                                        if socket.write_all(&buf[..n]).is_err() {
-                                            socket_disconnected = true;
-                                            break;
-                                        }
+                            let mut ffmpeg_child = match std::process::Command::new(&ffmpeg_sub)
+                                .args([
+                                    "-f", "h264",
+                                    "-i", "pipe:0",
+                                    "-vf", "format=yuvj420p",
+                                    "-c:v", "mjpeg",
+                                    "-q:v", "4",
+                                    "-f", "mpjpeg",
+                                    "-"
+                                ])
+                                .stdin(adb_stdout)
+                                .stdout(std::process::Stdio::piped())
+                                .stderr(std::process::Stdio::null())
+                                .spawn()
+                            {
+                                Ok(c) => c,
+                                Err(e) => {
+                                    eprintln!("[mobile_stream] Failed to spawn ffmpeg: {}", e);
+                                    #[cfg(unix)]
+                                    unsafe {
+                                        libc::kill(adb_pid as i32, libc::SIGKILL);
                                     }
-                                    Err(_) => break,
+                                    break;
+                                }
+                            };
+
+                            let ffmpeg_pid = ffmpeg_child.id();
+                            if let Ok(mut pids) = STREAM_CHILD_PIDS.lock() {
+                                pids.push(ffmpeg_pid);
+                            }
+
+                            let mut socket_disconnected = false;
+                            if let Some(mut ffmpeg_out) = ffmpeg_child.stdout.take() {
+                                let mut buf = [0u8; 8192];
+                                while STREAM_SERVER_ACTIVE.load(Ordering::SeqCst) {
+                                    match ffmpeg_out.read(&mut buf) {
+                                        Ok(0) => break,
+                                        Ok(n) => {
+                                            if socket.write_all(&buf[..n]).is_err() {
+                                                socket_disconnected = true;
+                                                break;
+                                            }
+                                        }
+                                        Err(_) => break,
+                                    }
                                 }
                             }
-                        }
 
-                        #[cfg(unix)]
-                        unsafe {
-                            libc::kill(adb_pid as i32, libc::SIGKILL);
-                            libc::kill(ffmpeg_pid as i32, libc::SIGKILL);
-                        }
+                            #[cfg(unix)]
+                            unsafe {
+                                libc::kill(adb_pid as i32, libc::SIGKILL);
+                                libc::kill(ffmpeg_pid as i32, libc::SIGKILL);
+                            }
 
-                        if socket_disconnected || !STREAM_SERVER_ACTIVE.load(Ordering::SeqCst) {
-                            break;
+                            if socket_disconnected || !STREAM_SERVER_ACTIVE.load(Ordering::SeqCst) {
+                                break;
+                            }
                         }
-                    }
+                    });
                 }
                 Err(ref e) if e.kind() == std::io::ErrorKind::WouldBlock => {
                     std::thread::sleep(std::time::Duration::from_millis(50));

@@ -25,6 +25,7 @@ export function MobileLiveMonitor({
   className = "",
 }: MobileLiveMonitorProps) {
   const videoRef = useRef<HTMLVideoElement | null>(null);
+  const imgRef = useRef<HTMLImageElement | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
   const [ripples, setRipples] = useState<TapRipple[]>([]);
   const [liveStreamUrl, setLiveStreamUrl] = useState<string | null>(() => mobileStreamBridge.getLiveStreamUrl());
@@ -32,6 +33,21 @@ export function MobileLiveMonitor({
     const s = mobileStreamBridge.getStream();
     return Boolean(s && s.getVideoTracks().length > 0);
   });
+
+  // Synchronize live frames into the recording canvas so recorded exports have 60 FPS clarity
+  useEffect(() => {
+    let animId: number;
+    const syncCanvas = () => {
+      if (liveStreamUrl && imgRef.current && imgRef.current.naturalWidth > 0) {
+        mobileStreamBridge.updateCanvasFrame(imgRef.current);
+      } else if (!liveStreamUrl && videoRef.current && videoRef.current.videoWidth > 0) {
+        mobileStreamBridge.updateCanvasFrame(videoRef.current);
+      }
+      animId = requestAnimationFrame(syncCanvas);
+    };
+    animId = requestAnimationFrame(syncCanvas);
+    return () => cancelAnimationFrame(animId);
+  }, [liveStreamUrl]);
 
   // Bind live media stream to the video element
   useEffect(() => {
@@ -178,10 +194,16 @@ export function MobileLiveMonitor({
           {/* Hardware Stream View: Native MJPEG image stream for zero-lag hardware mirroring, or video element for WebRTC/Canvas stream */}
           {liveStreamUrl ? (
             <img
+              ref={imgRef}
               src={liveStreamUrl}
-              alt="Live Device Mirror"
+              alt=""
               crossOrigin="anonymous"
               className="size-full object-cover pointer-events-none select-none"
+              onError={() => {
+                setTimeout(() => {
+                  setLiveStreamUrl(mobileStreamBridge.getLiveStreamUrl());
+                }, 800);
+              }}
             />
           ) : (
             <video

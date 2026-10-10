@@ -73,8 +73,6 @@ class MobileStreamBridgeImpl {
   private frameCtx: CanvasRenderingContext2D | null = null;
   private liveStreamUrl: string | null = null;
   private streamUrlListeners = new Set<(url: string | null) => void>();
-  private canvasMirrorAnimId: number | null = null;
-  private canvasMirrorImg: HTMLImageElement | null = null;
 
   public async scanAdbDevices(): Promise<AdbDeviceItem[]> {
     if (typeof window !== "undefined" && "__TAURI_INTERNALS__" in window) {
@@ -313,9 +311,6 @@ class MobileStreamBridgeImpl {
       if (url && this.activeDevice?.id === device.serial) {
         this.liveStreamUrl = url;
         this.streamUrlListeners.forEach((cb) => cb(url));
-        if (this.activeDevice) {
-          this.startCanvasMirrorFromStreamUrl(url, this.activeDevice);
-        }
         return;
       }
     } catch (err) {
@@ -329,49 +324,11 @@ class MobileStreamBridgeImpl {
     }
   }
 
-  private startCanvasMirrorFromStreamUrl(url: string, device: MobileDeviceInfo): void {
-    this.stopCanvasMirror();
-    if (typeof Image === "undefined") return;
-
-    const img = new Image();
-    img.crossOrigin = "anonymous";
-    this.canvasMirrorImg = img;
-
-    const render = () => {
-      if (!this.liveStreamUrl || !this.activeDevice) {
-        this.stopCanvasMirror();
-        return;
-      }
-      if (this.frameCtx && img.complete && img.naturalWidth > 0) {
-        this.frameCtx.drawImage(img, 0, 0, device.width, device.height);
-      }
-      this.canvasMirrorAnimId = requestAnimationFrame(render);
-    };
-
-    img.onload = () => {
-      if (!this.canvasMirrorAnimId) {
-        this.canvasMirrorAnimId = requestAnimationFrame(render);
-      }
-    };
-    img.onerror = () => {
-      setTimeout(() => {
-        if (this.liveStreamUrl && this.canvasMirrorImg === img) {
-          img.src = `${url}?t=${Date.now()}`;
-        }
-      }, 1000);
-    };
-
-    img.src = url;
-  }
-
-  private stopCanvasMirror(): void {
-    if (this.canvasMirrorAnimId) {
-      cancelAnimationFrame(this.canvasMirrorAnimId);
-      this.canvasMirrorAnimId = null;
-    }
-    if (this.canvasMirrorImg) {
-      this.canvasMirrorImg.src = "";
-      this.canvasMirrorImg = null;
+  public updateCanvasFrame(source: CanvasImageSource): void {
+    if (this.frameCtx && this.activeDevice) {
+      try {
+        this.frameCtx.drawImage(source, 0, 0, this.activeDevice.width, this.activeDevice.height);
+      } catch {}
     }
   }
 
@@ -821,7 +778,6 @@ class MobileStreamBridgeImpl {
    */
   public disconnect(): void {
     this.stopFramePolling();
-    this.stopCanvasMirror();
     if (typeof window !== "undefined" && "__TAURI_INTERNALS__" in window) {
       import("@tauri-apps/api/core").then(({ invoke }) => {
         invoke("stop_mobile_stream").catch(() => {});
