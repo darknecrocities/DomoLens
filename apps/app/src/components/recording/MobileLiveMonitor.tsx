@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { Cable, Wifi } from "lucide-react";
+import { Cable, Smartphone, Wifi } from "lucide-react";
 import { mobileStreamBridge, type MobileDeviceInfo } from "../../lib/mobile-stream-bridge";
 
 interface MobileLiveMonitorProps {
@@ -27,24 +27,44 @@ export function MobileLiveMonitor({
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
   const [ripples, setRipples] = useState<TapRipple[]>([]);
+  const [hasActiveStream, setHasActiveStream] = useState<boolean>(() => {
+    const s = mobileStreamBridge.getStream();
+    return Boolean(s && s.getVideoTracks().length > 0);
+  });
 
   // Bind live media stream to the video element
   useEffect(() => {
-    const stream = mobileStreamBridge.getStream();
-    if (videoRef.current && stream) {
-      videoRef.current.srcObject = stream;
-      videoRef.current.play().catch(() => {});
-    }
+    const checkStream = () => {
+      const stream = mobileStreamBridge.getStream();
+      const hasTracks = Boolean(stream && stream.getVideoTracks().length > 0);
+      setHasActiveStream(hasTracks);
+      if (videoRef.current && stream && hasTracks) {
+        videoRef.current.srcObject = stream;
+        videoRef.current.play().catch(() => {});
+      }
+    };
+    checkStream();
 
     const unsubStream = mobileStreamBridge.onStreamReady((newStream) => {
       if (videoRef.current) {
         videoRef.current.srcObject = newStream;
         videoRef.current.play().catch(() => {});
       }
+      setHasActiveStream(Boolean(newStream && newStream.getVideoTracks().length > 0));
+    });
+
+    const unsubDev = mobileStreamBridge.onDeviceConnected(() => {
+      checkStream();
+    });
+
+    const unsubDisc = mobileStreamBridge.onDeviceDisconnected(() => {
+      setHasActiveStream(false);
     });
 
     return () => {
       unsubStream();
+      unsubDev();
+      unsubDisc();
     };
   }, []);
 
@@ -75,23 +95,25 @@ export function MobileLiveMonitor({
   const width = deviceInfo?.width || 1179;
   const height = deviceInfo?.height || 2556;
   const aspectRatio = deviceInfo?.aspectRatio || "19.5:9";
-  const latencyMs = deviceInfo?.latencyMs || 24;
+  const latencyMs = deviceInfo?.latencyMs || 18;
 
   return (
     <div className={`flex flex-col items-center select-none ${className}`}>
       {/* Top Device Telemetry Bar */}
       <div className="flex w-full max-w-xs items-center justify-between pb-2 text-[11px] font-mono text-fg-muted">
-        <div className="flex items-center gap-1.5">
-          <span className={`size-2 rounded-full ${isRecording ? "bg-white animate-pulse" : "bg-neutral-400"}`} />
-          <span className="font-semibold text-white truncate max-w-[120px]">{name}</span>
+        <div className="flex items-center gap-1.5 truncate">
+          <span className={`size-2 rounded-full ${hasActiveStream ? "bg-white animate-pulse" : "bg-neutral-500 animate-ping"}`} />
+          <span className="font-semibold text-white truncate max-w-[130px]">
+            {deviceInfo ? name : "Standby"}
+          </span>
         </div>
-        <div className="flex items-center gap-2">
-          <span className="flex items-center gap-1 rounded bg-ink-800 px-1.5 py-0.5 border border-ink-700 text-fg-faint">
+        <div className="flex items-center gap-1.5 shrink-0">
+          <span className="flex items-center gap-1 rounded bg-ink-800 px-1.5 py-0.5 border border-ink-700 text-fg-faint text-[10px]">
             {connectionType === "wifi" ? <Wifi className="size-3" /> : <Cable className="size-3" />}
             {connectionType.toUpperCase()}
           </span>
-          <span className="text-white">{latencyMs}ms</span>
-          <span className="text-neutral-400">60 FPS</span>
+          <span className="text-white text-[10px]">{latencyMs}ms</span>
+          <span className="text-neutral-400 text-[10px]">60 FPS</span>
         </div>
       </div>
 
@@ -99,7 +121,7 @@ export function MobileLiveMonitor({
       <div
         className="relative flex flex-col items-center rounded-[36px] border-[3px] border-neutral-700 bg-black p-2 shadow-2xl transition-transform duration-200 hover:scale-[1.01]"
         style={{
-          width: "240px",
+          width: "230px",
           maxWidth: "100%",
         }}
       >
@@ -120,6 +142,21 @@ export function MobileLiveMonitor({
           }}
           title="Live Phone Screen — Click anywhere to simulate touch interaction"
         >
+          {/* Radar Standby Screen when awaiting active stream */}
+          {!hasActiveStream && (
+            <div className="absolute inset-0 z-10 flex flex-col items-center justify-center p-4 text-center bg-black/95">
+              <div className="relative flex size-16 items-center justify-center mb-2.5">
+                <div className="absolute inset-0 rounded-full border border-white/20 animate-ping" />
+                <div className="absolute inset-2 rounded-full border border-white/30" />
+                <Smartphone className="size-7 text-white" />
+              </div>
+              <span className="text-xs font-bold font-mono text-white tracking-wider">RADAR ACTIVE</span>
+              <span className="mt-1 text-[10px] text-neutral-400 max-w-[130px] leading-tight font-sans">
+                Scan QR code on left with your phone camera
+              </span>
+            </div>
+          )}
+
           {/* Hardware Stream Video Element */}
           <video
             ref={videoRef}
@@ -149,8 +186,8 @@ export function MobileLiveMonitor({
 
           {/* Live Recording Watermark Banner */}
           {isRecording && (
-            <div className="pointer-events-none absolute top-8 left-0 right-0 flex justify-center">
-              <span className="flex items-center gap-1 rounded-full bg-black/75 px-2.5 py-0.5 text-[9px] font-mono font-bold text-white border border-white/20 backdrop-blur-md">
+            <div className="pointer-events-none absolute top-8 left-0 right-0 flex justify-center z-20">
+              <span className="flex items-center gap-1 rounded-full bg-black/85 px-2.5 py-0.5 text-[9px] font-mono font-bold text-white border border-white/20 backdrop-blur-md">
                 <span className="size-1.5 rounded-full bg-white animate-pulse" />
                 REC LIVE
               </span>
@@ -158,7 +195,7 @@ export function MobileLiveMonitor({
           )}
 
           {/* Bottom Home Indicator Bar */}
-          <div className="pointer-events-none absolute bottom-1.5 left-0 right-0 flex justify-center">
+          <div className="pointer-events-none absolute bottom-1.5 left-0 right-0 flex justify-center z-20">
             <div className="h-1 w-20 rounded-full bg-white/50" />
           </div>
         </div>
@@ -166,7 +203,7 @@ export function MobileLiveMonitor({
 
       {/* Screen Specs Footer */}
       <div className="mt-2 text-center text-[10px] font-mono text-neutral-400">
-        {width} × {height} • {aspectRatio} • Click to test tap
+        {deviceInfo ? `${width} × ${height} • ${aspectRatio} • Click to test tap` : "Awaiting Mobile Connection"}
       </div>
     </div>
   );

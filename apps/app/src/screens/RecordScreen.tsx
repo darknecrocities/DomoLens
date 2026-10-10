@@ -1,10 +1,15 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import {
   AppWindow,
   ArrowLeft,
   Cable,
+  Check,
   CheckCircle2,
+  Copy,
+  Edit3,
+  ExternalLink,
+  Globe,
   HelpCircle,
   Mic,
   MicOff,
@@ -22,6 +27,7 @@ import { formatDuration } from "@domolens/core";
 import { copy } from "../copy/en";
 import { Button } from "../components/ui/Button";
 import { useNav } from "../store/nav";
+import { toast } from "../store/toast";
 import {
   useRecorder,
   type RecordingSource,
@@ -52,6 +58,7 @@ export function RecordScreen() {
     setDeviceTarget,
     setMobileConnectionType,
     connectMobileDevice,
+    disconnectMobileDevice,
     simulateMobileTap,
     setRecordingMode,
     toggleMic,
@@ -66,10 +73,22 @@ export function RecordScreen() {
 
   const [isGuideOpen, setIsGuideOpen] = useState(false);
   const [guideInitialTab, setGuideInitialTab] = useState<"android-wifi" | "android-usb" | "ios-wifi" | "ios-usb">("ios-wifi");
+  const [customIp, setCustomIp] = useState(() => mobileStreamBridge.getLanIp());
+  const [isEditingIp, setIsEditingIp] = useState(false);
+  const [hasCopiedLink, setHasCopiedLink] = useState(false);
+  const [qrFailed, setQrFailed] = useState(false);
+
+  // Automatically start host signaling when mobile mode is selected
+  useEffect(() => {
+    if (deviceTarget === "mobile") {
+      mobileStreamBridge.startHostSignaling();
+    }
+  }, [deviceTarget]);
 
   const pairingInfo = useMemo(
     () => mobileStreamBridge.generatePairingInfo(mobileConnectionType),
-    [mobileConnectionType],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [mobileConnectionType, customIp],
   );
 
   const deviceTargets: Array<{ id: DeviceTarget; label: string; desc: string; icon: typeof Monitor }> = [
@@ -89,15 +108,21 @@ export function RecordScreen() {
 
   const mobileConnectionModes: Array<{ id: MobileConnectionType; label: string; desc: string; icon: typeof Wifi }> = [
     {
+      id: "cloud",
+      label: "Mobile Data (4G/5G Cellular)",
+      desc: "Connect anywhere over cellular 4G/5G data via global WebRTC cloud link.",
+      icon: Globe,
+    },
+    {
       id: "wifi",
-      label: "Wi-Fi Wireless (WebRTC)",
-      desc: "Scan QR code with phone camera to connect wirelessly (< 30ms latency).",
+      label: "Wi-Fi / Personal Hotspot",
+      desc: "Ultra-low latency (< 20ms) on same Wi-Fi or phone's Personal Hotspot.",
       icon: Wifi,
     },
     {
       id: "usb",
-      label: "USB Cable (Direct Link)",
-      desc: "Ultra-low latency (< 15ms) via USB-C or Lightning cable.",
+      label: "USB Cable (Direct Wire)",
+      desc: "Sub-10ms response time via USB-C or Lightning cable.",
       icon: Cable,
     },
   ];
@@ -459,14 +484,14 @@ export function RecordScreen() {
                     <div>
                       <h3 className="text-sm font-bold text-white">Mobile Device Link Hub</h3>
                       <p className="text-[11px] text-fg-muted">
-                        Connect Android or iOS via Wi-Fi or USB cable
+                        Connect ANY Android or iOS phone automatically via QR code
                       </p>
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
                     <button
                       type="button"
-                      onClick={() => openSetupGuideFor(mobileConnectionType === "wifi" ? "ios-wifi" : "ios-usb")}
+                      onClick={() => openSetupGuideFor(mobileConnectionType === "usb" ? "ios-usb" : "ios-wifi")}
                       className="flex items-center gap-1.5 rounded-lg border border-neutral-700 bg-neutral-800 hover:bg-neutral-700 px-3 py-1 text-xs font-semibold text-white transition-colors"
                     >
                       <HelpCircle className="size-3.5" />
@@ -475,8 +500,8 @@ export function RecordScreen() {
                   </div>
                 </div>
 
-                {/* Connection Mode (Wi-Fi vs USB) */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {/* Connection Channel Selector (Mobile Data vs Wi-Fi vs USB) */}
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
                   {mobileConnectionModes.map((cm) => {
                     const Icon = cm.icon;
                     const selected = mobileConnectionType === cm.id;
@@ -485,105 +510,220 @@ export function RecordScreen() {
                         key={cm.id}
                         type="button"
                         onClick={() => setMobileConnectionType(cm.id)}
-                        className={`flex flex-col items-start rounded-2xl border p-3.5 text-left transition-all ${
+                        className={`flex flex-col items-start rounded-2xl border p-3 text-left transition-all ${
                           selected
                             ? "border-white bg-white/10 shadow-sm"
                             : "border-ink-700 bg-ink-900/60 hover:border-ink-600 hover:bg-ink-700/40"
                         }`}
                       >
-                        <div className="flex items-center gap-2 mb-1.5">
+                        <div className="flex items-center gap-2 mb-1">
                           <div className={`p-1.5 rounded-lg ${selected ? "bg-white text-black" : "bg-ink-800 text-fg-muted"}`}>
-                            <Icon className="size-4" />
+                            <Icon className="size-3.5" />
                           </div>
-                          <span className="text-xs font-bold text-white">{cm.label}</span>
+                          <span className="text-xs font-bold text-white leading-tight">{cm.label}</span>
                         </div>
-                        <span className="text-[11px] text-fg-muted leading-tight">{cm.desc}</span>
+                        <span className="text-[10px] text-fg-muted leading-tight">{cm.desc}</span>
                       </button>
                     );
                   })}
                 </div>
 
-                {/* Live Device Status & Preview Hub */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-center rounded-2xl border border-neutral-700/80 bg-ink-950/70 p-4">
-                  {/* Left Column: Device Info & Quick Connectors */}
-                  <div className="space-y-3">
-                    <div className="flex items-center gap-2">
-                      <span className="size-2 rounded-full bg-white animate-pulse" />
-                      <span className="text-xs font-semibold text-white">
-                        {mobileDeviceInfo ? `Connected: ${mobileDeviceInfo.name}` : "Ready to Pair"}
-                      </span>
-                    </div>
+                {/* Main Hub: Real Scannable QR Code & Live Mirror Monitor */}
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-start rounded-2xl border border-neutral-700/80 bg-ink-950/70 p-4">
+                  {/* Left Column: QR Code & Connection Status */}
+                  <div className="flex flex-col items-center space-y-3 w-full">
+                    {mobileConnectionType !== "usb" ? (
+                      <div className="flex flex-col items-center w-full p-4 rounded-2xl bg-black border border-neutral-800">
+                        {/* Real Scannable High-Res QR Code Card */}
+                        <div className="relative p-3 bg-white rounded-2xl shadow-lift border border-neutral-700 flex flex-col items-center">
+                          {!qrFailed ? (
+                            <img
+                              src={`https://api.qrserver.com/v1/create-qr-code/?size=240x240&margin=2&format=svg&data=${encodeURIComponent(pairingInfo.activeUrl)}`}
+                              alt="Scan Pairing QR Code"
+                              onError={() => setQrFailed(true)}
+                              className="size-48 sm:size-52 rounded-xl object-contain bg-white"
+                            />
+                          ) : (
+                            <div className="size-48 sm:size-52 rounded-xl bg-white flex flex-col items-center justify-center p-3 text-black text-center">
+                              <QrCode className="size-16 text-black mb-2" />
+                              <span className="text-xs font-mono font-bold">SCAN WITH PHONE CAMERA</span>
+                              <span className="text-[10px] font-mono break-all mt-1">{pairingInfo.activeUrl}</span>
+                            </div>
+                          )}
+                          <div className="mt-2 flex items-center gap-1.5 text-[10px] font-mono font-bold text-black uppercase tracking-wider">
+                            <span className="size-1.5 rounded-full bg-black animate-pulse" />
+                            <span>{mobileConnectionType === "cloud" ? "Cellular 4G/5G WebRTC" : "Wi-Fi Direct Link"}</span>
+                          </div>
+                        </div>
 
-                    <div className="rounded-xl border border-neutral-800 bg-ink-900 p-3 space-y-1.5 text-xs font-mono">
-                      <div className="flex justify-between text-neutral-400">
-                        <span>Resolution:</span>
-                        <span className="text-white font-bold">
-                          {mobileDeviceInfo ? `${mobileDeviceInfo.width} × ${mobileDeviceInfo.height}` : "1179 × 2556"}
-                        </span>
-                      </div>
-                      <div className="flex justify-between text-neutral-400">
-                        <span>Aspect Ratio:</span>
-                        <span className="text-white">
-                          {mobileDeviceInfo?.aspectRatio || "19.5:9 (Portrait)"}
-                        </span>
-                      </div>
-                      <div className="flex justify-between text-neutral-400">
-                        <span>Transport Link:</span>
-                        <span className="text-white uppercase">{mobileConnectionType} Direct</span>
-                      </div>
-                      <div className="flex justify-between text-neutral-400">
-                        <span>Latency & FPS:</span>
-                        <span className="text-white">
-                          {mobileDeviceInfo?.latencyMs || 22}ms • 60 FPS
-                        </span>
-                      </div>
-                    </div>
+                        {/* Real-time Connection Status Banner */}
+                        <div className="mt-3 w-full flex items-center justify-between px-3 py-2 rounded-xl bg-neutral-900 border border-neutral-800 text-[11px] font-mono">
+                          <div className="flex items-center gap-2 truncate">
+                            <span className={`size-2 rounded-full ${mobileDeviceInfo ? "bg-white animate-pulse" : "bg-neutral-500 animate-ping"}`} />
+                            <span className="text-white truncate font-medium">
+                              {mobileDeviceInfo ? `Connected: ${mobileDeviceInfo.name}` : "Waiting for phone camera to scan..."}
+                            </span>
+                          </div>
+                          {mobileDeviceInfo && (
+                            <button
+                              type="button"
+                              onClick={disconnectMobileDevice}
+                              className="text-[10px] text-neutral-400 hover:text-white underline ml-2 shrink-0"
+                            >
+                              Unpair
+                            </button>
+                          )}
+                        </div>
 
-                    {/* Quick Preset Device Switcher */}
-                    <div>
-                      <span className="block text-[10px] font-mono uppercase tracking-wider text-neutral-400 mb-1.5">
-                        Test Device Presets
-                      </span>
-                      <div className="flex flex-wrap gap-1.5">
+                        {/* Quick Action Buttons */}
+                        <div className="mt-2.5 flex items-center gap-2 w-full">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              void navigator.clipboard.writeText(pairingInfo.activeUrl);
+                              setHasCopiedLink(true);
+                              toast.success("Pairing link copied to clipboard!");
+                              setTimeout(() => setHasCopiedLink(false), 2000);
+                            }}
+                            className="flex-1 flex items-center justify-center gap-1.5 rounded-xl border border-neutral-700 bg-neutral-800 hover:bg-neutral-700 py-1.5 text-[11px] font-semibold text-white transition-colors"
+                          >
+                            {hasCopiedLink ? <Check className="size-3.5" /> : <Copy className="size-3.5" />}
+                            <span>{hasCopiedLink ? "Copied Link" : "Copy Pairing Link"}</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => window.open(pairingInfo.activeUrl, "_blank")}
+                            className="flex items-center justify-center gap-1.5 rounded-xl border border-neutral-700 bg-neutral-800 hover:bg-neutral-700 px-3 py-1.5 text-[11px] font-semibold text-white transition-colors"
+                            title="Open link in local browser for preview testing"
+                          >
+                            <ExternalLink className="size-3.5" />
+                            <span>Open</span>
+                          </button>
+                        </div>
+
+                        {/* Network Instructions & Mobile Data Guidance */}
+                        {mobileConnectionType === "cloud" ? (
+                          <div className="mt-3 w-full rounded-xl border border-neutral-800 bg-neutral-950 p-2.5 text-[11px] text-neutral-300 space-y-1">
+                            <div className="text-white font-semibold flex items-center gap-1">
+                              <Globe className="size-3 text-white" />
+                              <span>Mobile Data (4G/5G) Instructions:</span>
+                            </div>
+                            <p className="leading-relaxed text-neutral-400">
+                              Point your iPhone or Android camera at the QR code above. In your mobile browser, tap <strong>"Share Screen"</strong> to stream your screen to DomoLens.
+                            </p>
+                            <p className="text-[10px] text-neutral-500 pt-1 border-t border-neutral-900 leading-tight">
+                              💡 <em>Personal Hotspot Tip: You can also turn on your phone's Personal Hotspot and connect your laptop to it for zero-latency local streaming with zero cellular data consumption!</em>
+                            </p>
+                          </div>
+                        ) : (
+                          <div className="mt-3 w-full rounded-xl border border-neutral-800 bg-neutral-950 p-2.5 text-[11px] text-neutral-300 space-y-1.5">
+                            <div className="flex items-center justify-between">
+                              <span className="text-white font-semibold">Local Network Address:</span>
+                              {!isEditingIp ? (
+                                <button
+                                  type="button"
+                                  onClick={() => setIsEditingIp(true)}
+                                  className="flex items-center gap-1 text-[10px] text-neutral-400 hover:text-white"
+                                >
+                                  <Edit3 className="size-2.5" />
+                                  <span>Edit IP</span>
+                                </button>
+                              ) : (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    mobileStreamBridge.setLanIp(customIp);
+                                    setIsEditingIp(false);
+                                    toast.success(`Updated laptop LAN IP to ${customIp}`);
+                                  }}
+                                  className="text-[10px] font-bold text-white underline"
+                                >
+                                  Save IP
+                                </button>
+                              )}
+                            </div>
+                            {isEditingIp ? (
+                              <input
+                                type="text"
+                                value={customIp}
+                                onChange={(e) => setCustomIp(e.target.value)}
+                                className="w-full rounded-lg border border-neutral-700 bg-neutral-900 px-2 py-1 text-xs font-mono text-white"
+                                placeholder="e.g. 192.168.0.50"
+                              />
+                            ) : (
+                              <div className="font-mono text-neutral-300 truncate text-[10px]">{pairingInfo.localUrl}</div>
+                            )}
+                            <p className="text-[10px] text-neutral-500">
+                              Scan with phone camera while connected to same Wi-Fi or phone's Personal Hotspot.
+                            </p>
+                          </div>
+                        )}
+                      </div>
+                    ) : (
+                      /* USB Cable Direct Link Option */
+                      <div className="flex flex-col p-4 rounded-2xl bg-black border border-neutral-800 space-y-3 w-full">
+                        <div className="flex items-center gap-2 text-white font-bold text-sm">
+                          <Cable className="size-4" />
+                          <span>USB Direct Cable Link</span>
+                        </div>
+                        <div className="space-y-2 text-xs text-neutral-300">
+                          <div className="flex items-start gap-2">
+                            <span className="flex size-5 shrink-0 items-center justify-center rounded-full bg-white text-black text-[10px] font-bold">1</span>
+                            <span>Connect your phone to your computer using USB-C or Lightning cable.</span>
+                          </div>
+                          <div className="flex items-start gap-2">
+                            <span className="flex size-5 shrink-0 items-center justify-center rounded-full bg-white text-black text-[10px] font-bold">2</span>
+                            <span>On iPhone: Unlock and tap <strong>Trust Computer</strong>. On Android: Turn on <strong>USB Debugging</strong>.</span>
+                          </div>
+                          <div className="flex items-start gap-2">
+                            <span className="flex size-5 shrink-0 items-center justify-center rounded-full bg-white text-black text-[10px] font-bold">3</span>
+                            <span>Hardware capture links with sub-10ms latency at 60 FPS.</span>
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => openSetupGuideFor("ios-usb")}
+                          className="mt-2 rounded-xl border border-neutral-700 bg-neutral-800 hover:bg-neutral-700 py-2 text-xs font-semibold text-white transition-colors text-center"
+                        >
+                          Open Detailed USB Setup Guide
+                        </button>
+                      </div>
+                    )}
+
+                    {/* Collapsible Virtual Test Preview (For developer testing without a phone) */}
+                    <details className="group w-full rounded-2xl border border-neutral-800 bg-neutral-950/60 p-3 text-xs">
+                      <summary className="cursor-pointer font-mono text-[11px] text-neutral-400 select-none flex items-center justify-between">
+                        <span>Virtual Test Devices (for testing without physical phone)</span>
+                        <span className="text-[10px] text-neutral-500 group-open:rotate-180 transition-transform">▼</span>
+                      </summary>
+                      <div className="mt-2.5 flex flex-wrap gap-1.5 pt-2 border-t border-neutral-900">
                         <button
                           type="button"
                           onClick={() => void connectMobileDevice(mobileConnectionType, "iphone")}
                           className="rounded-lg border border-neutral-700 bg-neutral-800 hover:bg-neutral-700 px-2.5 py-1 text-[11px] font-medium text-white transition-colors"
                         >
-                          iPhone 15 Pro
+                          iPhone 15 Pro (Simulated)
                         </button>
                         <button
                           type="button"
                           onClick={() => void connectMobileDevice(mobileConnectionType, "android")}
                           className="rounded-lg border border-neutral-700 bg-neutral-800 hover:bg-neutral-700 px-2.5 py-1 text-[11px] font-medium text-white transition-colors"
                         >
-                          Galaxy S24 (Android)
+                          Galaxy S24 (Simulated)
                         </button>
                         <button
                           type="button"
                           onClick={() => void connectMobileDevice(mobileConnectionType, "ipad")}
                           className="rounded-lg border border-neutral-700 bg-neutral-800 hover:bg-neutral-700 px-2.5 py-1 text-[11px] font-medium text-white transition-colors"
                         >
-                          iPad Pro (Tablet)
+                          iPad Pro (Simulated)
                         </button>
                       </div>
-                    </div>
-
-                    {/* QR Code pairing URL / Host Info */}
-                    {mobileConnectionType === "wifi" && (
-                      <div className="rounded-xl border border-neutral-800 bg-neutral-900/60 p-2.5 text-[10px] font-mono text-neutral-400">
-                        <div className="flex items-center gap-1.5 text-white font-semibold mb-1">
-                          <QrCode className="size-3.5" />
-                          <span>Wi-Fi Pairing Address:</span>
-                        </div>
-                        <div className="truncate text-neutral-300">{pairingInfo.pairingUrl}</div>
-                        <div className="mt-1 text-fg-faint">Scan with iPhone or Android camera on same Wi-Fi.</div>
-                      </div>
-                    )}
+                    </details>
                   </div>
 
                   {/* Right Column: Live Mobile Screen Mirror Monitor */}
-                  <div className="flex flex-col items-center justify-center p-2 border border-neutral-800 rounded-2xl bg-black/40">
+                  <div className="flex flex-col items-center justify-center p-3 border border-neutral-800 rounded-2xl bg-black/50">
                     <MobileLiveMonitor
                       deviceInfo={mobileDeviceInfo}
                       lastTap={lastMobileTap}

@@ -3,6 +3,7 @@ import { AnimatePresence, motion } from "framer-motion";
 import {
   Cable,
   CheckCircle2,
+  Globe,
   Info,
   Smartphone,
   Wifi,
@@ -14,10 +15,10 @@ import { Button } from "../ui/Button";
 interface MobileSetupGuideModalProps {
   isOpen: boolean;
   onClose: () => void;
-  initialTab?: "android-wifi" | "android-usb" | "ios-wifi" | "ios-usb";
+  initialTab?: "cellular-hotspot" | "android-wifi" | "android-usb" | "ios-wifi" | "ios-usb";
 }
 
-type GuideTab = "android-wifi" | "android-usb" | "ios-wifi" | "ios-usb" | "troubleshooting";
+type GuideTab = "cellular-hotspot" | "android-wifi" | "android-usb" | "ios-wifi" | "ios-usb" | "troubleshooting";
 
 export function MobileSetupGuideModal({ isOpen, onClose, initialTab = "ios-wifi" }: MobileSetupGuideModalProps) {
   const [activeTab, setActiveTab] = useState<GuideTab>(initialTab);
@@ -51,7 +52,7 @@ export function MobileSetupGuideModal({ isOpen, onClose, initialTab = "ios-wifi"
               </div>
               <div>
                 <h3 className="text-base font-bold text-white">Mobile Device Setup Guide</h3>
-                <p className="text-xs text-fg-muted">Connect Android or iOS via Wi-Fi or USB cable</p>
+                <p className="text-xs text-fg-muted">Connect Android or iOS via Wi-Fi, Mobile Data, or USB cable</p>
               </div>
             </div>
             <button
@@ -65,6 +66,18 @@ export function MobileSetupGuideModal({ isOpen, onClose, initialTab = "ios-wifi"
 
           {/* Navigation Tabs */}
           <div className="flex border-b border-ink-800 px-6 bg-ink-950/60 overflow-x-auto gap-1 py-1.5 scrollbar-none">
+            <button
+              type="button"
+              onClick={() => setActiveTab("cellular-hotspot")}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-colors ${
+                activeTab === "cellular-hotspot"
+                  ? "bg-white text-black shadow-sm"
+                  : "text-fg-muted hover:text-white hover:bg-ink-800"
+              }`}
+            >
+              <Globe className="size-3.5" />
+              <span>Cellular / Hotspot</span>
+            </button>
             <button
               type="button"
               onClick={() => setActiveTab("ios-wifi")}
@@ -129,6 +142,40 @@ export function MobileSetupGuideModal({ isOpen, onClose, initialTab = "ios-wifi"
 
           {/* Tab Content Body */}
           <div className="flex-1 overflow-y-auto p-6 space-y-4">
+            {/* 0. Mobile Data & Cellular Hotspot */}
+            {activeTab === "cellular-hotspot" && (
+              <div className="space-y-4">
+                <div className="rounded-2xl border border-ink-800 bg-ink-800/40 p-4">
+                  <span className="text-xs font-mono uppercase tracking-wider text-neutral-400">Cellular 4G/5G &amp; Personal Hotspot</span>
+                  <p className="mt-1 text-sm font-medium text-white">
+                    Connect your iPhone or Android phone when running on mobile carrier cellular data or away from home Wi-Fi.
+                  </p>
+                </div>
+
+                <div className="space-y-3">
+                  <div className="flex items-start gap-3 rounded-2xl border border-ink-800 bg-ink-950/40 p-3.5">
+                    <span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-white text-black text-xs font-bold">1</span>
+                    <div>
+                      <h4 className="text-sm font-semibold text-white">Method A: Direct Cloud WebRTC (Mobile Data 4G/5G)</h4>
+                      <p className="mt-1 text-xs text-fg-muted leading-relaxed">
+                        On the DomoLens recording screen, select <strong>"Mobile Data (4G/5G Cellular)"</strong>. Point your phone camera at the QR code. Open the link in Safari or Chrome, and tap <strong>"Share Screen"</strong>. Your stream will flow across cellular WAN to your laptop.
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-start gap-3 rounded-2xl border border-ink-800 bg-ink-950/40 p-3.5">
+                    <span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-white text-black text-xs font-bold">2</span>
+                    <div>
+                      <h4 className="text-sm font-semibold text-white">Method B: Phone Personal Hotspot (Recommended)</h4>
+                      <p className="mt-1 text-xs text-fg-muted leading-relaxed">
+                        On your phone, enable <strong>Personal Hotspot</strong> (iPhone: Settings → Personal Hotspot → Allow Others to Join; Android: Settings → Hotspot &amp; Tethering). Connect your laptop to your phone's hotspot Wi-Fi. Scan the <strong>"Wi-Fi / Personal Hotspot"</strong> QR code. This gives you direct &lt; 15ms latency without consuming cellular video data!
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
             {/* 1. iOS Wi-Fi */}
             {activeTab === "ios-wifi" && (
               <div className="space-y-4">

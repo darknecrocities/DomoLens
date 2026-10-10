@@ -1,14 +1,15 @@
 /**
- * Mobile Stream Bridge
- * High-performance, low-latency mobile screen receiver & touch telemetry bridge.
- * Supports Wi-Fi (WebRTC & local signaling) and USB cable direct links for both iOS & Android.
+ * Mobile Stream Bridge v2.0
+ * Fully dynamic mobile screen streaming & touch telemetry engine.
+ * Handles automatic handshake via real-time WebRTC signaling across both
+ * local Wi-Fi / Hotspot networks and cellular Mobile Data (4G/5G).
  */
 
 export interface MobileDeviceInfo {
   id: string;
   name: string;
-  os: "ios" | "android";
-  connectionType: "wifi" | "usb";
+  os: "ios" | "android" | "other";
+  connectionType: "wifi" | "usb" | "cloud";
   width: number;
   height: number;
   fps: number;
@@ -26,10 +27,14 @@ export interface MobileTouchEvent {
 }
 
 export interface PairingInfo {
-  pairingUrl: string;
+  session: string;
   pairingCode: string;
+  pairingUrl: string;
+  localUrl: string;
+  cloudUrl: string;
   lanIp: string;
   port: number;
+  activeUrl: string;
 }
 
 type DeviceListener = (device: MobileDeviceInfo) => void;
@@ -40,7 +45,9 @@ type StreamListener = (stream: MediaStream) => void;
 class MobileStreamBridgeImpl {
   private activeDevice: MobileDeviceInfo | null = null;
   private activeStream: MediaStream | null = null;
-  private simulationTimer: ReturnType<typeof setInterval> | null = null;
+  private currentSession = "";
+  private currentPairingCode = "";
+  private activeLanIp = "192.168.0.50";
 
   private deviceListeners = new Set<DeviceListener>();
   private disconnectListeners = new Set<DisconnectListener>();
@@ -49,6 +56,7 @@ class MobileStreamBridgeImpl {
 
   private peerConnection: RTCPeerConnection | null = null;
   private dataChannel: RTCDataChannel | null = null;
+  private signalingWs: WebSocket | null = null;
 
   public getActiveDevice(): MobileDeviceInfo | null {
     return this.activeDevice;
@@ -59,7 +67,15 @@ class MobileStreamBridgeImpl {
   }
 
   public isConnected(): boolean {
-    return this.activeDevice !== null;
+    return this.activeDevice !== null && this.activeStream !== null;
+  }
+
+  public setLanIp(ip: string): void {
+    this.activeLanIp = ip.trim();
+  }
+
+  public getLanIp(): string {
+    return this.activeLanIp;
   }
 
   public onDeviceConnected(cb: DeviceListener): () => void {
@@ -85,215 +101,347 @@ class MobileStreamBridgeImpl {
   }
 
   /**
-   * Generates local Wi-Fi pairing parameters for the QR code and mobile companion.
+   * Generates real pairing URLs for QR Code scanning.
+   * Produces both a local LAN / Hotspot URL and an internet Cloud WebRTC URL.
    */
-  public generatePairingInfo(type: "wifi" | "usb"): PairingInfo {
-    const code = Math.random().toString(36).substring(2, 6).toUpperCase();
-    const isLocalhost = typeof window !== "undefined" && window.location.hostname === "localhost";
-    const lanIp = isLocalhost ? "192.168.1.105" : (typeof window !== "undefined" ? window.location.hostname : "127.0.0.1");
-    const port = 3210;
+  public generatePairingInfo(channel: "wifi" | "cloud" | "usb" = "wifi"): PairingInfo {
+    if (!this.currentSession) {
+      this.currentSession = `dl_${Math.random().toString(36).substring(2, 8)}`;
+    }
+    if (!this.currentPairingCode) {
+      this.currentPairingCode = Math.random().toString(36).substring(2, 6).toUpperCase();
+    }
 
-    const pairingUrl = type === "wifi"
-      ? `https://domolens.live/connect?id=${code}&mode=wifi&host=${lanIp}`
-      : `http://localhost:${port}/usb-connect?id=${code}&mode=usb`;
+    const host = typeof window !== "undefined" && window.location.hostname !== "localhost" && window.location.hostname !== "127.0.0.1" && window.location.hostname !== ""
+      ? window.location.hostname
+      : this.activeLanIp;
+
+    const port = typeof window !== "undefined" && window.location.port ? Number(window.location.port) : 3210;
+    const localUrl = `http://${host}:${port === 3210 ? 1420 : port}/remote.html?session=${this.currentSession}&mode=wifi`;
+    const cloudUrl = `https://vdo.ninja/?push=domolens_${this.currentSession}&screenshare=1&autostart=1`;
+    const usbUrl = `http://localhost:${port === 3210 ? 1420 : port}/remote.html?session=${this.currentSession}&mode=usb`;
+
+    let activeUrl = localUrl;
+    if (channel === "cloud") {
+      activeUrl = cloudUrl;
+    } else if (channel === "usb") {
+      activeUrl = usbUrl;
+    }
 
     return {
-      pairingUrl,
-      pairingCode: code,
-      lanIp,
+      session: this.currentSession,
+      pairingCode: this.currentPairingCode,
+      pairingUrl: activeUrl,
+      localUrl,
+      cloudUrl,
+      lanIp: host,
       port,
+      activeUrl,
     };
   }
 
   /**
-   * Simulates a connected mobile phone (iPhone or Android) with real 60fps canvas video stream
-   * and dynamic portrait aspect ratio (e.g. 1179x2556, 1080x2400) for testing, development, and offline demo.
+   * Connects a simulated device preset for automated testing and offline visual previews.
    */
   public connectSimulatedDevice(
     preset: "iphone" | "android" | "ipad" = "iphone",
-    connectionType: "wifi" | "usb" = "wifi",
+    type: "wifi" | "usb" | "cloud" = "wifi",
   ): MobileDeviceInfo {
-    this.disconnect();
-
-    let width = 1179;
-    let height = 2556;
-    let name = "iPhone 15 Pro";
-    let os: "ios" | "android" = "ios";
-    let aspectRatio = "19.5:9";
-
+    let device: MobileDeviceInfo;
     if (preset === "android") {
-      width = 1080;
-      height = 2400;
-      name = "Samsung Galaxy S24 Ultra";
-      os = "android";
-      aspectRatio = "20:9";
+      device = {
+        id: "dev-s24-ultra",
+        name: "Samsung Galaxy S24 Ultra",
+        os: "android",
+        connectionType: type,
+        width: 1080,
+        height: 2400,
+        fps: 60,
+        aspectRatio: "20:9",
+        latencyMs: type === "usb" ? 14 : 20,
+      };
     } else if (preset === "ipad") {
-      width = 1620;
-      height = 2160;
-      name = "iPad Pro (11-inch)";
-      os = "ios";
-      aspectRatio = "4:3";
+      device = {
+        id: "dev-ipad-pro",
+        name: "iPad Pro (11-inch)",
+        os: "ios",
+        connectionType: type,
+        width: 1620,
+        height: 2160,
+        fps: 60,
+        aspectRatio: "4:3",
+        latencyMs: type === "usb" ? 12 : 24,
+      };
+    } else {
+      device = {
+        id: "dev-iphone-15-pro",
+        name: "iPhone 15 Pro",
+        os: "ios",
+        connectionType: type,
+        width: 1179,
+        height: 2556,
+        fps: 60,
+        aspectRatio: "19.5:9",
+        latencyMs: type === "usb" ? 10 : 22,
+      };
     }
 
-    const device: MobileDeviceInfo = {
-      id: `dev-${Date.now()}`,
-      name,
-      os,
-      connectionType,
-      width,
-      height,
-      fps: 60,
-      aspectRatio,
-      batteryPercent: 92,
-      latencyMs: connectionType === "usb" ? 14 : 26,
-    };
+    this.activeDevice = device;
 
-    // Create a 60fps MediaStream via animated mobile simulation canvas
-    if (typeof document !== "undefined") {
-      const canvas = document.createElement("canvas");
-      canvas.width = width;
-      canvas.height = height;
-      const ctx = canvas.getContext("2d");
-
-      let tick = 0;
-      const drawFrame = () => {
-        if (!ctx) return;
-        tick++;
-
-        // Monochromatic sleek mobile background
-        ctx.fillStyle = "#09090b";
-        ctx.fillRect(0, 0, width, height);
-
-        // Subtle gradient backdrop
-        const grad = ctx.createLinearGradient(0, 0, 0, height);
-        grad.addColorStop(0, "#18181b");
-        grad.addColorStop(0.5, "#09090b");
-        grad.addColorStop(1, "#18181b");
-        ctx.fillStyle = grad;
-        ctx.fillRect(0, 0, width, height);
-
-        // Top Status Bar (Clock, Wi-Fi, Battery)
-        ctx.fillStyle = "#ffffff";
-        ctx.font = "bold 32px sans-serif";
-        ctx.fillText("9:41", 48, 68);
-
-        // Battery / Wifi icons simulation
-        ctx.fillStyle = "#ffffff";
-        ctx.fillRect(width - 96, 44, 48, 24);
-        ctx.strokeRect(width - 100, 40, 56, 32);
-
-        // Mobile App Header Mockup
-        ctx.fillStyle = "#27272a";
-        ctx.beginPath();
-        ctx.roundRect(32, 100, width - 64, 90, 24);
-        ctx.fill();
-
-        ctx.fillStyle = "#ffffff";
-        ctx.font = "bold 34px sans-serif";
-        ctx.fillText(name, 56, 156);
-
-        // Dynamic app feed cards
-        const cardCount = 4;
-        for (let i = 0; i < cardCount; i++) {
-          const cardY = 220 + i * 260;
-          ctx.fillStyle = i === 1 ? "#27272a" : "#18181b";
-          ctx.beginPath();
-          ctx.roundRect(32, cardY, width - 64, 220, 28);
-          ctx.fill();
-          ctx.strokeStyle = "#3f3f46";
-          ctx.lineWidth = 2;
-          ctx.stroke();
-
-          // Card icon
-          ctx.fillStyle = i === 1 ? "#ffffff" : "#a1a1aa";
-          ctx.beginPath();
-          ctx.arc(80, cardY + 60, 24, 0, Math.PI * 2);
-          ctx.fill();
-
-          // Card text lines
-          ctx.fillStyle = "#ffffff";
-          ctx.font = "bold 28px sans-serif";
-          ctx.fillText(`Interactive Mobile Flow ${i + 1}`, 124, cardY + 68);
-
-          ctx.fillStyle = "#71717a";
-          ctx.font = "22px sans-serif";
-          ctx.fillText(`Low-latency 60 FPS mobile stream active via ${connectionType.toUpperCase()}`, 124, cardY + 115);
-          ctx.fillText(`Resolution: ${width}x${height} (${aspectRatio})`, 124, cardY + 155);
-        }
-
-        // Bottom Home Indicator / Navigation Bar
-        ctx.fillStyle = "#ffffff";
-        ctx.beginPath();
-        ctx.roundRect((width - 240) / 2, height - 36, 240, 10, 5);
-        ctx.fill();
-
-        // Animated live ripple marker (moving slightly to simulate motion)
-        const rippleX = (width / 2) + Math.sin(tick * 0.05) * 80;
-        const rippleY = 740 + Math.cos(tick * 0.04) * 60;
-        ctx.strokeStyle = "rgba(255, 255, 255, 0.4)";
-        ctx.lineWidth = 3;
-        ctx.beginPath();
-        ctx.arc(rippleX, rippleY, 20 + (tick % 40), 0, Math.PI * 2);
-        ctx.stroke();
-      };
-
-      drawFrame();
-      this.simulationTimer = setInterval(drawFrame, 1000 / 60);
-
-      // Create stream from canvas
-      try {
-        if ("captureStream" in canvas) {
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          this.activeStream = (canvas as any).captureStream(60);
-        } else if (typeof MediaStream !== "undefined") {
-          this.activeStream = new MediaStream();
-        } else {
-          this.activeStream = {
-            id: `stream-${Date.now()}`,
-            active: true,
-            getTracks: () => [],
-            getVideoTracks: () => [],
-            getAudioTracks: () => [],
-            addTrack: () => {},
-            removeTrack: () => {},
-          } as unknown as MediaStream;
-        }
-      } catch {
-        this.activeStream = (typeof MediaStream !== "undefined"
-          ? new MediaStream()
-          : {
-              id: `stream-${Date.now()}`,
-              active: true,
-              getTracks: () => [],
-              getVideoTracks: () => [],
-              getAudioTracks: () => [],
-              addTrack: () => {},
-              removeTrack: () => {},
-            }) as unknown as MediaStream;
+    const createSafeMockStream = (): MediaStream => {
+      if (typeof document !== "undefined") {
+        try {
+          const canvas = document.createElement("canvas");
+          canvas.width = device.width;
+          canvas.height = device.height;
+          const ctx = canvas.getContext("2d");
+          if (ctx) {
+            ctx.fillStyle = "#000000";
+            ctx.fillRect(0, 0, device.width, device.height);
+          }
+          if (typeof canvas.captureStream === "function") {
+            return canvas.captureStream(30);
+          }
+        } catch {}
       }
-    } else {
-      this.activeStream = {
-        id: `stream-${Date.now()}`,
-        active: true,
+      if (typeof MediaStream !== "undefined") {
+        try {
+          return new MediaStream();
+        } catch {}
+      }
+      return {
         getTracks: () => [],
-        getVideoTracks: () => [],
+        getVideoTracks: () => [{
+          getSettings: () => ({ width: device.width, height: device.height }),
+          stop: () => {},
+        }],
         getAudioTracks: () => [],
         addTrack: () => {},
         removeTrack: () => {},
       } as unknown as MediaStream;
-    }
+    };
 
-    this.activeDevice = device;
+    this.activeStream = createSafeMockStream();
+
     this.deviceListeners.forEach((cb) => cb(device));
     if (this.activeStream) {
       this.streamListeners.forEach((cb) => cb(this.activeStream!));
     }
-
     return device;
   }
 
   /**
-   * Dispatches a tap event from the phone to all listeners and stores coordinates.
+   * Starts the host WebRTC signaling listener on the laptop.
+   * When any phone scans the QR code and opens remote.html, this receives the handshake
+   * and automatically binds the real device stream.
+   */
+  public startHostSignaling(sessionId?: string): void {
+    if (sessionId) {
+      this.currentSession = sessionId;
+    } else if (!this.currentSession) {
+      this.currentSession = `dl_${Math.random().toString(36).substring(2, 8)}`;
+    }
+
+    if (this.signalingWs) {
+      try { this.signalingWs.close(); } catch {}
+      this.signalingWs = null;
+    }
+
+    const hostTopic = `domolens_host_${this.currentSession}`;
+    const clientTopic = `domolens_client_${this.currentSession}`;
+
+    try {
+      if (typeof WebSocket !== "undefined") {
+        const ws = new WebSocket(`wss://ntfy.sh/${hostTopic}/ws`);
+        this.signalingWs = ws;
+
+        ws.onmessage = async (e) => {
+          try {
+            const data = JSON.parse(e.data);
+            const msg = data.message ? JSON.parse(data.message) : data;
+            await this.handleIncomingSignalingMessage(msg, clientTopic);
+          } catch (err) {
+            console.debug("[host signaling message error]", err);
+          }
+        };
+
+        ws.onerror = (err) => {
+          console.debug("[host signaling error]", err);
+        };
+      }
+    } catch (e) {
+      console.warn("WebSocket host signaling init error:", e);
+    }
+  }
+
+  private async handleIncomingSignalingMessage(msg: any, clientTopic: string): Promise<void> {
+    if (!msg || typeof msg !== "object") return;
+
+    if (msg.type === "hello" || msg.type === "device-info") {
+      const width = Number(msg.width) || 1080;
+      const height = Number(msg.height) || 2400;
+      const device: MobileDeviceInfo = {
+        id: `phone-${Date.now()}`,
+        name: msg.name || (/iPhone|iPad/.test(navigator.userAgent) ? "Apple iPhone" : "Android Device"),
+        os: msg.os || "android",
+        connectionType: "wifi",
+        width,
+        height,
+        fps: Number(msg.fps) || 60,
+        aspectRatio: width < height ? "9:16" : "16:9",
+        latencyMs: 18,
+      };
+
+      this.activeDevice = device;
+      this.deviceListeners.forEach((cb) => cb(device));
+
+      // Initiate WebRTC offer to the phone
+      this.setupHostPeerConnection(clientTopic);
+    } else if (msg.type === "answer" && this.peerConnection) {
+      try {
+        await this.peerConnection.setRemoteDescription(new RTCSessionDescription(msg.answer));
+      } catch (err) {
+        console.warn("setRemoteDescription error:", err);
+      }
+    } else if (msg.type === "candidate" && this.peerConnection && msg.candidate) {
+      try {
+        await this.peerConnection.addIceCandidate(new RTCIceCandidate(msg.candidate));
+      } catch (err) {
+        console.warn("addIceCandidate error:", err);
+      }
+    } else if (msg.type === "tap") {
+      this.emitTouchEvent({
+        type: "tap",
+        x: Number(msg.x) || 0.5,
+        y: Number(msg.y) || 0.5,
+        timestampMs: Number(msg.timestamp) || Date.now(),
+      });
+    }
+  }
+
+  private setupHostPeerConnection(clientTopic: string): void {
+    if (typeof RTCPeerConnection === "undefined") return;
+
+    if (this.peerConnection) {
+      try { this.peerConnection.close(); } catch {}
+    }
+
+    const pc = new RTCPeerConnection({
+      iceServers: [
+        { urls: "stun:stun.l.google.com:19302" },
+        { urls: "stun:stun1.l.google.com:19302" },
+      ],
+    });
+    this.peerConnection = pc;
+
+    // Create touch data channel
+    const dc = pc.createDataChannel("domolens-touch");
+    this.dataChannel = dc;
+
+    dc.onmessage = (event) => {
+      try {
+        const payload = JSON.parse(event.data);
+        if (payload.type === "tap") {
+          this.emitTouchEvent({
+            type: "tap",
+            x: Number(payload.x),
+            y: Number(payload.y),
+            timestampMs: Number(payload.timestamp) || Date.now(),
+          });
+        } else if (payload.type === "device-info") {
+          this.attachRealDevice(payload);
+        }
+      } catch {}
+    };
+
+    pc.onicecandidate = (event) => {
+      if (event.candidate) {
+        this.sendClientSignaling(clientTopic, { type: "candidate", candidate: event.candidate });
+      }
+    };
+
+    pc.ontrack = (event) => {
+      const stream = event.streams[0] || new MediaStream([event.track]);
+      this.activeStream = stream;
+      this.streamListeners.forEach((cb) => cb(stream));
+
+      const vTrack = stream.getVideoTracks()[0];
+      if (vTrack) {
+        const s = vTrack.getSettings();
+        if (s.width && s.height && this.activeDevice) {
+          this.activeDevice.width = s.width;
+          this.activeDevice.height = s.height;
+          this.activeDevice.aspectRatio = s.width < s.height ? "9:16" : "16:9";
+          this.deviceListeners.forEach((cb) => cb(this.activeDevice!));
+        }
+      }
+    };
+
+    // Send SDP offer to phone
+    void pc.createOffer({ offerToReceiveVideo: true, offerToReceiveAudio: true }).then(async (offer) => {
+      await pc.setLocalDescription(offer);
+      this.sendClientSignaling(clientTopic, { type: "offer", offer });
+    });
+  }
+
+  private sendClientSignaling(clientTopic: string, msg: any): void {
+    fetch(`https://ntfy.sh/${clientTopic}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(msg),
+    }).catch(() => {});
+  }
+
+  /**
+   * Attaches real device telemetry received from mobile browser.
+   */
+  public attachRealDevice(info: Partial<MobileDeviceInfo>, stream?: MediaStream): MobileDeviceInfo {
+    const width = info.width || 1080;
+    const height = info.height || 2400;
+    const device: MobileDeviceInfo = {
+      id: info.id || `dev-${Date.now()}`,
+      name: info.name || "Real Mobile Phone",
+      os: info.os || "android",
+      connectionType: info.connectionType || "wifi",
+      width,
+      height,
+      fps: info.fps || 60,
+      aspectRatio: info.aspectRatio || (width < height ? "9:16" : "16:9"),
+      batteryPercent: info.batteryPercent,
+      latencyMs: info.latencyMs || 20,
+    };
+
+    this.activeDevice = device;
+    if (stream) {
+      this.activeStream = stream;
+      this.streamListeners.forEach((cb) => cb(stream));
+    }
+
+    this.deviceListeners.forEach((cb) => cb(device));
+    return device;
+  }
+
+  /**
+   * Sets real video stream from connected device.
+   */
+  public setRealStream(stream: MediaStream): void {
+    this.activeStream = stream;
+    this.streamListeners.forEach((cb) => cb(stream));
+
+    const vTrack = stream.getVideoTracks()[0];
+    if (vTrack) {
+      const s = vTrack.getSettings();
+      if (s.width && s.height && this.activeDevice) {
+        this.activeDevice.width = s.width;
+        this.activeDevice.height = s.height;
+        this.activeDevice.aspectRatio = s.width < s.height ? "9:16" : "16:9";
+        this.deviceListeners.forEach((cb) => cb(this.activeDevice!));
+      }
+    }
+  }
+
+  /**
+   * Dispatches a tap event from the phone to all listeners.
    */
   public emitTouchEvent(event: MobileTouchEvent): void {
     const clampedEvent: MobileTouchEvent = {
@@ -305,15 +453,14 @@ class MobileStreamBridgeImpl {
   }
 
   /**
-   * Helper to simulate a tap on the mobile screen at normalized coordinates (0.0 - 1.0).
+   * Simulates a tap on the mobile screen at normalized coordinates (0.0 - 1.0).
    */
   public simulateTap(x: number, y: number): void {
-    const timestampMs = Date.now();
     this.emitTouchEvent({
       type: "tap",
       x,
       y,
-      timestampMs,
+      timestampMs: Date.now(),
     });
   }
 
@@ -321,11 +468,6 @@ class MobileStreamBridgeImpl {
    * Disconnects current mobile stream and releases resources.
    */
   public disconnect(): void {
-    if (this.simulationTimer) {
-      clearInterval(this.simulationTimer);
-      this.simulationTimer = null;
-    }
-
     if (this.activeStream) {
       this.activeStream.getTracks().forEach((t) => t.stop());
       this.activeStream = null;
@@ -339,6 +481,11 @@ class MobileStreamBridgeImpl {
     if (this.peerConnection) {
       try { this.peerConnection.close(); } catch {}
       this.peerConnection = null;
+    }
+
+    if (this.signalingWs) {
+      try { this.signalingWs.close(); } catch {}
+      this.signalingWs = null;
     }
 
     if (this.activeDevice) {

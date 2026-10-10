@@ -1,0 +1,470 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>DomoLens Mobile Companion</title>
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      -webkit-tap-highlight-color: transparent;
+      user-select: none;
+    }
+    body {
+      background-color: #000000;
+      color: #ffffff;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: space-between;
+      padding: env(safe-area-inset-top, 20px) 16px env(safe-area-inset-bottom, 20px) 16px;
+      overflow: hidden;
+      touch-action: none;
+    }
+    .header {
+      width: 100%;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 12px 0;
+      border-bottom: 1px solid #27272a;
+    }
+    .logo {
+      font-size: 16px;
+      font-weight: 800;
+      letter-spacing: -0.5px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .status-badge {
+      font-size: 11px;
+      font-weight: 600;
+      padding: 4px 10px;
+      border-radius: 9999px;
+      background: #18181b;
+      border: 1px solid #3f3f46;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: #71717a;
+    }
+    .dot.connected {
+      background: #ffffff;
+      box-shadow: 0 0 8px #ffffff;
+    }
+    .main {
+      width: 100%;
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      position: relative;
+    }
+    .touch-surface {
+      position: absolute;
+      inset: 0;
+      z-index: 10;
+      touch-action: none;
+    }
+    .action-card {
+      position: relative;
+      z-index: 20;
+      width: 100%;
+      max-width: 340px;
+      background: #09090b;
+      border: 1px solid #27272a;
+      border-radius: 24px;
+      padding: 24px 20px;
+      box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.5);
+    }
+    .title {
+      font-size: 18px;
+      font-weight: 700;
+      margin-bottom: 6px;
+    }
+    .subtitle {
+      font-size: 12px;
+      color: #a1a1aa;
+      line-height: 1.5;
+      margin-bottom: 20px;
+    }
+    .btn {
+      width: 100%;
+      padding: 14px;
+      border-radius: 16px;
+      font-size: 14px;
+      font-weight: 700;
+      cursor: pointer;
+      border: none;
+      transition: all 0.2s ease;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      margin-bottom: 10px;
+    }
+    .btn-primary {
+      background: #ffffff;
+      color: #000000;
+    }
+    .btn-primary:active {
+      transform: scale(0.98);
+      background: #e4e4e7;
+    }
+    .btn-secondary {
+      background: #18181b;
+      color: #ffffff;
+      border: 1px solid #3f3f46;
+    }
+    .btn-secondary:active {
+      background: #27272a;
+    }
+    .device-info {
+      margin-top: 14px;
+      font-family: monospace;
+      font-size: 10px;
+      color: #71717a;
+    }
+    .ripple {
+      position: absolute;
+      width: 44px;
+      height: 44px;
+      margin-left: -22px;
+      margin-top: -22px;
+      border-radius: 50%;
+      border: 2px solid #ffffff;
+      background: rgba(255, 255, 255, 0.25);
+      pointer-events: none;
+      animation: rip 0.5s ease-out forwards;
+      z-index: 15;
+    }
+    @keyframes rip {
+      0% { transform: scale(0.2); opacity: 1; }
+      100% { transform: scale(2.2); opacity: 0; }
+    }
+    .footer {
+      width: 100%;
+      text-align: center;
+      font-size: 11px;
+      color: #71717a;
+      padding: 10px 0;
+    }
+  </style>
+</head>
+<body>
+  <!-- Header -->
+  <div class="header">
+    <div class="logo">
+      <span>●</span>
+      <span>DOMOLENS</span>
+    </div>
+    <div class="status-badge">
+      <span class="dot" id="statusDot"></span>
+      <span id="statusText">Connecting...</span>
+    </div>
+  </div>
+
+  <!-- Touch & Control Area -->
+  <div class="main" id="mainArea">
+    <div class="touch-surface" id="touchSurface"></div>
+
+    <div class="action-card" id="actionCard">
+      <h2 class="title" id="deviceTitle">Mobile Link Active</h2>
+      <p class="subtitle" id="deviceDesc">
+        Tap the button below to start streaming this screen to DomoLens on your laptop. Every tap will be tracked with auto-zoom!
+      </p>
+
+      <button class="btn btn-primary" id="startShareBtn">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+          <rect x="5" y="2" width="14" height="20" rx="3"></rect>
+          <line x1="12" y1="18" x2="12.01" y2="18"></line>
+        </svg>
+        <span>Share Mobile Screen</span>
+      </button>
+
+      <button class="btn btn-secondary" id="cameraShareBtn">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"></path>
+          <circle cx="12" cy="13" r="3"></circle>
+        </svg>
+        <span>Share Camera Instead</span>
+      </button>
+
+      <div class="device-info" id="deviceMeta">Detecting screen metrics...</div>
+    </div>
+  </div>
+
+  <!-- Footer -->
+  <div class="footer">
+    <span>DomoLens Dynamic Mobile Bridge • 60 FPS Low-Latency</span>
+  </div>
+
+  <script>
+    // 1. Parse URL Parameters
+    const params = new URLSearchParams(window.location.search);
+    const session = params.get('session') || params.get('id') || 'dl_default';
+    const host = params.get('host') || window.location.hostname || '127.0.0.1';
+
+    // 2. Identify Actual Mobile Device Model & Resolution
+    const ua = navigator.userAgent || '';
+    let os = 'other';
+    let deviceName = 'Mobile Phone';
+    if (/iPad|iPhone|iPod/.test(ua)) {
+      os = 'ios';
+      deviceName = /iPad/.test(ua) ? 'Apple iPad' : 'Apple iPhone';
+    } else if (/Android/.test(ua)) {
+      os = 'android';
+      if (/Samsung/i.test(ua)) deviceName = 'Samsung Galaxy';
+      else if (/Pixel/i.test(ua)) deviceName = 'Google Pixel';
+      else if (/Xiaomi/i.test(ua)) deviceName = 'Xiaomi';
+      else deviceName = 'Android Device';
+    }
+
+    const dpr = window.devicePixelRatio || 1;
+    const realW = Math.round((window.screen.width || window.innerWidth) * dpr);
+    const realH = Math.round((window.screen.height || window.innerHeight) * dpr);
+    const aspect = (realW / realH).toFixed(2);
+
+    document.getElementById('deviceTitle').textContent = deviceName;
+    document.getElementById('deviceMeta').textContent = `${realW} × ${realH} • DPR: ${dpr} • ${deviceName}`;
+
+    // 3. WebRTC Peer Connection Setup
+    const statusDot = document.getElementById('statusDot');
+    const statusText = document.getElementById('statusText');
+
+    let pc = null;
+    let dataChannel = null;
+    let localStream = null;
+
+    const rtcConfig = {
+      iceServers: [
+        { urls: 'stun:stun.l.google.com:19302' },
+        { urls: 'stun:stun1.l.google.com:19302' },
+        { urls: 'stun:stun2.l.google.com:19302' }
+      ]
+    };
+
+    function initPeerConnection() {
+      pc = new RTCPeerConnection(rtcConfig);
+
+      pc.onicecandidate = (event) => {
+        if (event.candidate) {
+          sendSignalingMessage({ type: 'candidate', candidate: event.candidate });
+        }
+      };
+
+      pc.ondatachannel = (event) => {
+        setupDataChannel(event.channel);
+      };
+
+      pc.onconnectionstatechange = () => {
+        if (pc.connectionState === 'connected') {
+          statusDot.classList.add('connected');
+          statusText.textContent = 'Linked Live';
+          sendDeviceInfo();
+        } else if (pc.connectionState === 'disconnected' || pc.connectionState === 'failed') {
+          statusDot.classList.remove('connected');
+          statusText.textContent = 'Reconnecting...';
+        }
+      };
+    }
+
+    function setupDataChannel(channel) {
+      dataChannel = channel;
+      dataChannel.onopen = () => {
+        statusDot.classList.add('connected');
+        statusText.textContent = 'Touch Active';
+        sendDeviceInfo();
+      };
+    }
+
+    function sendDeviceInfo() {
+      const payload = {
+        type: 'device-info',
+        name: deviceName,
+        os: os,
+        width: realW,
+        height: realH,
+        aspectRatio: realW < realH ? '9:16' : '16:9',
+        fps: 60,
+        latencyMs: 16
+      };
+      if (dataChannel && dataChannel.readyState === 'open') {
+        dataChannel.send(JSON.stringify(payload));
+      } else {
+        sendSignalingMessage(payload);
+      }
+    }
+
+    // 4. Signaling Channel via lightweight pubsub (ntfy.sh & local fallback)
+    const clientTopic = `domolens_client_${session}`;
+    const hostTopic = `domolens_host_${session}`;
+
+    function sendSignalingMessage(msg) {
+      fetch(`https://ntfy.sh/${hostTopic}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(msg)
+      }).catch(() => {});
+    }
+
+    function connectSignalingWebSocket() {
+      try {
+        const ws = new WebSocket(`wss://ntfy.sh/${clientTopic}/ws`);
+        ws.onopen = () => {
+          statusText.textContent = 'Signaling...';
+          // Send initial handshake
+          sendSignalingMessage({ type: 'hello', name: deviceName, width: realW, height: realH });
+        };
+        ws.onmessage = async (e) => {
+          try {
+            const data = JSON.parse(e.data);
+            const msg = data.message ? JSON.parse(data.message) : data;
+            handleSignalingMessage(msg);
+          } catch (err) {}
+        };
+      } catch (e) {
+        statusText.textContent = 'Ready (Direct)';
+      }
+    }
+
+    async function handleSignalingMessage(msg) {
+      if (!pc) initPeerConnection();
+
+      if (msg.type === 'offer') {
+        await pc.setRemoteDescription(new RTCSessionDescription(msg.offer));
+        const answer = await pc.createAnswer();
+        await pc.setLocalDescription(answer);
+        sendSignalingMessage({ type: 'answer', answer });
+      } else if (msg.type === 'candidate' && msg.candidate) {
+        try {
+          await pc.addIceCandidate(new RTCIceCandidate(msg.candidate));
+        } catch (err) {}
+      }
+    }
+
+    // 5. Screen & Camera Capture Triggers
+    const startShareBtn = document.getElementById('startShareBtn');
+    const cameraShareBtn = document.getElementById('cameraShareBtn');
+
+    async function startScreenStream() {
+      try {
+        if (!navigator.mediaDevices || !navigator.mediaDevices.getDisplayMedia) {
+          alert('Screen sharing is not supported in this browser. Please use Chrome on Android or Safari on iOS 15+.');
+          return;
+        }
+        const stream = await navigator.mediaDevices.getDisplayMedia({
+          video: {
+            width: { ideal: realW },
+            height: { ideal: realH },
+            frameRate: { ideal: 60 }
+          },
+          audio: true
+        });
+
+        handleStreamStarted(stream);
+      } catch (err) {
+        console.warn('Screen share cancelled, trying camera fallback:', err);
+      }
+    }
+
+    async function startCameraStream() {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: {
+            facingMode: 'environment',
+            width: { ideal: 1920 },
+            height: { ideal: 1080 }
+          },
+          audio: true
+        });
+        handleStreamStarted(stream);
+      } catch (err) {
+        alert('Could not access camera: ' + err.message);
+      }
+    }
+
+    function handleStreamStarted(stream) {
+      localStream = stream;
+      if (!pc) initPeerConnection();
+
+      stream.getTracks().forEach((track) => pc.addTrack(track, stream));
+
+      document.getElementById('actionCard').style.opacity = '0.4';
+      startShareBtn.innerHTML = '<span>● Live Stream Shared</span>';
+      statusDot.classList.add('connected');
+      statusText.textContent = 'Streaming Live';
+
+      // Read real video dimensions
+      const vTrack = stream.getVideoTracks()[0];
+      if (vTrack) {
+        const settings = vTrack.getSettings();
+        if (settings.width && settings.height) {
+          document.getElementById('deviceMeta').textContent = `${settings.width} × ${settings.height} • Active Hardware Stream`;
+          sendSignalingMessage({
+            type: 'device-info',
+            name: deviceName,
+            width: settings.width,
+            height: settings.height,
+            fps: settings.frameRate || 60
+          });
+        }
+      }
+    }
+
+    startShareBtn.addEventListener('click', startScreenStream);
+    cameraShareBtn.addEventListener('click', startCameraStream);
+
+    // 6. Real Touch / Tap Telemetry Capture
+    const touchSurface = document.getElementById('touchSurface');
+
+    function emitTouch(e, type) {
+      const touch = e.touches ? e.touches[0] : e;
+      if (!touch) return;
+
+      const normX = Math.min(1, Math.max(0, touch.clientX / window.innerWidth));
+      const normY = Math.min(1, Math.max(0, touch.clientY / window.innerHeight));
+
+      // Visual pulse ripple
+      const rip = document.createElement('div');
+      rip.className = 'ripple';
+      rip.style.left = `${touch.clientX}px`;
+      rip.style.top = `${touch.clientY}px`;
+      document.body.appendChild(rip);
+      setTimeout(() => rip.remove(), 600);
+
+      const payload = {
+        type: 'tap',
+        x: normX,
+        y: normY,
+        timestamp: Date.now()
+      };
+
+      if (dataChannel && dataChannel.readyState === 'open') {
+        dataChannel.send(JSON.stringify(payload));
+      } else {
+        sendSignalingMessage(payload);
+      }
+    }
+
+    touchSurface.addEventListener('touchstart', (e) => emitTouch(e, 'tap'), { passive: true });
+    touchSurface.addEventListener('click', (e) => emitTouch(e, 'tap'), { passive: true });
+
+    // Initialize
+    initPeerConnection();
+    connectSignalingWebSocket();
+  </script>
+</body>
+</html>

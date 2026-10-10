@@ -23,7 +23,7 @@ let currentInterimStartMs = 0;
 let isIntentionallyStoppingRecognition = false;
 
 export type DeviceTarget = "computer" | "mobile";
-export type MobileConnectionType = "wifi" | "usb";
+export type MobileConnectionType = "wifi" | "usb" | "cloud";
 export type MobileConnectionStatus = "disconnected" | "pairing" | "connected";
 export type RecordingState = "idle" | "requesting_share" | "countdown" | "recording" | "paused";
 export type RecordingSource = "screen" | "window";
@@ -317,22 +317,32 @@ export const useRecorder = create<RecorderStore>((set, get) => ({
 
   setDeviceTarget: (deviceTarget) => {
     set({ deviceTarget });
-    if (deviceTarget === "mobile" && !get().mobileDeviceInfo) {
-      // Pre-connect mobile bridge so live screen and telemetry are immediately hot
-      const dev = mobileStreamBridge.connectSimulatedDevice("iphone", get().mobileConnectionType);
-      set({
-        mobileDeviceInfo: dev,
-        mobileConnectionStatus: "connected",
+    if (deviceTarget === "mobile") {
+      mobileStreamBridge.startHostSignaling();
+      mobileStreamBridge.onDeviceConnected((dev) => {
+        set({
+          mobileDeviceInfo: dev,
+          mobileConnectionStatus: "connected",
+        });
       });
+      if (!get().mobileDeviceInfo) {
+        const connType = get().mobileConnectionType === "cloud" ? "wifi" : get().mobileConnectionType;
+        const dev = mobileStreamBridge.connectSimulatedDevice("iphone", connType);
+        set({
+          mobileDeviceInfo: dev,
+          mobileConnectionStatus: "connected",
+        });
+      }
     }
   },
 
   setMobileConnectionType: (mobileConnectionType) => {
     set({ mobileConnectionType });
     if (get().deviceTarget === "mobile") {
+      const connType = mobileConnectionType === "cloud" ? "wifi" : mobileConnectionType;
       const dev = mobileStreamBridge.connectSimulatedDevice(
         get().mobileDeviceInfo?.os === "android" ? "android" : "iphone",
-        mobileConnectionType,
+        connType,
       );
       set({
         mobileDeviceInfo: dev,
@@ -343,7 +353,8 @@ export const useRecorder = create<RecorderStore>((set, get) => ({
 
   connectMobileDevice: async (type = get().mobileConnectionType, preset = "iphone") => {
     set({ mobileConnectionStatus: "pairing" });
-    const dev = mobileStreamBridge.connectSimulatedDevice(preset, type);
+    const connType = type === "cloud" ? "wifi" : type;
+    const dev = mobileStreamBridge.connectSimulatedDevice(preset, connType);
     set({
       mobileDeviceInfo: dev,
       mobileConnectionStatus: "connected",
