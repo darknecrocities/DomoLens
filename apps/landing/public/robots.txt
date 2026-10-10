@@ -1,0 +1,7 @@
+# robots.txt for DomoLens
+User-agent: *
+Allow: /
+
+# Sitemap location
+Sitemap: https://domolens.vercel.app/sitemap.xml
+Host: https://domolens.vercel.app
