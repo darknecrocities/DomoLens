@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { CheckCircle2, Download, Film, Folder, FolderOpen, Sparkles, Video } from "lucide-react";
+import { CheckCircle2, Download, Film, Folder, FolderOpen, Monitor, Smartphone, Sparkles, Square, Video } from "lucide-react";
 import { copy } from "../../copy/en";
 import { Button } from "../ui/Button";
 import { Modal } from "../ui/Modal";
@@ -11,9 +11,10 @@ import {
   renderProjectVideo,
   type ExportResolution,
   type ExportFormat,
+  type CanvasAspectRatio,
 } from "../../lib/video-renderer";
 
-export type { ExportResolution, ExportFormat };
+export type { ExportResolution, ExportFormat, CanvasAspectRatio };
 
 interface ExportModalProps {
   open: boolean;
@@ -26,6 +27,8 @@ export function ExportModal({ open, project, onClose }: ExportModalProps) {
   // Default format based on hardware platform: .mov on macOS, .mp4 on Windows/Linux
   const defaultFormat: ExportFormat = platform.isMac ? "mov" : "mp4";
   const [format, setFormat] = useState<ExportFormat>(defaultFormat);
+  // Canvas aspect ratio: defaults to whole canvas 16:9 widescreen
+  const [canvasAspectRatio, setCanvasAspectRatio] = useState<CanvasAspectRatio>("16:9");
 
   const [isExporting, setIsExporting] = useState(false);
   const [progress, setProgress] = useState(0);
@@ -40,6 +43,7 @@ export function ExportModal({ open, project, onClose }: ExportModalProps) {
   useEffect(() => {
     if (open) {
       setProjectName(project.summary.name || "DomoLens_Recording");
+      setCanvasAspectRatio("16:9");
     }
   }, [open, project.summary.name]);
 
@@ -165,6 +169,7 @@ export function ExportModal({ open, project, onClose }: ExportModalProps) {
         project,
         resolution,
         format: activeFormat,
+        canvasAspectRatio,
         onProgress: (pct, status) => {
           setProgress(pct);
           setStatusText(status);
@@ -297,6 +302,38 @@ export function ExportModal({ open, project, onClose }: ExportModalProps) {
     { id: "gif", label: "Animated GIF / Loop", desc: "Lightweight looping preview." },
   ];
 
+  const canvasAspectOptions: Array<{
+    id: CanvasAspectRatio;
+    label: string;
+    ratio: string;
+    desc: string;
+    badge?: string;
+    icon: typeof Monitor;
+  }> = [
+    {
+      id: "16:9",
+      label: "Whole Canvas (16:9)",
+      ratio: resolution === "4k" ? "3840×2160" : resolution === "720p" ? "1280×720" : "1920×1080",
+      desc: "Widescreen stage with backdrop & device centered. Default for YouTube & presentations.",
+      badge: "Recommended",
+      icon: Monitor,
+    },
+    {
+      id: "9:16",
+      label: "Vertical Video (9:16)",
+      ratio: resolution === "4k" ? "2160×3840" : resolution === "720p" ? "720×1280" : "1080×1920",
+      desc: "Vertical orientation optimized for TikTok, Instagram Reels, and YouTube Shorts.",
+      icon: Smartphone,
+    },
+    {
+      id: "1:1",
+      label: "Square Post (1:1)",
+      ratio: resolution === "4k" ? "2160×2160" : resolution === "720p" ? "720×720" : "1080×1080",
+      desc: "Square post format with background for LinkedIn, X (Twitter), and Instagram.",
+      icon: Square,
+    },
+  ];
+
   return (
     <Modal
       open={open}
@@ -377,6 +414,57 @@ export function ExportModal({ open, project, onClose }: ExportModalProps) {
           </div>
         ) : (
           <div className="space-y-4">
+            {/* Canvas Aspect Ratio Selector (Widescreen Whole Canvas vs Vertical Social) */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between text-xs">
+                <label className="font-semibold uppercase tracking-wider text-fg-muted">
+                  Canvas Aspect Ratio
+                </label>
+                <span className="text-[11px] font-mono text-neutral-400">
+                  {canvasAspectRatio === "16:9" ? "Exports whole studio canvas & backdrop" : "Custom canvas orientation"}
+                </span>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                {canvasAspectOptions.map((opt) => {
+                  const isSelected = canvasAspectRatio === opt.id;
+                  const Icon = opt.icon;
+                  return (
+                    <button
+                      key={opt.id}
+                      type="button"
+                      onClick={() => setCanvasAspectRatio(opt.id)}
+                      className={`flex flex-col justify-between rounded-xl border p-2.5 text-left transition-all ${
+                        isSelected
+                          ? "border-white bg-white/10 shadow-sm"
+                          : "border-ink-700 bg-ink-900/60 hover:border-ink-600"
+                      }`}
+                    >
+                      <div className="flex items-center justify-between w-full">
+                        <span className="text-xs font-bold text-fg flex items-center gap-1.5">
+                          <Icon className="size-3.5 text-neutral-300" />
+                          {opt.label}
+                        </span>
+                        {isSelected && <CheckCircle2 className="size-3.5 text-white" />}
+                      </div>
+                      <div className="mt-1 flex items-center gap-1.5">
+                        <span className="font-mono text-[10px] text-neutral-300">
+                          {opt.ratio}
+                        </span>
+                        {opt.badge && (
+                          <span className="font-mono text-[9px] uppercase font-bold px-1.5 py-0.5 rounded bg-white/20 text-white border border-white/30">
+                            {opt.badge}
+                          </span>
+                        )}
+                      </div>
+                      <p className="mt-1 text-[10px] text-fg-muted leading-tight">
+                        {opt.desc}
+                      </p>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
             {/* Format Option Selector (Hardware aware) */}
             {resolution !== "gif" && (
               <div className="space-y-2">

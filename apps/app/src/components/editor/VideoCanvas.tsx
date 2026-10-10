@@ -962,7 +962,26 @@ export function VideoCanvas({ project, currentTimeMs: propTimeMs }: VideoCanvasP
     }
   }, [summary.width, summary.height]);
 
+  const isPhoneOrTablet =
+    (looks.padding ?? 32) > 0 &&
+    (looks.windowFrame === "android" ||
+     looks.windowFrame === "iphone" ||
+     looks.windowFrame === "ipad");
+
+  const isAndroid = isPhoneOrTablet && looks.windowFrame === "android";
+  const isIphone = isPhoneOrTablet && looks.windowFrame === "iphone";
+  const isIpad = isPhoneOrTablet && looks.windowFrame === "ipad";
+
+  const isMobileRecording = Boolean(
+    (summary.width && summary.height && summary.width < summary.height) ||
+    looks.aspectRatio === "9:16" ||
+    (summary.name && /(android|iphone|samsung|pixel|mobile|ios|phone)/i.test(summary.name))
+  );
+
   const viewportAspectRatio = useMemo(() => {
+    if (isPhoneOrTablet || isMobileRecording) {
+      return naturalAspectRatio || (summary.width && summary.height ? `${summary.width} / ${summary.height}` : "9 / 16");
+    }
     if (looks.aspectRatio && looks.aspectRatio !== "auto") {
       if (looks.aspectRatio === "9:16") return "9 / 16";
       if (looks.aspectRatio === "1:1") return "1 / 1";
@@ -970,7 +989,7 @@ export function VideoCanvas({ project, currentTimeMs: propTimeMs }: VideoCanvasP
       if (looks.aspectRatio === "16:9") return "16 / 9";
     }
     return naturalAspectRatio || (summary.width && summary.height ? `${summary.width} / ${summary.height}` : "16 / 9");
-  }, [looks.aspectRatio, naturalAspectRatio, summary.width, summary.height]);
+  }, [isPhoneOrTablet, summary.source, looks.aspectRatio, naturalAspectRatio, summary.width, summary.height]);
 
   const parseAspect = (v: string | null | undefined): number | null => {
     if (!v) return null;
@@ -993,16 +1012,6 @@ export function VideoCanvas({ project, currentTimeMs: propTimeMs }: VideoCanvasP
     lift: "0 24px 60px -24px rgb(0 0 0 / 0.8)",
     glow: "0 10px 36px -10px rgb(255 255 255 / 0.35)",
   };
-
-  const isPhoneOrTablet =
-    (looks.padding ?? 32) > 0 &&
-    (looks.windowFrame === "android" ||
-     looks.windowFrame === "iphone" ||
-     looks.windowFrame === "ipad");
-
-  const isAndroid = isPhoneOrTablet && looks.windowFrame === "android";
-  const isIphone = isPhoneOrTablet && looks.windowFrame === "iphone";
-  const isIpad = isPhoneOrTablet && looks.windowFrame === "ipad";
 
   // Responsive Canvas Viewport Measurement: ensures device frame remains firmly fixed and full-size on screen
   const containerRef = useRef<HTMLDivElement>(null);

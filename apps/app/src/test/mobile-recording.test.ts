@@ -321,5 +321,24 @@ describe("Mobile Recording Engine & Transport", () => {
     expect(preservedFrameless?.looks.windowFrame).toBe("none");
     expect(preservedFrameless?.looks.padding).toBe(0);
   });
+
+  it("supports whole canvas widescreen (16:9) export for mobile recordings with selectable ratios", async () => {
+    const { getOutputDimensions } = await import("../lib/video-renderer");
+
+    // 16:9 Whole Canvas (Widescreen demo with background backdrop)
+    const widescreen1080p = getOutputDimensions("1080p", "16:9");
+    expect(widescreen1080p).toEqual({ width: 1920, height: 1080 });
+
+    const widescreen4k = getOutputDimensions("4k", "16:9");
+    expect(widescreen4k).toEqual({ width: 3840, height: 2160 });
+
+    // 9:16 Vertical Crop (Reels / TikTok / Shorts)
+    const vertical1080p = getOutputDimensions("1080p", "9:16");
+    expect(vertical1080p).toEqual({ width: 1080, height: 1920 });
+
+    // 1:1 Square Feed (Social Post)
+    const square1080p = getOutputDimensions("1080p", "1:1");
+    expect(square1080p).toEqual({ width: 1080, height: 1080 });
+  });
 });
 

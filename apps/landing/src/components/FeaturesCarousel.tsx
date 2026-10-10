@@ -2,8 +2,10 @@ import { motion } from "framer-motion";
 import {
   Check,
   Layers,
+  Monitor,
   MousePointer2,
   Shield,
+  Smartphone,
   Sliders,
   SlidersHorizontal,
   Volume2,
@@ -12,40 +14,52 @@ import {
 export function FeaturesCarousel() {
   const features = [
     {
-      title: "Follows Clicks & Typing",
-      desc: "Camera glides with your cursor, holds focus tight on button clicks, and pans smoothly along code or text typing without manual keyframing.",
-      icon: MousePointer2,
+      title: "USB & Wi-Fi Mobile Mirroring",
+      desc: "Plug in via USB or pair over Wi-Fi. Stream iPhone or Android at buttery 60 FPS with live touch ripples, hardware buttons, and instant latency-free capture.",
+      icon: Smartphone,
       num: "01",
     },
     {
-      title: "Tactile Sound Effects",
-      desc: "Subtle bubble bops on button clicks and mechanical keystroke sounds automatically synced to your actions to keep viewers engaged.",
-      icon: Volume2,
+      title: "Whole Canvas Studio Export",
+      desc: "Export widescreen 16:9 videos with your mobile phone or laptop centered on a custom canvas. Complete with realistic hardware chassis, drop shadows, and vibrant backdrops.",
+      icon: Monitor,
       num: "02",
     },
     {
-      title: "Studio Window Framing",
-      desc: "Make any desktop app look like an Apple keynote: rounded corners, frosted glass backdrops, custom padding, and soft drop shadows.",
+      title: "Authentic Device Chassis",
+      desc: "iPhone Pro with Dynamic Island, Android Flagship with punch-hole & nav pill, MacBook Pro notch, iPad, and modern laptop shells that adapt dynamically.",
       icon: Layers,
       num: "03",
+    },
+    {
+      title: "Follows Clicks & Typing",
+      desc: "Camera glides with your cursor, holds focus tight on button clicks, and pans smoothly along code or text typing without manual keyframing.",
+      icon: MousePointer2,
+      num: "04",
+    },
+    {
+      title: "Tactile Audio & Background Music",
+      desc: "Subtle bubble bops on button clicks, mechanical keystroke sounds, and custom background music tracks with automatic voice ducking.",
+      icon: Volume2,
+      num: "05",
     },
     {
       title: "One-Click QuickBar HUD",
       desc: "Floating shortcut toolbar for laptop and phone. Hit Option+Space to record, pause, transcribe, and open the studio with zero clutter.",
       icon: Sliders,
-      num: "04",
+      num: "06",
     },
     {
       title: "Visual Multi-Track Timeline",
       desc: "NLE-grade timeline with dedicated track headers for Keyframes, Zoom, Video, Captions, and Audio. Trim with T, split with S, zero overlap.",
       icon: SlidersHorizontal,
-      num: "05",
+      num: "07",
     },
     {
       title: "100% Private On Your Device",
       desc: "Everything runs locally on your computer. Zero cloud rendering queues, no subscriptions, no accounts, and zero watermarks.",
       icon: Shield,
-      num: "06",
+      num: "08",
     },
   ];
 

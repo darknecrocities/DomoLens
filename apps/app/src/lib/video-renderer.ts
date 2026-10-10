@@ -22,11 +22,13 @@ import { platform } from "../platform";
 
 export type ExportResolution = "1080p" | "720p" | "4k" | "gif";
 export type ExportFormat = "mov" | "mp4" | "webm" | "gif";
+export type CanvasAspectRatio = "16:9" | "9:16" | "1:1" | "4:3" | "auto";
 
 export interface RenderOptions {
   project: ProjectData;
   resolution: ExportResolution;
   format?: ExportFormat;
+  canvasAspectRatio?: CanvasAspectRatio;
   onProgress?: (percent: number, statusText: string) => void;
   signal?: AbortSignal;
 }
@@ -1033,7 +1035,7 @@ export function renderActiveTextOverlays(
  * backdrops, padding, effects, audio SFX, and text overlays into an exported video.
  */
 export async function renderProjectVideo(options: RenderOptions): Promise<RenderResult> {
-  const { project, resolution, format, onProgress, signal } = options;
+  const { project, resolution, format, canvasAspectRatio, onProgress, signal } = options;
   const targetFormat: ExportFormat = format || (resolution === "gif" ? "gif" : "mp4");
   const looks = project.looks;
   const durationMs = Math.max(1000, project.summary.durationMs || 10000);
@@ -1041,7 +1043,22 @@ export async function renderProjectVideo(options: RenderOptions): Promise<Render
     project.summary.width && project.summary.height && project.summary.height > 0
       ? project.summary.width / project.summary.height
       : undefined;
-  const { width, height } = getOutputDimensions(resolution, looks.aspectRatio, nativeAspect);
+
+  // Determine effective canvas aspect ratio:
+  // Whole canvas 16:9 widescreen by default, so phone recordings render with the complete backdrop
+  // and centered device frame just like in the editor canvas, unless an explicit ratio is chosen.
+  const isMobileRecording = Boolean(
+    (project.summary.width && project.summary.height && project.summary.height > project.summary.width) ||
+    looks.aspectRatio === "9:16" ||
+    (project.summary.name && /(android|iphone|samsung|pixel|mobile|ios|phone)/i.test(project.summary.name)) ||
+    looks.windowFrame === "iphone" ||
+    looks.windowFrame === "android"
+  );
+  const effectiveCanvasAspect =
+    canvasAspectRatio ||
+    (isMobileRecording ? "16:9" : looks.aspectRatio || "16:9");
+
+  const { width, height } = getOutputDimensions(resolution, effectiveCanvasAspect, nativeAspect);
 
   onProgress?.(3, "Initializing render canvas...");
 
@@ -1269,11 +1286,31 @@ export async function renderProjectVideo(options: RenderOptions): Promise<Render
   const rawHeight = video.videoHeight || project.summary.height || 0;
 
   let targetAspect: number | null = null;
-  if (looks.aspectRatio === "9:16") targetAspect = 9 / 16;
-  else if (looks.aspectRatio === "16:9") targetAspect = 16 / 9;
-  else if (looks.aspectRatio === "1:1") targetAspect = 1;
-  else if (looks.aspectRatio === "4:3") targetAspect = 4 / 3;
-  else if (rawWidth > 0 && rawHeight > 0) targetAspect = rawWidth / rawHeight;
+  const isMobileContent =
+    isPhoneOrTablet ||
+    Boolean(
+      (rawHeight > 0 && rawWidth > 0 && rawHeight > rawWidth) ||
+      looks.aspectRatio === "9:16" ||
+      (project.summary.name && /(android|iphone|samsung|pixel|mobile|ios|phone)/i.test(project.summary.name)) ||
+      looks.windowFrame === "iphone" ||
+      looks.windowFrame === "android"
+    );
+
+  if (isMobileContent) {
+    if (rawWidth > 0 && rawHeight > 0) {
+      targetAspect = rawWidth / rawHeight;
+    } else {
+      targetAspect = 9 / 16;
+    }
+  } else if (looks.aspectRatio && looks.aspectRatio !== "auto") {
+    if (looks.aspectRatio === "9:16") targetAspect = 9 / 16;
+    else if (looks.aspectRatio === "16:9") targetAspect = 16 / 9;
+    else if (looks.aspectRatio === "1:1") targetAspect = 1;
+    else if (looks.aspectRatio === "4:3") targetAspect = 4 / 3;
+    else if (rawWidth > 0 && rawHeight > 0) targetAspect = rawWidth / rawHeight;
+  } else if (rawWidth > 0 && rawHeight > 0) {
+    targetAspect = rawWidth / rawHeight;
+  }
 
   if (targetAspect) {
     const availAspect = innerAvailW / innerAvailH;
