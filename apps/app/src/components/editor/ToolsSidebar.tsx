@@ -5,6 +5,7 @@ import {
   Paintbrush,
   MousePointer,
   ChevronRight,
+  ChevronDown,
   ChevronLeft,
   Plus,
   Trash2,
@@ -47,6 +48,85 @@ import { useEditor, type ToolTab } from "../../store/editor";
 import { useTutorial } from "../../store/tutorial";
 import { TiltController } from "./TiltController";
 import { ResizeHandle } from "./ResizeHandle";
+
+interface CollapsibleCardProps {
+  id: string;
+  title: string;
+  icon?: React.ReactNode;
+  badge?: React.ReactNode;
+  actions?: React.ReactNode;
+  defaultOpen?: boolean;
+  children: React.ReactNode;
+  className?: string;
+}
+
+export function CollapsibleCard({
+  id,
+  title,
+  icon,
+  badge,
+  actions,
+  defaultOpen = true,
+  children,
+  className = "",
+}: CollapsibleCardProps) {
+  const [isOpen, setIsOpen] = useState(() => {
+    try {
+      const saved = window.localStorage.getItem(`domolens:card:${id}`);
+      if (saved !== null) return saved === "true";
+    } catch {}
+    return defaultOpen;
+  });
+
+  const toggle = () => {
+    setIsOpen((prev) => {
+      const next = !prev;
+      try {
+        window.localStorage.setItem(`domolens:card:${id}`, String(next));
+      } catch {}
+      return next;
+    });
+  };
+
+  return (
+    <div
+      className={`rounded-xl border border-neutral-800 bg-neutral-900/90 shadow-sm transition-all overflow-hidden ${className}`}
+    >
+      {/* Sleek Minimal Header */}
+      <div
+        onClick={toggle}
+        className="flex items-center justify-between px-3 py-2 cursor-pointer select-none hover:bg-neutral-800/50 transition-colors"
+      >
+        <div className="flex items-center gap-2 min-w-0">
+          <span className="text-neutral-400 hover:text-white transition-colors p-0.5">
+            {isOpen ? (
+              <ChevronDown className="size-3.5 text-neutral-400" />
+            ) : (
+              <ChevronRight className="size-3.5 text-neutral-400" />
+            )}
+          </span>
+          {icon && <span className="text-white shrink-0">{icon}</span>}
+          <span className="font-semibold text-white text-xs truncate">{title}</span>
+        </div>
+
+        <div
+          className="flex items-center gap-1.5 shrink-0"
+          onClick={(e) => e.stopPropagation()}
+        >
+          {badge}
+          {actions}
+        </div>
+      </div>
+
+      {/* Expandable Body */}
+      {isOpen && (
+        <div className="p-3 pt-2 border-t border-neutral-800/60 space-y-3">
+          {children}
+        </div>
+      )}
+    </div>
+  );
+}
 
 function AddKeyframeButton({ zoomScale }: { zoomScale: number }) {
   const currentTimeMs = useEditor((s) => s.currentTimeMs);
@@ -239,13 +319,19 @@ export function ToolsSidebar() {
         {activeToolTab === "zoom" && (
           <div className="space-y-4">
             {/* Auto-Plot Master Button */}
-            <div className="rounded-xl border border-neutral-700 bg-neutral-900 p-3 shadow-sm">
-              <div className="flex items-center justify-between mb-1.5">
-                <div className="flex items-center gap-2">
-                  <Sparkles className="size-4 text-white" />
-                  <span className="font-semibold text-white text-xs">Auto-Zoom Generator</span>
-                </div>
-                {(project?.zoomBlocks?.length ?? 0) > 0 && (
+            <CollapsibleCard
+              id="zoom-generator"
+              title="Auto-Zoom Generator"
+              icon={<Sparkles className="size-3.5 text-white" />}
+              badge={
+                (project?.zoomBlocks?.length ?? 0) > 0 ? (
+                  <span className="rounded bg-neutral-800 border border-neutral-700 px-1.5 py-0.5 text-[9px] font-mono text-neutral-300">
+                    {project?.zoomBlocks.length} Active
+                  </span>
+                ) : undefined
+              }
+              actions={
+                (project?.zoomBlocks?.length ?? 0) > 0 ? (
                   <button
                     type="button"
                     onClick={clearZoomBlocks}
@@ -254,9 +340,10 @@ export function ToolsSidebar() {
                   >
                     Clear Zooms
                   </button>
-                )}
-              </div>
-              <p className="text-[11px] text-fg-muted leading-relaxed mb-3">
+                ) : undefined
+              }
+            >
+              <p className="text-[11px] text-fg-muted leading-relaxed">
                 Starts smooth zoom 0.5s before click or typing, auto-tracks the cursor, and shifts back to full-screen frame after 1.2s of inactivity.
               </p>
 
@@ -349,19 +436,19 @@ export function ToolsSidebar() {
                   Create Camera Shift Tour
                 </button>
               </div>
-            </div>
+            </CollapsibleCard>
 
             {/* TRACE SHIFTING ANIMATION (PATH TRAJECTORY) */}
-            <div className="rounded-xl border border-neutral-700 bg-neutral-900 p-3 shadow-sm space-y-3">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <Pencil className="size-4 text-white" />
-                  <span className="font-semibold text-white text-xs">Trace Shifting (Draw to Zoom)</span>
-                </div>
+            <CollapsibleCard
+              id="zoom-trace-shifting"
+              title="Trace Shifting (Draw to Zoom)"
+              icon={<Pencil className="size-3.5 text-white" />}
+              badge={
                 <span className="rounded bg-neutral-800 border border-neutral-700 px-1.5 py-0.5 text-[9px] font-mono text-neutral-300">
                   {traceWaypoints.length > 0 ? "Line Ready" : "Freehand Path"}
                 </span>
-              </div>
+              }
+            >
               <p className="text-[11px] text-fg-muted leading-relaxed">
                 Draw or drag a line directly on the video screen. The zoom camera smoothly zooms in, follows that line, and zooms back out. The trajectory line is an editor guide and is never rendered on the video.
               </p>
@@ -516,7 +603,7 @@ export function ToolsSidebar() {
                   </button>
                 </div>
               </div>
-            </div>
+            </CollapsibleCard>
 
             {/* AUTO-ZOOM KEYFRAME BREAKDOWN INSPECTOR */}
             {(project?.zoomBlocks?.length ?? 0) > 0 && (() => {
@@ -526,17 +613,16 @@ export function ToolsSidebar() {
               );
 
               return (
-                <div className="rounded-xl border border-neutral-700 bg-neutral-900 p-3 shadow-sm space-y-3">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-1.5">
-                      <Sparkles className="size-3.5 text-white" />
-                      <span className="font-semibold text-white text-xs">Auto-Zoom Inspector</span>
-                    </div>
+                <CollapsibleCard
+                  id="zoom-inspector"
+                  title="Auto-Zoom Inspector"
+                  icon={<Sparkles className="size-3.5 text-white" />}
+                  badge={
                     <span className="text-[10px] font-mono text-neutral-400">
                       {project?.zoomBlocks.length} Blocks
                     </span>
-                  </div>
-
+                  }
+                >
                   {/* Auto-Zoom Blocks Tab Selector */}
                   <div className="flex gap-1 overflow-x-auto pb-1 scrollbar-none text-[10px]">
                     {project?.zoomBlocks.map((b, idx) => {
@@ -746,16 +832,16 @@ export function ToolsSidebar() {
                       </button>
                     </div>
                   </div>
-                </div>
+                </CollapsibleCard>
               );
             })()}
 
             {/* Manual Keyframe Controls */}
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <span className="text-[11px] font-semibold uppercase tracking-wider text-fg-faint">
-                  Keyframes ({project?.keyframes?.length ?? 0})
-                </span>
+            <CollapsibleCard
+              id="zoom-manual-keyframes"
+              title={`Keyframes (${project?.keyframes?.length ?? 0})`}
+              icon={<Diamond className="size-3.5 text-white" />}
+              actions={
                 <div className="flex items-center gap-2">
                   {(project?.keyframes?.length ?? 0) > 0 && (
                     <button
@@ -769,7 +855,8 @@ export function ToolsSidebar() {
                   )}
                   <AddKeyframeButton zoomScale={zoomScale} />
                 </div>
-              </div>
+              }
+            >
 
               {selectedBlock && (
                 <div className="rounded-xl border border-neutral-700 bg-neutral-900 p-2.5 space-y-2.5">
@@ -1213,7 +1300,7 @@ export function ToolsSidebar() {
                                   }}
                                   className={`rounded px-1 py-1 text-[9px] capitalize font-medium transition-colors ${
                                     isCur
-                                      ? "bg-amber-400 text-black font-bold shadow-sm"
+                                      ? "bg-white text-black font-bold shadow-sm"
                                       : "bg-ink-800 text-fg-muted hover:bg-ink-700 hover:text-white"
                                   }`}
                                 >
@@ -1306,11 +1393,7 @@ export function ToolsSidebar() {
                         <span className="truncate">Node #{i + 1} ({kf.scale.toFixed(1)}x)</span>
                         {kf.sound ? (
                           <span
-                            className={`rounded border text-[9px] px-1 py-0.2 shrink-0 flex items-center gap-0.5 font-medium ${
-                              kf.sound === "typing"
-                                ? "bg-amber-500/20 text-amber-300 border-amber-500/30"
-                                : "bg-cyan-500/20 text-cyan-300 border-cyan-500/30"
-                            }`}
+                            className="rounded border text-[9px] px-1 py-0.2 shrink-0 flex items-center gap-0.5 font-medium bg-white/10 text-white border-white/20"
                             title={`SFX: ${kf.sound} (${kf.soundPreset || (kf.sound === "typing" ? "mech" : "bop")})`}
                           >
                             <Volume2 className="size-2.5 shrink-0" />
@@ -1361,20 +1444,19 @@ export function ToolsSidebar() {
                   ))
                 )}
               </div>
-            </div>
+            </CollapsibleCard>
           </div>
         )}
 
         {/* TAB 2: VIDEO EFFECTS */}
         {activeToolTab === "effects" && (
           <div className="space-y-4">
-            <div className="rounded-xl border border-ink-800 bg-ink-900/60 p-3 shadow-sm">
-              <div className="flex items-center justify-between mb-1.5">
-                <div className="flex items-center gap-2">
-                  <Wand2 className="size-4 text-white" />
-                  <span className="font-semibold text-white text-xs">Video Effects</span>
-                </div>
-                {(project?.effects?.length ?? 0) > 0 && (
+            <CollapsibleCard
+              id="effects-presets"
+              title="Video Effects"
+              icon={<Wand2 className="size-3.5 text-white" />}
+              actions={
+                (project?.effects?.length ?? 0) > 0 ? (
                   <button
                     type="button"
                     onClick={clearEffects}
@@ -1383,9 +1465,10 @@ export function ToolsSidebar() {
                   >
                     Clear All
                   </button>
-                )}
-              </div>
-              <p className="text-[11px] text-fg-muted leading-relaxed mb-3">
+                ) : undefined
+              }
+            >
+              <p className="text-[11px] text-fg-muted leading-relaxed">
                 Apply spotlights, cinematic vignettes, motion blur, cursor glow, or color grades on the timeline.
               </p>
 
@@ -1445,16 +1528,20 @@ export function ToolsSidebar() {
                   <span>Slow-Mo (0.5x)</span>
                 </button>
               </div>
-            </div>
+            </CollapsibleCard>
 
             {/* Inspector for selected effect */}
-            {selectedEffect ? (
-              <div className="rounded-xl border border-ink-800 bg-ink-900 p-3 space-y-3">
-                <div className="flex items-center justify-between">
-                  <span className="font-semibold text-fg flex items-center gap-1.5">
-                    <Wand2 className="size-3.5 text-white" />
-                    Edit Effect
+            {selectedEffect && (
+              <CollapsibleCard
+                id="effects-inspector"
+                title={`Edit: ${selectedEffect.name}`}
+                icon={<Wand2 className="size-3.5 text-white" />}
+                badge={
+                  <span className="font-mono text-[10px] text-neutral-400">
+                    {Math.round(selectedEffect.intensity * 100)}%
                   </span>
+                }
+                actions={
                   <button
                     type="button"
                     onClick={() => deleteEffect(selectedEffect.id)}
@@ -1463,8 +1550,8 @@ export function ToolsSidebar() {
                   >
                     <Trash2 className="size-3.5" />
                   </button>
-                </div>
-
+                }
+              >
                 <div>
                   <label className="text-[10px] text-fg-faint uppercase font-semibold">Effect Name</label>
                   <input
@@ -1564,18 +1651,15 @@ export function ToolsSidebar() {
                   <Trash2 className="size-3" />
                   Delete Effect
                 </button>
-              </div>
-            ) : (
-              <p className="text-[11px] text-fg-faint">
-                Select an effect on the timeline or click an effect preset above to add one.
-              </p>
+              </CollapsibleCard>
             )}
 
             {/* List of active video effects */}
-            <div className="space-y-1.5">
-              <span className="text-[11px] font-semibold uppercase tracking-wider text-fg-faint">
-                Active Effects ({project?.effects?.length ?? 0})
-              </span>
+            <CollapsibleCard
+              id="effects-active-list"
+              title={`Active Effects (${project?.effects?.length ?? 0})`}
+              icon={<Sparkles className="size-3.5 text-white" />}
+            >
               {(!project?.effects || project.effects.length === 0) ? (
                 <div className="rounded-lg border border-ink-800 bg-ink-900/40 p-3 text-center text-[11px] text-fg-faint">
                   No effects added yet. Click an effect above to add to timeline.
@@ -1614,39 +1698,29 @@ export function ToolsSidebar() {
                   </div>
                 ))
               )}
-            </div>
+            </CollapsibleCard>
           </div>
         )}
 
         {/* TAB 2: TEXT & CAPTIONS */}
         {activeToolTab === "text" && (
           <div className="space-y-4">
-            <div className="flex items-center justify-between">
-              <span className="text-[11px] font-semibold uppercase tracking-wider text-fg-faint">
-                Text Overlays ({project?.textOverlays?.length ?? 0})
-              </span>
-              <button
-                type="button"
-                onClick={() => addTextOverlay("New Caption")}
-                className="flex items-center gap-1 rounded bg-neutral-800 border border-neutral-700 px-2 py-1 text-[11px] font-medium text-white hover:border-white"
-              >
-                <Plus className="size-3" /> Add Text
-              </button>
-            </div>
-
-            {selectedText ? (
-              <div className="rounded-xl border border-ink-800 bg-ink-900 p-3 space-y-3">
-                <div className="flex items-center justify-between">
-                  <span className="font-semibold text-fg">Edit Caption</span>
+            {selectedText && (
+              <CollapsibleCard
+                id="text-editor"
+                title={`Edit Caption: ${selectedText.text}`}
+                icon={<Type className="size-3.5 text-white" />}
+                actions={
                   <button
                     type="button"
                     onClick={() => deleteTextOverlay(selectedText.id)}
                     className="text-danger hover:opacity-80 p-0.5"
+                    title="Delete caption"
                   >
                     <Trash2 className="size-3.5" />
                   </button>
-                </div>
-
+                }
+              >
                 <div>
                   <label className="text-[10px] text-fg-faint uppercase font-semibold">Content</label>
                   <input
@@ -1697,35 +1771,50 @@ export function ToolsSidebar() {
                     Bottom Subtitle
                   </button>
                 </div>
-              </div>
-            ) : (
-              <p className="text-[11px] text-fg-faint">
-                Select a text track or click "Add Text" to insert captions.
-              </p>
+              </CollapsibleCard>
             )}
 
             {/* List of text overlays */}
-            <div className="space-y-1.5">
-              {project?.textOverlays?.map((t) => (
-                <div
-                  key={t.id}
-                  onClick={() => selectText(t.id)}
-                  className={`flex items-center justify-between rounded-lg border p-2 cursor-pointer transition-colors ${
-                    selectedTextId === t.id
-                      ? "border-white bg-white/10 text-white font-medium"
-                      : "border-ink-800 bg-ink-900/60 text-fg-muted hover:border-ink-700"
-                  }`}
+            <CollapsibleCard
+              id="text-captions-list"
+              title={`Captions List (${project?.textOverlays?.length ?? 0})`}
+              icon={<Type className="size-3.5 text-white" />}
+              actions={
+                <button
+                  type="button"
+                  onClick={() => addTextOverlay("New Caption")}
+                  className="flex items-center gap-1 rounded bg-neutral-800 border border-neutral-700 px-2 py-0.5 text-[10px] font-medium text-white hover:border-white"
                 >
-                  <div className="flex items-center gap-2 truncate">
-                    <Type className="size-3.5 text-white shrink-0" />
-                    <span className="truncate font-medium">{t.text}</span>
-                  </div>
-                  <span className="font-mono text-[10px] text-fg-faint shrink-0">
-                    {formatDuration(t.startTimeMs)}
-                  </span>
+                  <Plus className="size-3" /> Add Caption
+                </button>
+              }
+            >
+              {(!project?.textOverlays || project.textOverlays.length === 0) ? (
+                <div className="rounded-lg border border-ink-800 bg-ink-900/40 p-3 text-center text-[11px] text-fg-faint">
+                  No captions added yet. Click &quot;Add Caption&quot; above to insert one.
                 </div>
-              ))}
-            </div>
+              ) : (
+                project.textOverlays.map((t) => (
+                  <div
+                    key={t.id}
+                    onClick={() => selectText(t.id)}
+                    className={`flex items-center justify-between rounded-lg border p-2 cursor-pointer transition-colors ${
+                      selectedTextId === t.id
+                        ? "border-white bg-white/10 text-white font-medium"
+                        : "border-ink-800 bg-ink-900/60 text-fg-muted hover:border-ink-700"
+                    }`}
+                  >
+                    <div className="flex items-center gap-2 truncate">
+                      <Type className="size-3.5 text-white shrink-0" />
+                      <span className="truncate font-medium">{t.text}</span>
+                    </div>
+                    <span className="font-mono text-[10px] text-fg-faint shrink-0">
+                      {formatDuration(t.startTimeMs)}
+                    </span>
+                  </div>
+                ))
+              )}
+            </CollapsibleCard>
           </div>
         )}
 
@@ -1737,16 +1826,16 @@ export function ToolsSidebar() {
           return (
           <div className="space-y-4">
             {/* 1. Background Music & Soundtracks */}
-            <div className="rounded-xl border border-neutral-700 bg-neutral-900 p-3 shadow-sm space-y-3">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <Music className="size-4 text-white" />
-                  <span className="font-semibold text-white text-xs">Background Music & Soundtracks</span>
-                </div>
+            <CollapsibleCard
+              id="audio-music"
+              title="Background Music & Soundtracks"
+              icon={<Music className="size-3.5 text-white" />}
+              badge={
                 <span className="rounded bg-neutral-800 border border-neutral-700 px-1.5 py-0.5 text-[9px] font-mono text-neutral-300">
                   {musicTracks.length} Active
                 </span>
-              </div>
+              }
+            >
               <p className="text-[11px] text-fg-muted leading-relaxed">
                 Add cinematic background music tracks, adjust decibel gain (dB), and set smooth fade-in and fade-out curves.
               </p>
@@ -1930,14 +2019,14 @@ export function ToolsSidebar() {
                   </button>
                 </div>
               )}
-            </div>
+            </CollapsibleCard>
 
             {/* 2. Auto AFX Master Generator */}
-            <div className="rounded-xl border border-neutral-700 bg-neutral-900 p-3 shadow-sm">
-              <div className="flex items-center gap-2 mb-1.5">
-                <Volume2 className="size-4 text-white" />
-                <span className="font-semibold text-white text-xs">Auto AFX Generator</span>
-              </div>
+            <CollapsibleCard
+              id="audio-auto-afx"
+              title="Auto AFX Generator"
+              icon={<Volume2 className="size-3.5 text-white" />}
+            >
               <p className="text-[11px] text-fg-muted leading-relaxed mb-3">
                 Automatically attaches tactile click bops to clicks and clean mechanical typing sounds.
               </p>
@@ -1949,22 +2038,25 @@ export function ToolsSidebar() {
                 <Sparkles className="size-3.5 fill-black" />
                 Apply Auto AFX
               </button>
-            </div>
+            </CollapsibleCard>
 
             {/* 1. Click Sound Effects */}
-            <div className="rounded-xl border border-ink-800 bg-ink-900/80 p-3 shadow-sm space-y-3">
-              <div className="flex items-center justify-between">
-                <div>
-                  <span className="block text-xs font-semibold text-white">Click Sound Effects</span>
-                  <span className="block text-[10px] text-fg-faint">Tactile bop sound on every button click</span>
-                </div>
+            <CollapsibleCard
+              id="audio-click-sfx"
+              title="Click Sound Effects"
+              icon={<Volume2 className="size-3.5 text-white" />}
+              badge={
                 <input
                   type="checkbox"
                   checked={project?.audioSettings?.clickSoundEnabled ?? true}
                   onChange={(e) => updateAudioSettings({ clickSoundEnabled: e.target.checked })}
                   className="size-4 accent-white rounded cursor-pointer"
                 />
-              </div>
+              }
+            >
+              <span className="block text-[10px] text-fg-faint -mt-1">
+                Tactile bop sound on every button click
+              </span>
 
               {(project?.audioSettings?.clickSoundEnabled ?? true) && (
                 <div className="space-y-2 pt-1 border-t border-ink-800/80">
@@ -2034,22 +2126,25 @@ export function ToolsSidebar() {
                   </div>
                 </div>
               )}
-            </div>
+            </CollapsibleCard>
 
             {/* 2. Typing Keystroke Sound Effects */}
-            <div className="rounded-xl border border-ink-800 bg-ink-900/80 p-3 shadow-sm space-y-3">
-              <div className="flex items-center justify-between">
-                <div>
-                  <span className="block text-xs font-semibold text-white">Auto Typing Sounds</span>
-                  <span className="block text-[10px] text-fg-faint">Plays mechanical key sounds during typing</span>
-                </div>
+            <CollapsibleCard
+              id="audio-typing-sfx"
+              title="Auto Typing Sounds"
+              icon={<Volume2 className="size-3.5 text-white" />}
+              badge={
                 <input
                   type="checkbox"
                   checked={project?.audioSettings?.typingSoundEnabled ?? true}
                   onChange={(e) => updateAudioSettings({ typingSoundEnabled: e.target.checked })}
                   className="size-4 accent-white rounded cursor-pointer"
                 />
-              </div>
+              }
+            >
+              <span className="block text-[10px] text-fg-faint -mt-1">
+                Plays mechanical key sounds during typing
+              </span>
 
               {(project?.audioSettings?.typingSoundEnabled ?? true) && (
                 <div className="space-y-2 pt-1 border-t border-ink-800/80">
@@ -2129,124 +2224,136 @@ export function ToolsSidebar() {
                   </div>
                 </div>
               )}
-            </div>
+            </CollapsibleCard>
           </div>
           );
         })()}
 
         {/* TAB 4: CANVAS & LOOKS */}
         {activeToolTab === "looks" && (
-          <div className="space-y-4">
-            {/* Header */}
-            <div className="flex items-center justify-between">
-              <span className="text-[11px] font-semibold uppercase tracking-wider text-fg-faint">
-                Canvas Presets
-              </span>
-              <span className="text-[10px] text-fg-muted font-mono">
-                {BACKGROUND_PRESETS.length} Presets
-              </span>
-            </div>
+          <div className="space-y-3">
+            {/* 1. Canvas Background Presets */}
+            <CollapsibleCard
+              id="looks-presets"
+              title="Canvas Presets"
+              icon={<Paintbrush className="size-3.5" />}
+              badge={
+                <span className="rounded bg-neutral-800 px-1.5 py-0.5 text-[9px] font-mono text-neutral-400">
+                  {BACKGROUND_PRESETS.length} Presets
+                </span>
+              }
+            >
+              {/* Category Filter Tabs */}
+              <div className="flex gap-1 overflow-x-auto pb-1 scrollbar-none text-[10px]">
+                <button
+                  type="button"
+                  onClick={() => setSelectedBgCategory("all")}
+                  className={`shrink-0 rounded-md px-2 py-1 font-medium transition-colors ${
+                    selectedBgCategory === "all"
+                      ? "bg-white text-black font-semibold shadow-sm"
+                      : "bg-ink-900 text-fg-muted hover:text-white hover:bg-ink-800 border border-ink-800"
+                  }`}
+                >
+                  All ({BACKGROUND_PRESETS.length})
+                </button>
+                {BACKGROUND_CATEGORIES.map((cat) => {
+                  const count = BACKGROUND_PRESETS.filter((p) => p.category === cat.id).length;
+                  const isActive = selectedBgCategory === cat.id;
+                  return (
+                    <button
+                      key={cat.id}
+                      type="button"
+                      onClick={() => setSelectedBgCategory(cat.id)}
+                      className={`shrink-0 rounded-md px-2 py-1 font-medium transition-colors whitespace-nowrap ${
+                        isActive
+                          ? "bg-white text-black font-semibold shadow-sm"
+                          : "bg-ink-900 text-fg-muted hover:text-white hover:bg-ink-800 border border-ink-800"
+                      }`}
+                    >
+                      {cat.label} ({count})
+                    </button>
+                  );
+                })}
+              </div>
 
-            {/* Category Filter Tabs */}
-            <div className="flex gap-1 overflow-x-auto pb-1 scrollbar-none text-[10px]">
-              <button
-                type="button"
-                onClick={() => setSelectedBgCategory("all")}
-                className={`shrink-0 rounded-md px-2 py-1 font-medium transition-colors ${
-                  selectedBgCategory === "all"
-                    ? "bg-white text-black font-semibold shadow-sm"
-                    : "bg-ink-900 text-fg-muted hover:text-white hover:bg-ink-800 border border-ink-800"
-                }`}
-              >
-                All ({BACKGROUND_PRESETS.length})
-              </button>
-              {BACKGROUND_CATEGORIES.map((cat) => {
-                const count = BACKGROUND_PRESETS.filter((p) => p.category === cat.id).length;
-                const isActive = selectedBgCategory === cat.id;
-                return (
-                  <button
-                    key={cat.id}
-                    type="button"
-                    onClick={() => setSelectedBgCategory(cat.id)}
-                    className={`shrink-0 rounded-md px-2 py-1 font-medium transition-colors whitespace-nowrap ${
-                      isActive
-                        ? "bg-white text-black font-semibold shadow-sm"
-                        : "bg-ink-900 text-fg-muted hover:text-white hover:bg-ink-800 border border-ink-800"
-                    }`}
-                  >
-                    {cat.label} ({count})
-                  </button>
-                );
-              })}
-            </div>
+              {/* Categorized Preset Selector Grid */}
+              <div className="max-h-72 overflow-y-auto space-y-3 pr-1 scrollbar-thin">
+                {(selectedBgCategory === "all"
+                  ? BACKGROUND_CATEGORIES
+                  : BACKGROUND_CATEGORIES.filter((c) => c.id === selectedBgCategory)
+                ).map((cat) => {
+                  const catPresets = BACKGROUND_PRESETS.filter((p) => p.category === cat.id);
+                  if (catPresets.length === 0) return null;
 
-            {/* Categorized Preset Selector Grid */}
-            <div className="max-h-80 overflow-y-auto space-y-3.5 pr-1 scrollbar-thin">
-              {(selectedBgCategory === "all"
-                ? BACKGROUND_CATEGORIES
-                : BACKGROUND_CATEGORIES.filter((c) => c.id === selectedBgCategory)
-              ).map((cat) => {
-                const catPresets = BACKGROUND_PRESETS.filter((p) => p.category === cat.id);
-                if (catPresets.length === 0) return null;
+                  return (
+                    <div key={cat.id} className="space-y-1.5">
+                      <div className="flex items-center justify-between text-[10px] text-fg-muted font-medium">
+                        <span className="uppercase tracking-wider text-fg-faint font-semibold">
+                          {cat.label}
+                        </span>
+                        <span className="text-[9px] text-fg-faint font-mono">
+                          {catPresets.length}
+                        </span>
+                      </div>
 
-                return (
-                  <div key={cat.id} className="space-y-1.5">
-                    <div className="flex items-center justify-between text-[10px] text-fg-muted font-medium">
-                      <span className="uppercase tracking-wider text-fg-faint font-semibold">
-                        {cat.label}
-                      </span>
-                      <span className="text-[9px] text-fg-faint font-mono">
-                        {catPresets.length}
-                      </span>
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-2">
-                      {catPresets.map((preset) => {
-                        const isSelected = project?.looks.backgroundValue === preset.value;
-                        return (
-                          <button
-                            key={preset.id}
-                            type="button"
-                            onClick={() =>
-                              updateLooks({
-                                backgroundType: preset.type,
-                                backgroundValue: preset.value,
-                              })
-                            }
-                            className={`group relative h-16 w-full overflow-hidden rounded-lg border text-left transition-all ${
-                              isSelected
-                                ? "border-white ring-2 ring-white/60 shadow-md scale-[1.02]"
-                                : "border-ink-800 hover:border-neutral-500 hover:scale-[1.01]"
-                            }`}
-                            style={{ background: preset.value }}
-                            title={`${preset.name} (${cat.label})`}
-                          >
-                            {/* Contrast Protection Scrim */}
-                            <div className="absolute inset-0 flex flex-col justify-between p-2 bg-gradient-to-t from-black/80 via-black/25 to-transparent">
-                              <div className="flex items-center justify-between">
-                                <span className="text-[8px] font-semibold uppercase tracking-wider text-white/75 truncate">
-                                  {preset.type}
+                      <div className="grid grid-cols-2 gap-2">
+                        {catPresets.map((preset) => {
+                          const isSelected = project?.looks.backgroundValue === preset.value;
+                          return (
+                            <button
+                              key={preset.id}
+                              type="button"
+                              onClick={() =>
+                                updateLooks({
+                                  backgroundType: preset.type,
+                                  backgroundValue: preset.value,
+                                })
+                              }
+                              className={`group relative h-16 w-full overflow-hidden rounded-lg border text-left transition-all ${
+                                isSelected
+                                  ? "border-white ring-2 ring-white/60 shadow-md scale-[1.02]"
+                                  : "border-ink-800 hover:border-neutral-500 hover:scale-[1.01]"
+                              }`}
+                              style={{ background: preset.value }}
+                              title={`${preset.name} (${cat.label})`}
+                            >
+                              {/* Contrast Protection Scrim */}
+                              <div className="absolute inset-0 flex flex-col justify-between p-2 bg-gradient-to-t from-black/80 via-black/25 to-transparent">
+                                <div className="flex items-center justify-between">
+                                  <span className="text-[8px] font-semibold uppercase tracking-wider text-white/75 truncate">
+                                    {preset.type}
+                                  </span>
+                                  {isSelected && (
+                                    <div className="flex size-3.5 items-center justify-center rounded-full bg-white text-black shadow">
+                                      <Check className="size-2.5 stroke-[3]" />
+                                    </div>
+                                  )}
+                                </div>
+                                <span className="text-[11px] font-bold text-white drop-shadow-sm truncate">
+                                  {preset.name}
                                 </span>
-                                {isSelected && (
-                                  <div className="flex size-3.5 items-center justify-center rounded-full bg-white text-black shadow">
-                                    <Check className="size-2.5 stroke-[3]" />
-                                  </div>
-                                )}
                               </div>
-                              <span className="text-[11px] font-bold text-white drop-shadow-sm truncate">
-                                {preset.name}
-                              </span>
-                            </div>
-                          </button>
-                        );
-                      })}
+                            </button>
+                          );
+                        })}
+                      </div>
                     </div>
-                  </div>
-                );
-              })}
-            </div>
+                  );
+                })}
+              </div>
+            </CollapsibleCard>
 
-            <div className="space-y-3 pt-2">
+            {/* 2. Aspect Ratio & Window Framing */}
+            <CollapsibleCard
+              id="looks-framing"
+              title="Aspect Ratio & Window Framing"
+              icon={<Sliders className="size-3.5" />}
+              badge={
+                <span className="rounded bg-neutral-800 px-1.5 py-0.5 text-[9px] font-mono text-neutral-400">
+                  {project?.looks.aspectRatio === "auto" ? "Native" : project?.looks.aspectRatio || "16:9"}
+                </span>
+              }
+            >
               {/* Aspect Ratio & Display Mode */}
               <div className="space-y-1.5">
                 <div className="flex justify-between items-center text-[11px]">
@@ -2282,7 +2389,7 @@ export function ToolsSidebar() {
                 </div>
               </div>
 
-              {/* Quick Framing Presets: MacBook Terminal vs macOS Window vs Full Screen */}
+              {/* Quick Framing Presets: MacBook Terminal vs macOS Window vs Full Screen (Monochromatic) */}
               <div className="grid grid-cols-3 gap-1 pt-1">
                 <button
                   type="button"
@@ -2297,7 +2404,7 @@ export function ToolsSidebar() {
                   }
                   className={`rounded-lg py-1.5 px-1.5 text-[9.5px] font-semibold border transition-all truncate text-center ${
                     project?.looks.windowFrame === "terminal"
-                      ? "border-emerald-400 bg-emerald-500/15 text-emerald-300 font-bold"
+                      ? "border-white bg-white/20 text-white font-bold"
                       : "border-ink-800 bg-ink-900/60 text-fg-muted hover:text-white hover:border-ink-700"
                   }`}
                   title="MacBook Terminal window frame with traffic lights and terminal title"
@@ -2317,7 +2424,7 @@ export function ToolsSidebar() {
                   }
                   className={`rounded-lg py-1.5 px-1.5 text-[9.5px] font-semibold border transition-all truncate text-center ${
                     project?.looks.windowFrame === "macos"
-                      ? "border-white bg-white/15 text-white font-bold"
+                      ? "border-white bg-white/20 text-white font-bold"
                       : "border-ink-800 bg-ink-900/60 text-fg-muted hover:text-white hover:border-ink-700"
                   }`}
                   title="macOS studio window mockup frame"
@@ -2338,7 +2445,7 @@ export function ToolsSidebar() {
                   }
                   className={`rounded-lg py-1.5 px-1.5 text-[9.5px] font-semibold border transition-all truncate text-center ${
                     (project?.looks.padding ?? 0) === 0 && project?.looks.windowFrame === "none"
-                      ? "border-amber-400 bg-amber-500/15 text-amber-300 font-bold"
+                      ? "border-white bg-white/20 text-white font-bold"
                       : "border-ink-800 bg-ink-900/60 text-fg-muted hover:text-white hover:border-ink-700"
                   }`}
                   title="Make recording fill the whole screen edge-to-edge with zero margins"
@@ -2446,11 +2553,22 @@ export function ToolsSidebar() {
                     );
                   })}
                 </div>
-
               </div>
+            </CollapsibleCard>
 
+            {/* 3. 3D Tilt & Camera Physics */}
+            <CollapsibleCard
+              id="looks-tilt"
+              title="3D Tilt & Camera Physics"
+              icon={<Sparkles className="size-3.5" />}
+              badge={
+                <span className="rounded bg-neutral-800 px-1.5 py-0.5 text-[9px] font-mono text-neutral-400 capitalize">
+                  {project?.looks.cameraPhysics || "spring"}
+                </span>
+              }
+            >
               {/* 3D Perspective Tilt Plot Box & Kinetic Motion Engine */}
-              <div className="pt-2 border-t border-ink-800/80">
+              <div>
                 <TiltController />
               </div>
 
@@ -2484,9 +2602,27 @@ export function ToolsSidebar() {
                   })}
                 </div>
               </div>
+            </CollapsibleCard>
 
+            {/* 4. Ambient Glow & Brand Accent */}
+            <CollapsibleCard
+              id="looks-ambient"
+              title="Ambient Glow & Brand Accent"
+              icon={<SunMedium className="size-3.5" />}
+              badge={
+                <span
+                  className={`rounded px-1.5 py-0.5 text-[9px] font-semibold ${
+                    project?.looks.ambientBackdropBlur
+                      ? "bg-white text-black"
+                      : "bg-neutral-800 text-neutral-400"
+                  }`}
+                >
+                  {project?.looks.ambientBackdropBlur ? "Glow On" : "Off"}
+                </span>
+              }
+            >
               {/* Ambient Video Blur Glow Toggle */}
-              <div className="pt-2 border-t border-ink-800/80 flex items-center justify-between">
+              <div className="flex items-center justify-between">
                 <div>
                   <span className="block text-xs font-semibold text-white">Ambient Blur Glow</span>
                   <span className="block text-[10px] text-fg-faint">
@@ -2512,31 +2648,42 @@ export function ToolsSidebar() {
                 <div className="flex items-center gap-2">
                   <input
                     type="color"
-                    value={project?.looks.brandAccentColor || "#6366f1"}
+                    value={project?.looks.brandAccentColor || "#ffffff"}
                     onChange={(e) => updateLooks({ brandAccentColor: e.target.value })}
                     className="size-6 rounded cursor-pointer bg-transparent border-0 p-0"
                   />
                   <span className="font-mono text-[11px] text-white">
-                    {project?.looks.brandAccentColor || "#6366f1"}
+                    {project?.looks.brandAccentColor || "#ffffff"}
                   </span>
                 </div>
               </div>
-            </div>
+            </CollapsibleCard>
           </div>
         )}
 
         {/* TAB 5: CURSOR & AUTOTRACKING (OPENSCREEN) */}
         {activeToolTab === "cursor" && (
-          <div className="space-y-4">
-            <span className="text-[11px] font-semibold uppercase tracking-wider text-fg-faint">
-              OpenScreen Auto-Tracking & Cursor
-            </span>
-
-            {/* 1. Auto-Track Camera Toggle */}
-            <div className="rounded-xl border border-ink-800 bg-ink-900/80 p-3 shadow-sm space-y-3">
+          <div className="space-y-3">
+            {/* 1. Dynamic Camera Reframing */}
+            <CollapsibleCard
+              id="cursor-reframing"
+              title="Dynamic Camera Reframing"
+              icon={<Crosshair className="size-3.5" />}
+              badge={
+                <span
+                  className={`rounded px-1.5 py-0.5 text-[9px] font-semibold ${
+                    project?.looks.autoTrackCursor
+                      ? "bg-white text-black"
+                      : "bg-neutral-800 text-neutral-400"
+                  }`}
+                >
+                  {project?.looks.autoTrackCursor ? "Active" : "Off"}
+                </span>
+              }
+            >
               <div className="flex items-center justify-between">
                 <div>
-                  <span className="block text-xs font-semibold text-white">Dynamic Camera Reframing</span>
+                  <span className="block text-xs font-semibold text-white">Auto-Track Cursor</span>
                   <span className="block text-[10px] text-fg-faint">
                     Gently reframes camera on highlights or wide drags
                   </span>
@@ -2550,7 +2697,7 @@ export function ToolsSidebar() {
               </div>
 
               {Boolean(project?.looks.autoTrackCursor) && (
-                <div className="space-y-1 pt-1 border-t border-ink-800/80">
+                <div className="space-y-1 pt-2 border-t border-ink-800/80">
                   <div className="flex justify-between text-[11px]">
                     <span className="text-fg-muted">Follow Zoom Scale</span>
                     <span className="font-mono text-white font-semibold">
@@ -2568,59 +2715,94 @@ export function ToolsSidebar() {
                   />
                 </div>
               )}
-            </div>
+            </CollapsibleCard>
 
-            {/* 2. Expanded Cursor Size Multiplier & Quick Presets */}
-            <div className="rounded-xl border border-ink-800 bg-ink-900/80 p-3 shadow-sm space-y-2">
-              <div className="flex justify-between text-[11px]">
-                <span className="text-fg-muted">Cursor Size</span>
-                <span className="font-mono text-white font-semibold">
-                  {(project?.looks.cursorSize ?? 1.4).toFixed(2)}x ({Math.round((project?.looks.cursorSize ?? 1.4) * 100)}%)
+            {/* 2. Cursor Size Multiplier & Trajectory Smoothing */}
+            <CollapsibleCard
+              id="cursor-size-motion"
+              title="Cursor Size & Smoothing"
+              icon={<MousePointer className="size-3.5" />}
+              badge={
+                <span className="rounded bg-neutral-800 px-1.5 py-0.5 text-[9px] font-mono text-neutral-400">
+                  {(project?.looks.cursorSize ?? 1.4).toFixed(1)}x
                 </span>
+              }
+            >
+              <div className="space-y-2">
+                <div className="flex justify-between text-[11px]">
+                  <span className="text-fg-muted">Cursor Size</span>
+                  <span className="font-mono text-white font-semibold">
+                    {(project?.looks.cursorSize ?? 1.4).toFixed(2)}x ({Math.round((project?.looks.cursorSize ?? 1.4) * 100)}%)
+                  </span>
+                </div>
+                <input
+                  type="range"
+                  min="0.6"
+                  max="3.0"
+                  step="0.05"
+                  value={project?.looks.cursorSize ?? 1.4}
+                  onChange={(e) => updateLooks({ cursorSize: parseFloat(e.target.value) })}
+                  className="w-full accent-white cursor-pointer h-1.5 bg-ink-800 rounded-lg"
+                />
+
+                {/* Quick Presets: S, M, L, XL */}
+                <div className="grid grid-cols-4 gap-1.5 pt-1">
+                  {[
+                    { label: "S", value: 0.8, tooltip: "Small (0.8x)" },
+                    { label: "M", value: 1.4, tooltip: "Medium (1.4x - Default)" },
+                    { label: "L", value: 2.0, tooltip: "Large (2.0x)" },
+                    { label: "XL", value: 2.8, tooltip: "Extra Large (2.8x)" },
+                  ].map((preset) => {
+                    const isPresetActive = Math.abs((project?.looks.cursorSize ?? 1.4) - preset.value) < 0.04;
+                    return (
+                      <button
+                        key={preset.label}
+                        type="button"
+                        onClick={() => updateLooks({ cursorSize: preset.value })}
+                        className={`rounded-md py-1 text-[10px] font-semibold transition-all ${
+                          isPresetActive
+                            ? "bg-white text-black font-bold shadow-sm"
+                            : "bg-ink-800 text-fg-muted hover:text-white hover:bg-ink-700"
+                        }`}
+                        title={preset.tooltip}
+                      >
+                        {preset.label} ({preset.value}x)
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
-              <input
-                type="range"
-                min="0.6"
-                max="3.0"
-                step="0.05"
-                value={project?.looks.cursorSize ?? 1.4}
-                onChange={(e) => updateLooks({ cursorSize: parseFloat(e.target.value) })}
-                className="w-full accent-white cursor-pointer h-1.5 bg-ink-800 rounded-lg"
-              />
 
-              {/* Quick Presets: S, M, L, XL */}
-              <div className="grid grid-cols-4 gap-1.5 pt-1">
-                {[
-                  { label: "S", value: 0.8, tooltip: "Small (0.8x)" },
-                  { label: "M", value: 1.4, tooltip: "Medium (1.4x - Default)" },
-                  { label: "L", value: 2.0, tooltip: "Large (2.0x)" },
-                  { label: "XL", value: 2.8, tooltip: "Extra Large (2.8x)" },
-                ].map((preset) => {
-                  const isPresetActive = Math.abs((project?.looks.cursorSize ?? 1.4) - preset.value) < 0.04;
-                  return (
-                    <button
-                      key={preset.label}
-                      type="button"
-                      onClick={() => updateLooks({ cursorSize: preset.value })}
-                      className={`rounded-md py-1 text-[10px] font-semibold transition-all ${
-                        isPresetActive
-                          ? "bg-white text-black font-bold shadow-sm"
-                          : "bg-ink-800 text-fg-muted hover:text-white hover:bg-ink-700"
-                      }`}
-                      title={preset.tooltip}
-                    >
-                      {preset.label} ({preset.value}x)
-                    </button>
-                  );
-                })}
+              {/* Trajectory Smoothing Presets */}
+              <div className="space-y-2 pt-2 border-t border-ink-800/80">
+                <label className="text-[11px] text-fg-muted block">Cursor Motion Smoothing</label>
+                <div className="grid grid-cols-3 gap-1.5">
+                  {[
+                    { id: "none" as const, label: "Raw (None)" },
+                    { id: "smooth" as const, label: "Balanced" },
+                    { id: "cinematic" as const, label: "Cinematic" },
+                  ].map((sm) => {
+                    const isActive = (project?.looks.cursorSmoothing ?? "smooth") === sm.id;
+                    return (
+                      <button
+                        key={sm.id}
+                        type="button"
+                        onClick={() => updateLooks({ cursorSmoothing: sm.id })}
+                        className={`rounded-lg py-1.5 px-2 text-[10px] font-semibold transition-all ${
+                          isActive
+                            ? "bg-white text-black font-bold shadow-sm"
+                            : "bg-ink-800 text-fg-muted hover:text-white hover:bg-ink-700"
+                        }`}
+                      >
+                        {sm.label}
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
+            </CollapsibleCard>
 
-              <p className="text-[10px] text-fg-faint">
-                Smooth vector pointer scale from 0.6x (compact) to 3.0x (presentation).
-              </p>
-            </div>
-
-            {/* 3. Presenter Avatar Badge Customization Controls */}
+            {/* 3. Presenter Avatar Badge Customization */}
             {(() => {
               const avatar = project?.looks.cursorAvatar ?? DEFAULT_CURSOR_AVATAR;
               const updateAvatar = (partial: Partial<CursorAvatar>) => {
@@ -2634,7 +2816,22 @@ export function ToolsSidebar() {
               };
 
               return (
-                <div className="rounded-xl border border-ink-800 bg-ink-900/80 p-3 shadow-sm space-y-3">
+                <CollapsibleCard
+                  id="cursor-avatar"
+                  title="Presenter Avatar Badge"
+                  icon={<User className="size-3.5" />}
+                  badge={
+                    <span
+                      className={`rounded px-1.5 py-0.5 text-[9px] font-semibold ${
+                        avatar.enabled
+                          ? "bg-white text-black"
+                          : "bg-neutral-800 text-neutral-400"
+                      }`}
+                    >
+                      {avatar.enabled ? "Active" : "Off"}
+                    </span>
+                  }
+                >
                   {/* Avatar Enable Toggle */}
                   <div className="flex items-center justify-between">
                     <div>
@@ -2774,38 +2971,38 @@ export function ToolsSidebar() {
                         </div>
                       )}
 
-                      {/* Badge Accent Color */}
+                      {/* Badge Accent Color (Monochrome / Neutral Palette) */}
                       <div>
                         <div className="flex items-center justify-between mb-1">
                           <label className="text-[10px] font-medium text-fg-muted">Badge Color</label>
-                          <span className="font-mono text-[10px] text-white">{avatar.color || "#6366f1"}</span>
+                          <span className="font-mono text-[10px] text-white">{avatar.color || "#ffffff"}</span>
                         </div>
                         <div className="flex items-center gap-2">
                           <input
                             type="color"
-                            value={avatar.color || "#6366f1"}
+                            value={avatar.color || "#ffffff"}
                             onChange={(e) => updateAvatar({ color: e.target.value })}
                             className="size-6 rounded cursor-pointer bg-transparent border-0 p-0"
                           />
                           <div className="flex flex-wrap gap-1">
                             {[
-                              "#6366f1",
-                              "#ec4899",
-                              "#10b981",
-                              "#f59e0b",
-                              "#3b82f6",
-                              "#8b5cf6",
-                              "#ef4444",
-                              "#06b6d4",
+                              "#ffffff",
+                              "#e4e4e7",
+                              "#a1a1aa",
+                              "#71717a",
+                              "#52525b",
+                              "#27272a",
+                              "#18181b",
+                              "#09090b",
                             ].map((c) => (
                               <button
                                 key={c}
                                 type="button"
                                 onClick={() => updateAvatar({ color: c })}
                                 className={`size-4 rounded-full border transition-transform ${
-                                  (avatar.color || "#6366f1") === c
+                                  (avatar.color || "#ffffff") === c
                                     ? "scale-125 border-white ring-1 ring-white"
-                                    : "border-ink-800"
+                                    : "border-neutral-700"
                                 }`}
                                 style={{ backgroundColor: c }}
                               />
@@ -2835,7 +3032,7 @@ export function ToolsSidebar() {
                         <div className="flex items-center gap-1.5">
                           <div
                             className="flex size-6 shrink-0 items-center justify-center rounded-full text-[10px] font-bold text-white shadow-sm overflow-hidden"
-                            style={{ backgroundColor: avatar.color || "#6366f1" }}
+                            style={{ backgroundColor: avatar.color || "#ffffff", color: avatar.color === "#ffffff" ? "#000000" : "#ffffff" }}
                           >
                             {avatar.type === "initials" && (avatar.value || "DL")}
                             {avatar.type === "text" && (avatar.value || "Host")}
@@ -2867,82 +3064,65 @@ export function ToolsSidebar() {
                       </div>
                     </div>
                   )}
-                </div>
+                </CollapsibleCard>
               );
             })()}
 
-            {/* 4. Trajectory Smoothing Presets */}
-            <div className="space-y-2">
-              <label className="text-[11px] text-fg-muted block">Cursor Motion Smoothing</label>
-              <div className="grid grid-cols-3 gap-1.5">
-                {[
-                  { id: "none" as const, label: "Raw (None)" },
-                  { id: "smooth" as const, label: "Balanced" },
-                  { id: "cinematic" as const, label: "Cinematic" },
-                ].map((sm) => {
-                  const isActive = (project?.looks.cursorSmoothing ?? "smooth") === sm.id;
-                  return (
-                    <button
-                      key={sm.id}
-                      type="button"
-                      onClick={() => updateLooks({ cursorSmoothing: sm.id })}
-                      className={`rounded-lg py-1.5 px-2 text-[10px] font-semibold transition-all ${
-                        isActive
-                          ? "bg-white text-black font-bold shadow-sm"
-                          : "bg-ink-800 text-fg-muted hover:text-white hover:bg-ink-700"
-                      }`}
-                    >
-                      {sm.label}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-
-            {/* 5. Pointer Style (Catalog of 24 Presets) */}
-            <div className="space-y-2">
-              <div className="flex justify-between items-center">
-                <label className="text-[11px] text-fg-muted block">Cursor Pointer Style</label>
-                <span className="text-[10px] text-fg-faint font-mono">24 Designs</span>
-              </div>
-              <div className="grid grid-cols-2 gap-1.5 max-h-56 overflow-y-auto pr-1 scrollbar-thin">
-                {CURSOR_PRESETS.map((cur) => {
-                  const isActive = project?.looks.cursorStyle === cur.id;
-                  return (
-                    <button
-                      key={cur.id}
-                      type="button"
-                      onClick={() => updateLooks({ cursorStyle: cur.id, showCursor: cur.id !== "hidden" })}
-                      className={`rounded-lg border p-2 text-left text-xs transition-all ${
-                        isActive
-                          ? "border-white bg-white/20 text-white font-bold ring-1 ring-white/50"
-                          : "border-ink-800 bg-ink-900 text-fg-muted hover:text-fg hover:border-neutral-600"
-                      }`}
-                      title={`${cur.name}: ${cur.description}`}
-                    >
-                      <span className="block truncate font-semibold text-[11px] text-fg">{cur.name}</span>
-                      <span className="block text-[9px] text-fg-faint capitalize">{cur.category}</span>
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-
-            {/* 5. Click Ripples */}
-            <div className="flex items-center justify-between rounded-xl border border-ink-800 bg-ink-900 p-3">
-              <div>
-                <span className="block text-xs font-semibold text-fg">Click Ripples</span>
-                <span className="block text-[10px] text-fg-faint">
-                  Expand glowing rings on click locations
+            {/* 4. Pointer Style & Click Ripples */}
+            <CollapsibleCard
+              id="cursor-style-ripples"
+              title="Cursor Pointer Style & Ripples"
+              icon={<Sparkles className="size-3.5" />}
+              badge={
+                <span className="rounded bg-neutral-800 px-1.5 py-0.5 text-[9px] font-mono text-neutral-400">
+                  {project?.looks.showClickRipples ? "Ripples On" : "24 Designs"}
                 </span>
+              }
+            >
+              <div className="space-y-2">
+                <div className="flex justify-between items-center">
+                  <label className="text-[11px] text-fg-muted block">Cursor Pointer Style</label>
+                  <span className="text-[10px] text-fg-faint font-mono">24 Designs</span>
+                </div>
+                <div className="grid grid-cols-2 gap-1.5 max-h-52 overflow-y-auto pr-1 scrollbar-thin">
+                  {CURSOR_PRESETS.map((cur) => {
+                    const isActive = project?.looks.cursorStyle === cur.id;
+                    return (
+                      <button
+                        key={cur.id}
+                        type="button"
+                        onClick={() => updateLooks({ cursorStyle: cur.id, showCursor: cur.id !== "hidden" })}
+                        className={`rounded-lg border p-2 text-left text-xs transition-all ${
+                          isActive
+                            ? "border-white bg-white/20 text-white font-bold ring-1 ring-white/50"
+                            : "border-ink-800 bg-ink-900 text-fg-muted hover:text-fg hover:border-neutral-600"
+                        }`}
+                        title={`${cur.name}: ${cur.description}`}
+                      >
+                        <span className="block truncate font-semibold text-[11px] text-fg">{cur.name}</span>
+                        <span className="block text-[9px] text-fg-faint capitalize">{cur.category}</span>
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
-              <input
-                type="checkbox"
-                checked={project?.looks.showClickRipples ?? true}
-                onChange={(e) => updateLooks({ showClickRipples: e.target.checked })}
-                className="size-4 accent-white rounded cursor-pointer"
-              />
-            </div>
+
+              {/* Click Ripples Toggle */}
+              <div className="flex items-center justify-between pt-2 border-t border-ink-800/80">
+                <div>
+                  <span className="block text-xs font-semibold text-fg">Click Ripples</span>
+                  <span className="block text-[10px] text-fg-faint">
+                    Expand glowing rings on click locations
+                  </span>
+                </div>
+                <input
+                  type="checkbox"
+                  checked={project?.looks.showClickRipples ?? true}
+                  onChange={(e) => updateLooks({ showClickRipples: e.target.checked })}
+                  className="size-4 accent-white rounded cursor-pointer"
+                />
+              </div>
+            </CollapsibleCard>
           </div>
         )}
       </div>

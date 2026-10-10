@@ -15,6 +15,7 @@ import {
   User,
   Pencil,
   Play,
+  GripVertical,
 } from "lucide-react";
 import {
   calculateActiveEffectsState,
@@ -380,8 +381,93 @@ export function VideoCanvas({ project, currentTimeMs: propTimeMs }: VideoCanvasP
   const strokePointsRef = useRef<Array<{ x: number; y: number }>>([]);
   const [cursorScreenPos, setCursorScreenPos] = useState<{ x: number; y: number } | null>(null);
 
+  // Floating canvas banner draggable state
+  const [bannerPos, setBannerPos] = useState<{ x: number; y: number } | null>(null);
+  const bannerRef = useRef<HTMLDivElement>(null);
+  const bannerDragStateRef = useRef<{
+    isDragging: boolean;
+    startX: number;
+    startY: number;
+    initLeft: number;
+    initTop: number;
+  }>({
+    isDragging: false,
+    startX: 0,
+    startY: 0,
+    initLeft: 0,
+    initTop: 0,
+  });
+
+  const handleBannerPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (e.button !== 0) return;
+    const bannerEl = bannerRef.current;
+    const viewportEl = viewportRef.current;
+    if (!bannerEl || !viewportEl) return;
+
+    e.preventDefault();
+    e.stopPropagation();
+
+    try {
+      bannerEl.setPointerCapture(e.pointerId);
+    } catch {}
+
+    const bannerRect = bannerEl.getBoundingClientRect();
+    const viewportRect = viewportEl.getBoundingClientRect();
+
+    const currentLeft = bannerRect.left - viewportRect.left;
+    const currentTop = bannerRect.top - viewportRect.top;
+
+    bannerDragStateRef.current = {
+      isDragging: true,
+      startX: e.clientX,
+      startY: e.clientY,
+      initLeft: currentLeft,
+      initTop: currentTop,
+    };
+  };
+
+  const handleBannerPointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (!bannerDragStateRef.current.isDragging) return;
+    e.preventDefault();
+    e.stopPropagation();
+
+    const bannerEl = bannerRef.current;
+    const viewportEl = viewportRef.current;
+    if (!bannerEl || !viewportEl) return;
+
+    const viewportRect = viewportEl.getBoundingClientRect();
+    const bannerRect = bannerEl.getBoundingClientRect();
+
+    const dx = e.clientX - bannerDragStateRef.current.startX;
+    const dy = e.clientY - bannerDragStateRef.current.startY;
+
+    const nextLeft = bannerDragStateRef.current.initLeft + dx;
+    const nextTop = bannerDragStateRef.current.initTop + dy;
+
+    const maxLeft = Math.max(8, viewportRect.width - bannerRect.width - 8);
+    const maxTop = Math.max(8, viewportRect.height - bannerRect.height - 8);
+
+    const clampedLeft = Math.max(8, Math.min(maxLeft, nextLeft));
+    const clampedTop = Math.max(8, Math.min(maxTop, nextTop));
+
+    setBannerPos({ x: clampedLeft, y: clampedTop });
+  };
+
+  const handleBannerPointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (!bannerDragStateRef.current.isDragging) return;
+    e.preventDefault();
+    e.stopPropagation();
+    bannerDragStateRef.current.isDragging = false;
+    try {
+      if (bannerRef.current?.hasPointerCapture(e.pointerId)) {
+        bannerRef.current.releasePointerCapture(e.pointerId);
+      }
+    } catch {}
+  };
+
   const handlePointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
     if (!isTraceShiftingMode) return;
+    if (bannerDragStateRef.current.isDragging) return;
     e.preventDefault();
     e.stopPropagation();
 
@@ -1461,9 +1547,27 @@ export function VideoCanvas({ project, currentTimeMs: propTimeMs }: VideoCanvasP
           </div>
         )}
 
-        {/* Trace Shifting Mode Active Canvas Banner */}
+        {/* Trace Shifting Mode Active Canvas Banner (Draggable) */}
         {isTraceShiftingMode ? (
-          <div className="absolute top-3 left-1/2 -translate-x-1/2 flex items-center gap-2 rounded-full bg-black/95 border border-white/40 px-3.5 py-1.5 backdrop-blur-md z-40 shadow-2xl select-none">
+          <div
+            ref={bannerRef}
+            onPointerDown={handleBannerPointerDown}
+            onPointerMove={handleBannerPointerMove}
+            onPointerUp={handleBannerPointerUp}
+            onPointerCancel={handleBannerPointerUp}
+            style={
+              bannerPos
+                ? { left: `${bannerPos.x}px`, top: `${bannerPos.y}px`, transform: "none" }
+                : { left: "50%", top: "12px", transform: "translateX(-50%)" }
+            }
+            className="absolute flex items-center gap-2 rounded-full bg-black/95 border border-white/40 px-3.5 py-1.5 backdrop-blur-md z-40 shadow-2xl select-none cursor-grab active:cursor-grabbing touch-none"
+          >
+            <div
+              className="flex items-center text-neutral-400 hover:text-white cursor-grab active:cursor-grabbing p-0.5 -ml-1"
+              title="Drag banner anywhere across preview screen"
+            >
+              <GripVertical className="size-3.5" />
+            </div>
             <span className="size-2 rounded-full bg-white animate-ping shrink-0" />
             <span className="text-xs font-semibold text-white">
               {isDrawingStroke
@@ -1475,12 +1579,13 @@ export function VideoCanvas({ project, currentTimeMs: propTimeMs }: VideoCanvasP
             <div className="h-3 w-px bg-white/20 mx-0.5" />
             <button
               type="button"
+              onPointerDown={(e) => e.stopPropagation()}
               onClick={(e) => {
                 e.stopPropagation();
                 followDrawnLine();
               }}
               disabled={traceWaypoints.length === 0}
-              className="rounded-full bg-white text-black font-bold px-3 py-1 text-[10px] hover:bg-neutral-200 transition-colors disabled:opacity-40 flex items-center gap-1 shadow-sm"
+              className="rounded-full bg-white text-black font-bold px-3 py-1 text-[10px] hover:bg-neutral-200 transition-colors disabled:opacity-40 flex items-center gap-1 shadow-sm cursor-pointer"
               title="Play camera zooming and following this drawn line"
             >
               <Play className="size-2.5 fill-black" />
@@ -1488,34 +1593,37 @@ export function VideoCanvas({ project, currentTimeMs: propTimeMs }: VideoCanvasP
             </button>
             <button
               type="button"
+              onPointerDown={(e) => e.stopPropagation()}
               onClick={(e) => {
                 e.stopPropagation();
                 applyTraceShifting();
               }}
               disabled={traceWaypoints.length === 0}
-              className="rounded-full border border-white/50 text-white font-medium px-2.5 py-1 text-[10px] hover:bg-white/10 transition-colors disabled:opacity-40"
+              className="rounded-full border border-white/50 text-white font-medium px-2.5 py-1 text-[10px] hover:bg-white/10 transition-colors disabled:opacity-40 cursor-pointer"
               title="Save camera path to timeline"
             >
               Apply
             </button>
             <button
               type="button"
+              onPointerDown={(e) => e.stopPropagation()}
               onClick={(e) => {
                 e.stopPropagation();
                 clearTraceWaypoints();
               }}
-              className="text-[10px] text-neutral-400 hover:text-white px-1.5 transition-colors"
+              className="text-[10px] text-neutral-400 hover:text-white px-1.5 transition-colors cursor-pointer"
               title="Clear all waypoints to draw again"
             >
               Clear
             </button>
             <button
               type="button"
+              onPointerDown={(e) => e.stopPropagation()}
               onClick={(e) => {
                 e.stopPropagation();
                 setTraceShiftingMode(false);
               }}
-              className="text-[10px] text-neutral-400 hover:text-white px-1"
+              className="text-[10px] text-neutral-400 hover:text-white px-1 cursor-pointer"
               title="Exit draw mode"
             >
               ✕
