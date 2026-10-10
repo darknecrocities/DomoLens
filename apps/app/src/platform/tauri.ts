@@ -187,6 +187,18 @@ export function createTauriPlatform(opts: {
       return lazyOff(listen<{ x: number; y: number; norm_x: number; norm_y: number }>("global-typing", (ev) => callback(ev.payload)));
     },
 
+    onMobileTouch(callback) {
+      return lazyOff(listen<{ x: number; y: number; event_type: string; timestamp_ms: number }>("mobile-touch", (ev) => callback(ev.payload)));
+    },
+
+    startDeviceTouchMonitor(serial, width, height) {
+      return invoke<void>("start_device_touch_monitor", { serial, width, height });
+    },
+
+    stopDeviceTouchMonitor() {
+      return invoke<void>("stop_device_touch_monitor");
+    },
+
     onProjectsChanged(callback) {
       return lazyOff(listen("projects://changed", () => callback()));
     },

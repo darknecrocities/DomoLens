@@ -22,11 +22,13 @@ import { platform } from "../platform";
 
 export type ExportResolution = "1080p" | "720p" | "4k" | "gif";
 export type ExportFormat = "mov" | "mp4" | "webm" | "gif";
+export type CanvasAspectRatio = "16:9" | "9:16" | "1:1" | "4:3" | "auto";
 
 export interface RenderOptions {
   project: ProjectData;
   resolution: ExportResolution;
   format?: ExportFormat;
+  canvasAspectRatio?: CanvasAspectRatio;
   onProgress?: (percent: number, statusText: string) => void;
   signal?: AbortSignal;
 }
@@ -1033,7 +1035,7 @@ export function renderActiveTextOverlays(
  * backdrops, padding, effects, audio SFX, and text overlays into an exported video.
  */
 export async function renderProjectVideo(options: RenderOptions): Promise<RenderResult> {
-  const { project, resolution, format, onProgress, signal } = options;
+  const { project, resolution, format, canvasAspectRatio, onProgress, signal } = options;
   const targetFormat: ExportFormat = format || (resolution === "gif" ? "gif" : "mp4");
   const looks = project.looks;
   const durationMs = Math.max(1000, project.summary.durationMs || 10000);
@@ -1041,7 +1043,22 @@ export async function renderProjectVideo(options: RenderOptions): Promise<Render
     project.summary.width && project.summary.height && project.summary.height > 0
       ? project.summary.width / project.summary.height
       : undefined;
-  const { width, height } = getOutputDimensions(resolution, looks.aspectRatio, nativeAspect);
+
+  // Determine effective canvas aspect ratio:
+  // Whole canvas 16:9 widescreen by default, so phone recordings render with the complete backdrop
+  // and centered device frame just like in the editor canvas, unless an explicit ratio is chosen.
+  const isMobileRecording = Boolean(
+    (project.summary.width && project.summary.height && project.summary.height > project.summary.width) ||
+    looks.aspectRatio === "9:16" ||
+    (project.summary.name && /(android|iphone|samsung|pixel|mobile|ios|phone)/i.test(project.summary.name)) ||
+    looks.windowFrame === "iphone" ||
+    looks.windowFrame === "android"
+  );
+  const effectiveCanvasAspect =
+    canvasAspectRatio ||
+    (isMobileRecording ? "16:9" : looks.aspectRatio || "16:9");
+
+  const { width, height } = getOutputDimensions(resolution, effectiveCanvasAspect, nativeAspect);
 
   onProgress?.(3, "Initializing render canvas...");
 
@@ -1179,6 +1196,20 @@ export async function renderProjectVideo(options: RenderOptions): Promise<Render
     audioCtx = null;
   }
 
+  // Decode original recorded audio from source video if available
+  let sourceAudioBuffer: AudioBuffer | null = null;
+  if (audioCtx && mediaSrc) {
+    try {
+      const resp = await fetch(mediaSrc);
+      if (resp.ok) {
+        const arrayBuffer = await resp.arrayBuffer();
+        sourceAudioBuffer = await audioCtx.decodeAudioData(arrayBuffer.slice(0));
+      }
+    } catch (audioDecodeErr) {
+      console.debug("Source video has no decodable audio track or audio unavailable:", audioDecodeErr);
+    }
+  }
+
   // Setup MediaStream & MediaRecorder
   const captureStreamFn =
     canvas.captureStream ||
@@ -1247,31 +1278,74 @@ export async function renderProjectVideo(options: RenderOptions): Promise<Render
   const paddingPx = (looks.padding || 0) * baseScale;
   const radiusPx = (looks.borderRadius || 0) * baseScale;
 
-  // Window rect inside canvas: adapt to video's native aspect ratio when available
+  const isPhoneOrTablet =
+    (looks.padding || 0) > 0 &&
+    (looks.windowFrame === "android" ||
+     looks.windowFrame === "iphone" ||
+     looks.windowFrame === "ipad");
+  const bezelPx = isPhoneOrTablet ? 13 * baseScale : 0;
+
+  // Window rect inside canvas: adapt to video's native or preset aspect ratio
   const availW = Math.max(100, width - 2 * paddingPx);
   const availH = Math.max(100, height - 2 * paddingPx);
-  let winW = availW;
-  let winH = availH;
-  let winX = paddingPx;
-  let winY = paddingPx;
+  const innerAvailW = Math.max(80, availW - 2 * bezelPx);
+  const innerAvailH = Math.max(80, availH - 2 * bezelPx);
+
+  let winW = innerAvailW;
+  let winH = innerAvailH;
+  let winX = paddingPx + bezelPx;
+  let winY = paddingPx + bezelPx;
 
   const rawWidth = video.videoWidth || project.summary.width || 0;
   const rawHeight = video.videoHeight || project.summary.height || 0;
-  if (rawWidth > 0 && rawHeight > 0 && (!looks.aspectRatio || looks.aspectRatio === "16:9")) {
-    const videoAspect = rawWidth / rawHeight;
-    const availAspect = availW / availH;
-    if (availAspect > videoAspect) {
-      winH = availH;
-      winW = Math.round(availH * videoAspect);
-      winX = Math.round((width - winW) / 2);
-      winY = paddingPx;
+
+  let targetAspect: number | null = null;
+  const isMobileContent =
+    isPhoneOrTablet ||
+    Boolean(
+      (rawHeight > 0 && rawWidth > 0 && rawHeight > rawWidth) ||
+      looks.aspectRatio === "9:16" ||
+      (project.summary.name && /(android|iphone|samsung|pixel|mobile|ios|phone)/i.test(project.summary.name)) ||
+      looks.windowFrame === "iphone" ||
+      looks.windowFrame === "android"
+    );
+
+  if (isMobileContent) {
+    if (rawWidth > 0 && rawHeight > 0) {
+      targetAspect = rawWidth / rawHeight;
     } else {
-      winW = availW;
-      winH = Math.round(availW / videoAspect);
-      winX = paddingPx;
+      targetAspect = 9 / 16;
+    }
+  } else if (looks.aspectRatio && looks.aspectRatio !== "auto") {
+    if (looks.aspectRatio === "9:16") targetAspect = 9 / 16;
+    else if (looks.aspectRatio === "16:9") targetAspect = 16 / 9;
+    else if (looks.aspectRatio === "1:1") targetAspect = 1;
+    else if (looks.aspectRatio === "4:3") targetAspect = 4 / 3;
+    else if (rawWidth > 0 && rawHeight > 0) targetAspect = rawWidth / rawHeight;
+  } else if (rawWidth > 0 && rawHeight > 0) {
+    targetAspect = rawWidth / rawHeight;
+  }
+
+  if (targetAspect) {
+    const availAspect = innerAvailW / innerAvailH;
+    if (availAspect > targetAspect) {
+      winH = innerAvailH;
+      winW = Math.round(innerAvailH * targetAspect);
+      winX = Math.round((width - winW) / 2);
+      winY = paddingPx + bezelPx + Math.round((innerAvailH - winH) / 2);
+    } else {
+      winW = innerAvailW;
+      winH = Math.round(innerAvailW / targetAspect);
+      winX = paddingPx + bezelPx + Math.round((innerAvailW - winW) / 2);
       winY = Math.round((height - winH) / 2);
     }
   }
+
+  const chassisX = winX - bezelPx;
+  const chassisY = winY - bezelPx;
+  const chassisW = winW + 2 * bezelPx;
+  const chassisH = winH + 2 * bezelPx;
+  const chassisRadius = radiusPx + bezelPx;
 
   recorder.start(250);
 
@@ -1313,33 +1387,12 @@ export async function renderProjectVideo(options: RenderOptions): Promise<Render
       if (cancelled) return;
 
       // 1. Draw Background
-      // Ensure frosted glass has an opaque obsidian substrate first to eliminate transparency leakage
       ctx.fillStyle = "#08090c";
       ctx.fillRect(0, 0, width, height);
       ctx.fillStyle = createUniversalBackgroundFill(ctx, width, height, looks.backgroundValue);
       ctx.fillRect(0, 0, width, height);
 
-      // 2. Draw Outer Window Drop Shadow
-      if (looks.shadow && looks.shadow !== "none") {
-        ctx.save();
-        ctx.shadowColor =
-          looks.shadow === "glow"
-            ? "rgba(255, 255, 255, 0.35)"
-            : "rgba(0, 0, 0, 0.75)";
-        ctx.shadowBlur = looks.shadow === "lift" ? 40 * baseScale : 24 * baseScale;
-        ctx.shadowOffsetY = looks.shadow === "lift" ? 20 * baseScale : 10 * baseScale;
-        ctx.fillStyle = "#000000";
-        if (typeof ctx.roundRect === "function") {
-          ctx.beginPath();
-          ctx.roundRect(winX, winY, winW, winH, radiusPx);
-          ctx.fill();
-        } else {
-          ctx.fillRect(winX, winY, winW, winH);
-        }
-        ctx.restore();
-      }
-
-      // 3. Compute camera state at timestamp tMs
+      // 2. Compute camera state at timestamp tMs
       const rawCamera = calculateCameraAtTime(
         tMs,
         project.zoomBlocks,
@@ -1365,6 +1418,119 @@ export async function renderProjectVideo(options: RenderOptions): Promise<Render
         project.keyframes,
         { x: camera.x, y: camera.y },
       );
+
+      // Frame & window dimensions for framing and sub-region clipping
+      const isWindowBar =
+        looks.windowFrame === "macos" ||
+        looks.windowFrame === "windows" ||
+        looks.windowFrame === "terminal" ||
+        looks.windowFrame === "chrome" ||
+        looks.windowFrame === "safari" ||
+        looks.windowFrame === "glass";
+      const isLaptop = looks.windowFrame === "laptop";
+      const isMacbook = looks.windowFrame === "macbook";
+      const isImac = looks.windowFrame === "imac";
+
+      const topBarH = isWindowBar
+        ? (looks.windowFrame === "chrome" ? 36 : 26) * baseScale
+        : isLaptop
+        ? 16 * baseScale
+        : 0;
+
+      const bottomBarH = isMacbook
+        ? 12 * baseScale
+        : isLaptop
+        ? 12 * baseScale
+        : isImac
+        ? 28 * baseScale
+        : 0;
+
+      const vidY = winY + topBarH;
+      const vidH = Math.max(10, winH - topBarH - bottomBarH);
+
+      const exportVideoAspect =
+        videoLoaded && video.videoWidth && video.videoHeight ? video.videoWidth / video.videoHeight : null;
+      const mapExportPt = (px: number, py: number) =>
+        mapVideoPointToViewport(px, py, exportVideoAspect, winW / vidH);
+      const camView = mapExportPt(camera.x, camera.y);
+
+      // Whole Canvas Camera Transform: zooms & shifts the entire framed video screen across the canvas
+      const stageCenterX = isPhoneOrTablet ? chassisX + chassisW / 2 : winX + winW / 2;
+      const stageCenterY = isPhoneOrTablet ? chassisY + chassisH / 2 : winY + winH / 2;
+
+      ctx.save();
+      ctx.translate(stageCenterX, stageCenterY);
+      ctx.scale(camera.scale, camera.scale);
+      ctx.translate((0.5 - camView.x) * winW, (0.5 - camView.y) * vidH);
+      ctx.translate(-stageCenterX, -stageCenterY);
+
+      // 3. Draw Outer Window / Chassis Drop Shadow
+      if (looks.shadow && looks.shadow !== "none") {
+        ctx.save();
+        ctx.shadowColor =
+          looks.shadow === "glow"
+            ? "rgba(255, 255, 255, 0.35)"
+            : "rgba(0, 0, 0, 0.85)";
+        ctx.shadowBlur = looks.shadow === "lift" ? 40 * baseScale : 24 * baseScale;
+        ctx.shadowOffsetY = looks.shadow === "lift" ? 20 * baseScale : 10 * baseScale;
+        ctx.fillStyle = "#000000";
+        const shX = isPhoneOrTablet ? chassisX : winX;
+        const shY = isPhoneOrTablet ? chassisY : winY;
+        const shW = isPhoneOrTablet ? chassisW : winW;
+        const shH = isPhoneOrTablet ? chassisH : winH;
+        const shR = isPhoneOrTablet ? chassisRadius : radiusPx;
+        if (typeof ctx.roundRect === "function") {
+          ctx.beginPath();
+          ctx.roundRect(shX, shY, shW, shH, shR);
+          ctx.fill();
+        } else {
+          ctx.fillRect(shX, shY, shW, shH);
+        }
+        ctx.restore();
+      }
+
+      // 3b. Draw Physical Phone Chassis Body with Real Hardware Edges
+      if (isPhoneOrTablet) {
+        ctx.save();
+        // Hardware Buttons on Outer Edges
+        ctx.fillStyle = "#4a4a52";
+        // Right side Power button
+        ctx.fillRect(chassisX + chassisW, chassisY + chassisH * 0.28, 3.5 * baseScale, 36 * baseScale);
+        // Left side Volume buttons
+        ctx.fillRect(chassisX - 3.5 * baseScale, chassisY + chassisH * 0.22, 3.5 * baseScale, 48 * baseScale);
+
+        // Chassis body
+        const chassisGrad = ctx.createLinearGradient(chassisX, chassisY, chassisX, chassisY + chassisH);
+        if (looks.windowFrame === "iphone") {
+          chassisGrad.addColorStop(0, "#2e2e34");
+          chassisGrad.addColorStop(0.5, "#1e1e22");
+          chassisGrad.addColorStop(1, "#121215");
+        } else {
+          chassisGrad.addColorStop(0, "#2a2a2e");
+          chassisGrad.addColorStop(0.5, "#1b1b1e");
+          chassisGrad.addColorStop(1, "#111113");
+        }
+        ctx.fillStyle = chassisGrad;
+        if (typeof ctx.roundRect === "function") {
+          ctx.beginPath();
+          ctx.roundRect(chassisX, chassisY, chassisW, chassisH, chassisRadius);
+          ctx.fill();
+          // Metallic outer rim edge
+          ctx.strokeStyle = "rgba(255, 255, 255, 0.32)";
+          ctx.lineWidth = 2 * baseScale;
+          ctx.stroke();
+        } else {
+          ctx.fillRect(chassisX, chassisY, chassisW, chassisH);
+        }
+
+        // Top Ear-Speaker Slit on chassis bezel
+        if (looks.windowFrame !== "ipad") {
+          const spW = 40 * baseScale;
+          ctx.fillStyle = "#08080a";
+          ctx.fillRect(chassisX + (chassisW - spW) / 2, chassisY + (bezelPx - 2 * baseScale) / 2, spW, 2.5 * baseScale);
+        }
+        ctx.restore();
+      }
 
       // 4. Clip inner video window & apply 3D tilt perspective
       ctx.save();
@@ -1393,17 +1559,7 @@ export async function renderProjectVideo(options: RenderOptions): Promise<Render
         ctx.clip();
       }
 
-      // 5. Apply camera transform (scale and target centering)
-      const hasHeader = Boolean(looks.windowFrame && looks.windowFrame !== "none");
-      const headerH = hasHeader ? (looks.windowFrame === "chrome" ? 36 : 26) * baseScale : 0;
-      const vidY = winY + headerH;
-      const vidH = Math.max(10, winH - headerH);
-
-      const exportVideoAspect =
-        videoLoaded && video.videoWidth && video.videoHeight ? video.videoWidth / video.videoHeight : null;
-      const mapExportPt = (px: number, py: number) =>
-        mapVideoPointToViewport(px, py, exportVideoAspect, winW / vidH);
-      const camView = mapExportPt(camera.x, camera.y);
+      // 5. Video content sub-region (1:1 uncropped inside device frame)
       ctx.save();
       // Clip to video content sub-region (below header) so video does not occlude or get covered by header
       ctx.beginPath();
@@ -1411,8 +1567,6 @@ export async function renderProjectVideo(options: RenderOptions): Promise<Render
       ctx.clip();
 
       ctx.translate(winX + winW / 2, vidY + vidH / 2);
-      ctx.scale(camera.scale, camera.scale);
-      ctx.translate((0.5 - camView.x) * winW, (0.5 - camView.y) * vidH);
 
       // 6. Draw video source or high-fidelity mockup
       if (videoLoaded && video.readyState >= 2) {
@@ -1604,7 +1758,357 @@ export async function renderProjectVideo(options: RenderOptions): Promise<Render
 
       ctx.restore(); // Restore window clipping
 
-      // 8b. Draw user's template photo placeholder image
+      // 9. Draw Window Mockup Shell Header & Device Framing Overlays
+      if (looks.windowFrame && looks.windowFrame !== "none") {
+        ctx.save();
+        const isWindowBar =
+          looks.windowFrame === "macos" ||
+          looks.windowFrame === "windows" ||
+          looks.windowFrame === "terminal" ||
+          looks.windowFrame === "chrome" ||
+          looks.windowFrame === "safari" ||
+          looks.windowFrame === "glass";
+
+        if (isWindowBar) {
+          const headerH = (looks.windowFrame === "chrome" ? 36 : 26) * baseScale;
+          ctx.fillStyle = looks.windowFrame === "windows"
+            ? "rgba(31, 31, 31, 0.95)"
+            : looks.windowFrame === "chrome"
+            ? "rgba(32, 33, 36, 0.95)"
+            : "rgba(0, 0, 0, 0.45)";
+          if (typeof ctx.roundRect === "function") {
+            ctx.beginPath();
+            ctx.roundRect(winX, winY, winW, headerH, [radiusPx, radiusPx, 0, 0]);
+            ctx.fill();
+          } else {
+            ctx.fillRect(winX, winY, winW, headerH);
+          }
+
+          // Traffic Light Dots for macOS, Safari, Terminal, Glass
+          if (looks.windowFrame === "macos" || looks.windowFrame === "safari" || looks.windowFrame === "terminal" || looks.windowFrame === "glass") {
+            const dotR = 4 * baseScale;
+            const startDotX = winX + 12 * baseScale;
+            const dotY = winY + 13 * baseScale;
+            const gap = 13 * baseScale;
+
+            // Red
+            ctx.fillStyle = looks.windowFrame === "glass" ? "rgba(255, 255, 255, 0.4)" : "#ff5f56";
+            ctx.beginPath();
+            ctx.arc(startDotX, dotY, dotR, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Yellow
+            ctx.fillStyle = looks.windowFrame === "glass" ? "rgba(255, 255, 255, 0.25)" : "#ffbd2e";
+            ctx.beginPath();
+            ctx.arc(startDotX + gap, dotY, dotR, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Green
+            ctx.fillStyle = looks.windowFrame === "glass" ? "rgba(255, 255, 255, 0.2)" : "#27c93f";
+            ctx.beginPath();
+            ctx.arc(startDotX + gap * 2, dotY, dotR, 0, Math.PI * 2);
+            ctx.fill();
+          }
+
+          // Windows Terminal (Clean tab + authentic Windows controls, no text)
+          if (looks.windowFrame === "windows") {
+            // Tab on left
+            const tabW = Math.min(80 * baseScale, winW * 0.25);
+            const tabH = 20 * baseScale;
+            const tabX = winX + 8 * baseScale;
+            const tabY = winY + headerH - tabH;
+            ctx.fillStyle = "rgba(45, 45, 45, 0.95)";
+            if (typeof ctx.roundRect === "function") {
+              ctx.beginPath();
+              ctx.roundRect(tabX, tabY, tabW, tabH, [3 * baseScale, 3 * baseScale, 0, 0]);
+              ctx.fill();
+            } else {
+              ctx.fillRect(tabX, tabY, tabW, tabH);
+            }
+            // Tab active blue indicator top border
+            ctx.fillStyle = "#38bdf8";
+            ctx.fillRect(tabX, tabY, tabW, 2 * baseScale);
+
+            // Window Controls on right: Minimize (—), Maximize (□), Close (✕)
+            const rightControlsX = winX + winW - 54 * baseScale;
+            const ctrlY = winY + headerH / 2;
+            ctx.fillStyle = "rgba(255, 255, 255, 0.75)";
+            // Minimize
+            ctx.fillRect(rightControlsX, ctrlY - 0.5 * baseScale, 8 * baseScale, 1.5 * baseScale);
+            // Maximize
+            ctx.lineWidth = 1.2 * baseScale;
+            ctx.strokeStyle = "rgba(255, 255, 255, 0.75)";
+            ctx.strokeRect(rightControlsX + 16 * baseScale, ctrlY - 4 * baseScale, 8 * baseScale, 8 * baseScale);
+            // Close
+            ctx.font = `${10 * baseScale}px sans-serif`;
+            ctx.textAlign = "center";
+            ctx.fillText("✕", rightControlsX + 42 * baseScale, ctrlY + 3.5 * baseScale);
+          }
+
+          // Safari Omnibar (Clean omnibar pill, no text)
+          if (looks.windowFrame === "safari") {
+            const omniW = Math.min(180 * baseScale, winW * 0.35);
+            const omniH = 14 * baseScale;
+            const omniX = winX + (winW - omniW) / 2;
+            const omniY = winY + (headerH - omniH) / 2;
+            ctx.fillStyle = "rgba(255, 255, 255, 0.12)";
+            if (typeof ctx.roundRect === "function") {
+              ctx.beginPath();
+              ctx.roundRect(omniX, omniY, omniW, omniH, 4 * baseScale);
+              ctx.fill();
+            } else {
+              ctx.fillRect(omniX, omniY, omniW, omniH);
+            }
+          }
+
+          // Chrome Browser (Tab bar + Omnibox, no text)
+          if (looks.windowFrame === "chrome") {
+            // Tab
+            const tabW = Math.min(90 * baseScale, winW * 0.22);
+            ctx.fillStyle = "rgba(41, 42, 45, 0.95)";
+            if (typeof ctx.roundRect === "function") {
+              ctx.beginPath();
+              ctx.roundRect(winX + 10 * baseScale, winY + 3 * baseScale, tabW, 16 * baseScale, [4 * baseScale, 4 * baseScale, 0, 0]);
+              ctx.fill();
+            } else {
+              ctx.fillRect(winX + 10 * baseScale, winY + 3 * baseScale, tabW, 16 * baseScale);
+            }
+
+            // Omnibox
+            const omniW = Math.min(220 * baseScale, winW * 0.45);
+            const omniH = 12 * baseScale;
+            const omniX = winX + (winW - omniW) / 2;
+            const omniY = winY + 20 * baseScale;
+            ctx.fillStyle = "rgba(255, 255, 255, 0.10)";
+            if (typeof ctx.roundRect === "function") {
+              ctx.beginPath();
+              ctx.roundRect(omniX, omniY, omniW, omniH, 6 * baseScale);
+              ctx.fill();
+            } else {
+              ctx.fillRect(omniX, omniY, omniW, omniH);
+            }
+          }
+        }
+
+        // Modern Laptop: Top Bezel with Webcam + Bottom Hinge Deck
+        if (looks.windowFrame === "laptop") {
+          const topH = 16 * baseScale;
+          const botH = 12 * baseScale;
+          // Top Bezel
+          ctx.fillStyle = "rgba(24, 24, 27, 0.98)";
+          ctx.fillRect(winX, winY, winW, topH);
+          // Centered Camera + dual mic pinholes
+          const camX = winX + winW / 2;
+          const camY = winY + topH / 2;
+          ctx.fillStyle = "#000000";
+          ctx.beginPath();
+          ctx.arc(camX, camY, 3 * baseScale, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.fillStyle = "rgba(59, 130, 246, 0.6)";
+          ctx.beginPath();
+          ctx.arc(camX, camY, 1 * baseScale, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.fillStyle = "#71717a";
+          ctx.beginPath();
+          ctx.arc(camX - 10 * baseScale, camY, 0.75 * baseScale, 0, Math.PI * 2);
+          ctx.arc(camX + 10 * baseScale, camY, 0.75 * baseScale, 0, Math.PI * 2);
+          ctx.fill();
+
+          // Bottom Hinge
+          ctx.fillStyle = "rgba(28, 28, 31, 0.98)";
+          ctx.fillRect(winX, winY + winH - botH, winW, botH);
+          ctx.strokeStyle = "rgba(255, 255, 255, 0.08)";
+          ctx.lineWidth = 1 * baseScale;
+          ctx.beginPath();
+          ctx.moveTo(winX + winW * 0.35, winY + winH - botH / 2);
+          ctx.lineTo(winX + winW * 0.65, winY + winH - botH / 2);
+          ctx.stroke();
+        }
+
+        // MacBook Pro: Top Camera Notch + Bottom Unibody Lip
+        if (looks.windowFrame === "macbook") {
+          const notchW = Math.min(130 * baseScale, winW * 0.28);
+          const notchH = 14 * baseScale;
+          const notchX = winX + (winW - notchW) / 2;
+          const notchY = winY;
+          ctx.fillStyle = "#141416";
+          if (typeof ctx.roundRect === "function") {
+            ctx.beginPath();
+            ctx.roundRect(notchX, notchY, notchW, notchH, [0, 0, 5 * baseScale, 5 * baseScale]);
+            ctx.fill();
+          } else {
+            ctx.fillRect(notchX, notchY, notchW, notchH);
+          }
+          // Camera lens & green indicator LED
+          const camX = winX + winW / 2 - 4 * baseScale;
+          const camY = winY + notchH / 2;
+          ctx.fillStyle = "#000000";
+          ctx.beginPath();
+          ctx.arc(camX, camY, 2.5 * baseScale, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.fillStyle = "#22c55e";
+          ctx.beginPath();
+          ctx.arc(camX + 10 * baseScale, camY, 1 * baseScale, 0, Math.PI * 2);
+          ctx.fill();
+
+          // Bottom aluminum lip with thumb groove
+          const lipH = 12 * baseScale;
+          const lipY = winY + winH - lipH;
+          ctx.fillStyle = "#1a1a1c";
+          ctx.fillRect(winX, lipY, winW, lipH);
+          ctx.fillStyle = "#0d0d0f";
+          const grooveW = Math.min(50 * baseScale, winW * 0.15);
+          ctx.fillRect(winX + (winW - grooveW) / 2, lipY, grooveW, 2.5 * baseScale);
+        }
+
+        // iPhone Pro: Dynamic Island + Speaker Slit + Home Indicator Bar
+        if (looks.windowFrame === "iphone") {
+          // Dynamic Island
+          const diW = Math.min(100 * baseScale, winW * 0.32);
+          const diH = 20 * baseScale;
+          const diX = winX + (winW - diW) / 2;
+          const diY = winY + 10 * baseScale;
+          ctx.fillStyle = "#000000";
+          if (typeof ctx.roundRect === "function") {
+            ctx.beginPath();
+            ctx.roundRect(diX, diY, diW, diH, 10 * baseScale);
+            ctx.fill();
+            ctx.strokeStyle = "rgba(255, 255, 255, 0.15)";
+            ctx.lineWidth = 1 * baseScale;
+            ctx.stroke();
+          } else {
+            ctx.fillRect(diX, diY, diW, diH);
+          }
+          // Dynamic Island internal lens dot
+          ctx.fillStyle = "rgba(30, 41, 59, 0.8)";
+          ctx.beginPath();
+          ctx.arc(diX + diW - 12 * baseScale, diY + diH / 2, 3 * baseScale, 0, Math.PI * 2);
+          ctx.fill();
+
+          // Top speaker slit
+          ctx.fillStyle = "#262626";
+          const spW = Math.min(48 * baseScale, winW * 0.16);
+          ctx.fillRect(winX + (winW - spW) / 2, winY + 3 * baseScale, spW, 2 * baseScale);
+
+          // Bottom iOS Home Indicator Bar
+          const barW = Math.min(110 * baseScale, winW * 0.38);
+          const barH = 4 * baseScale;
+          const barX = winX + (winW - barW) / 2;
+          const barY = winY + winH - 12 * baseScale;
+          ctx.fillStyle = "rgba(255, 255, 255, 0.75)";
+          if (typeof ctx.roundRect === "function") {
+            ctx.beginPath();
+            ctx.roundRect(barX, barY, barW, barH, 2 * baseScale);
+            ctx.fill();
+          } else {
+            ctx.fillRect(barX, barY, barW, barH);
+          }
+        }
+
+        // Android Flagship: Centered Punch-Hole Camera + Bottom Gesture Bar
+        if (looks.windowFrame === "android") {
+          const camX = winX + winW / 2;
+          const camY = winY + 12 * baseScale;
+          const camR = 5 * baseScale;
+          ctx.fillStyle = "#000000";
+          ctx.beginPath();
+          ctx.arc(camX, camY, camR, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.strokeStyle = "rgba(255, 255, 255, 0.15)";
+          ctx.lineWidth = 1 * baseScale;
+          ctx.stroke();
+          // Inner lens dot
+          ctx.fillStyle = "#27272a";
+          ctx.beginPath();
+          ctx.arc(camX, camY, 2 * baseScale, 0, Math.PI * 2);
+          ctx.fill();
+
+          // Bottom Android Gesture Bar
+          const barW = Math.min(80 * baseScale, winW * 0.28);
+          const barH = 3 * baseScale;
+          const barX = winX + (winW - barW) / 2;
+          const barY = winY + winH - 9 * baseScale;
+          ctx.fillStyle = "rgba(255, 255, 255, 0.5)";
+          if (typeof ctx.roundRect === "function") {
+            ctx.beginPath();
+            ctx.roundRect(barX, barY, barW, barH, 1.5 * baseScale);
+            ctx.fill();
+          } else {
+            ctx.fillRect(barX, barY, barW, barH);
+          }
+        }
+
+        // iPad Tablet: Centered Front Camera + Home Indicator Bar
+        if (looks.windowFrame === "ipad") {
+          const camX = winX + winW / 2;
+          const camY = winY + 9 * baseScale;
+          ctx.fillStyle = "#000000";
+          ctx.beginPath();
+          ctx.arc(camX, camY, 3.5 * baseScale, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.strokeStyle = "rgba(255, 255, 255, 0.15)";
+          ctx.lineWidth = 1 * baseScale;
+          ctx.stroke();
+
+          // Bottom Home Indicator Bar
+          const barW = Math.min(130 * baseScale, winW * 0.32);
+          const barH = 4 * baseScale;
+          const barX = winX + (winW - barW) / 2;
+          const barY = winY + winH - 12 * baseScale;
+          ctx.fillStyle = "rgba(255, 255, 255, 0.65)";
+          if (typeof ctx.roundRect === "function") {
+            ctx.beginPath();
+            ctx.roundRect(barX, barY, barW, barH, 2 * baseScale);
+            ctx.fill();
+          } else {
+            ctx.fillRect(barX, barY, barW, barH);
+          }
+        }
+
+        // iMac: Top Camera Dot + Bottom Aluminum Chin with Stand Neck
+        if (looks.windowFrame === "imac") {
+          const camX = winX + winW / 2;
+          const camY = winY + 6 * baseScale;
+          ctx.fillStyle = "#000000";
+          ctx.beginPath();
+          ctx.arc(camX, camY, 2.5 * baseScale, 0, Math.PI * 2);
+          ctx.fill();
+
+          // Bottom Aluminum Chin
+          const chinH = 28 * baseScale;
+          const chinY = winY + winH - chinH;
+          ctx.fillStyle = "#222225";
+          ctx.fillRect(winX, chinY, winW, chinH);
+          ctx.strokeStyle = "rgba(255, 255, 255, 0.08)";
+          ctx.lineWidth = 1 * baseScale;
+          ctx.beginPath();
+          ctx.moveTo(winX, chinY);
+          ctx.lineTo(winX + winW, chinY);
+          ctx.stroke();
+
+          // Stand Neck
+          const standW = Math.min(70 * baseScale, winW * 0.2);
+          ctx.fillStyle = "#2c2c2f";
+          ctx.fillRect(winX + (winW - standW) / 2, winY + winH - 6 * baseScale, standW, 6 * baseScale);
+        }
+
+        // Sleek perimeter border stroke for device frames
+        if (looks.windowFrame === "iphone" || looks.windowFrame === "android" || looks.windowFrame === "ipad") {
+          ctx.strokeStyle = "rgba(255, 255, 255, 0.12)";
+          ctx.lineWidth = 1.5 * baseScale;
+          if (typeof ctx.roundRect === "function") {
+            ctx.beginPath();
+            ctx.roundRect(winX, winY, winW, winH, radiusPx);
+            ctx.stroke();
+          }
+        }
+
+        ctx.restore();
+      }
+
+      ctx.restore(); // Restore Whole Canvas Camera Transform
+
+      // 10. Draw user's template photo placeholder image (pinned to canvas)
       if (photoImg && looks.photoOverlay) {
         const po = looks.photoOverlay;
         const pSize = po.size * width;
@@ -1642,135 +2146,6 @@ export async function renderProjectVideo(options: RenderOptions): Promise<Render
         ctx.strokeStyle = "rgba(255,255,255,0.9)";
         ctx.lineWidth = 3 * baseScale;
         ctx.stroke();
-        ctx.restore();
-      }
-
-      // 9. Draw Window Mockup Shell Header
-      if (looks.windowFrame && looks.windowFrame !== "none") {
-        ctx.save();
-        const headerH = (looks.windowFrame === "chrome" ? 36 : 26) * baseScale;
-        ctx.fillStyle = looks.windowFrame === "windows"
-          ? "rgba(31, 31, 31, 0.95)"
-          : looks.windowFrame === "chrome"
-          ? "rgba(32, 33, 36, 0.95)"
-          : "rgba(0, 0, 0, 0.45)";
-        if (typeof ctx.roundRect === "function") {
-          ctx.beginPath();
-          ctx.roundRect(winX, winY, winW, headerH, [radiusPx, radiusPx, 0, 0]);
-          ctx.fill();
-        } else {
-          ctx.fillRect(winX, winY, winW, headerH);
-        }
-
-        // Traffic Light Dots for macOS, Safari, Terminal, Glass
-        if (looks.windowFrame === "macos" || looks.windowFrame === "safari" || looks.windowFrame === "terminal" || looks.windowFrame === "glass") {
-          const dotR = 4 * baseScale;
-          const startDotX = winX + 12 * baseScale;
-          const dotY = winY + 13 * baseScale;
-          const gap = 13 * baseScale;
-
-          // Red
-          ctx.fillStyle = looks.windowFrame === "glass" ? "rgba(255, 255, 255, 0.4)" : "#ff5f56";
-          ctx.beginPath();
-          ctx.arc(startDotX, dotY, dotR, 0, Math.PI * 2);
-          ctx.fill();
-
-          // Yellow
-          ctx.fillStyle = looks.windowFrame === "glass" ? "rgba(255, 255, 255, 0.25)" : "#ffbd2e";
-          ctx.beginPath();
-          ctx.arc(startDotX + gap, dotY, dotR, 0, Math.PI * 2);
-          ctx.fill();
-
-          // Green
-          ctx.fillStyle = looks.windowFrame === "glass" ? "rgba(255, 255, 255, 0.2)" : "#27c93f";
-          ctx.beginPath();
-          ctx.arc(startDotX + gap * 2, dotY, dotR, 0, Math.PI * 2);
-          ctx.fill();
-        }
-
-        // macOS Window Title - Clean header with no text
-
-        // Windows Terminal (Clean tab + authentic Windows controls, no text)
-        if (looks.windowFrame === "windows") {
-          // Tab on left
-          const tabW = Math.min(80 * baseScale, winW * 0.25);
-          const tabH = 20 * baseScale;
-          const tabX = winX + 8 * baseScale;
-          const tabY = winY + headerH - tabH;
-          ctx.fillStyle = "rgba(45, 45, 45, 0.95)";
-          if (typeof ctx.roundRect === "function") {
-            ctx.beginPath();
-            ctx.roundRect(tabX, tabY, tabW, tabH, [3 * baseScale, 3 * baseScale, 0, 0]);
-            ctx.fill();
-          } else {
-            ctx.fillRect(tabX, tabY, tabW, tabH);
-          }
-          // Tab active blue indicator top border
-          ctx.fillStyle = "#38bdf8";
-          ctx.fillRect(tabX, tabY, tabW, 2 * baseScale);
-
-          // Window Controls on right: Minimize (—), Maximize (□), Close (✕)
-          const rightControlsX = winX + winW - 54 * baseScale;
-          const ctrlY = winY + headerH / 2;
-          ctx.fillStyle = "rgba(255, 255, 255, 0.75)";
-          // Minimize
-          ctx.fillRect(rightControlsX, ctrlY - 0.5 * baseScale, 8 * baseScale, 1.5 * baseScale);
-          // Maximize
-          ctx.lineWidth = 1.2 * baseScale;
-          ctx.strokeStyle = "rgba(255, 255, 255, 0.75)";
-          ctx.strokeRect(rightControlsX + 16 * baseScale, ctrlY - 4 * baseScale, 8 * baseScale, 8 * baseScale);
-          // Close
-          ctx.font = `${10 * baseScale}px sans-serif`;
-          ctx.textAlign = "center";
-          ctx.fillText("✕", rightControlsX + 42 * baseScale, ctrlY + 3.5 * baseScale);
-        }
-
-        // Safari Omnibar (Clean omnibar pill, no text)
-        if (looks.windowFrame === "safari") {
-          const omniW = Math.min(180 * baseScale, winW * 0.35);
-          const omniH = 14 * baseScale;
-          const omniX = winX + (winW - omniW) / 2;
-          const omniY = winY + (headerH - omniH) / 2;
-          ctx.fillStyle = "rgba(255, 255, 255, 0.12)";
-          if (typeof ctx.roundRect === "function") {
-            ctx.beginPath();
-            ctx.roundRect(omniX, omniY, omniW, omniH, 4 * baseScale);
-            ctx.fill();
-          } else {
-            ctx.fillRect(omniX, omniY, omniW, omniH);
-          }
-        }
-
-        // Terminal Title - Clean header with traffic lights, no text
-
-        // Chrome Browser (Tab bar + Omnibox, no text)
-        if (looks.windowFrame === "chrome") {
-          // Tab
-          const tabW = Math.min(90 * baseScale, winW * 0.22);
-          ctx.fillStyle = "rgba(41, 42, 45, 0.95)";
-          if (typeof ctx.roundRect === "function") {
-            ctx.beginPath();
-            ctx.roundRect(winX + 10 * baseScale, winY + 3 * baseScale, tabW, 16 * baseScale, [4 * baseScale, 4 * baseScale, 0, 0]);
-            ctx.fill();
-          } else {
-            ctx.fillRect(winX + 10 * baseScale, winY + 3 * baseScale, tabW, 16 * baseScale);
-          }
-
-          // Omnibox
-          const omniW = Math.min(220 * baseScale, winW * 0.45);
-          const omniH = 12 * baseScale;
-          const omniX = winX + (winW - omniW) / 2;
-          const omniY = winY + 20 * baseScale;
-          ctx.fillStyle = "rgba(255, 255, 255, 0.10)";
-          if (typeof ctx.roundRect === "function") {
-            ctx.beginPath();
-            ctx.roundRect(omniX, omniY, omniW, omniH, 6 * baseScale);
-            ctx.fill();
-          } else {
-            ctx.fillRect(omniX, omniY, omniW, omniH);
-          }
-        }
-
         ctx.restore();
       }
 
@@ -1855,10 +2230,19 @@ export async function renderProjectVideo(options: RenderOptions): Promise<Render
       }
     };
 
+    let sourceAudioNode: AudioBufferSourceNode | null = null;
+    const primaryClip = project.clips?.[0];
+    const isClipMuted = primaryClip?.muted ?? false;
+    const clipVolume = primaryClip?.volume ?? 1;
+
     const finishRender = () => {
       onProgress?.(99, "Packaging download...");
       try {
         video.pause();
+        if (sourceAudioNode) {
+          try { sourceAudioNode.stop(); } catch {}
+          sourceAudioNode = null;
+        }
 
         recorder.onstop = async () => {
           if (audioCtx) void audioCtx.close();
@@ -1894,12 +2278,32 @@ export async function renderProjectVideo(options: RenderOptions): Promise<Render
           recorder.onstop?.(new Event("stop"));
         }
       } catch (err) {
+        if (sourceAudioNode) {
+          try { sourceAudioNode.stop(); } catch {}
+          sourceAudioNode = null;
+        }
         reject(err);
       }
     };
 
     // Begin render loop at time 0 with audio processing window
     let lastProcessedAudioMs = -1;
+
+    // Start playback of original recorded video audio into render mix if available and not muted
+    if (audioCtx && audioDest && sourceAudioBuffer && !isClipMuted && clipVolume > 0) {
+      try {
+        sourceAudioNode = audioCtx.createBufferSource();
+        sourceAudioNode.buffer = sourceAudioBuffer;
+        const gainNode = audioCtx.createGain();
+        gainNode.gain.value = Math.max(0, Math.min(1, clipVolume));
+        sourceAudioNode.connect(gainNode);
+        gainNode.connect(audioDest);
+        sourceAudioNode.start(0);
+      } catch (audioStartErr) {
+        console.warn("Failed starting source audio playback node:", audioStartErr);
+      }
+    }
+
     renderFrame(0);
   });
 }

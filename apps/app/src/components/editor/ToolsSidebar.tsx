@@ -1,11 +1,11 @@
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import {
   Sparkles,
   Type,
   Paintbrush,
   MousePointer,
-  Download,
   ChevronRight,
+  ChevronDown,
   ChevronLeft,
   Plus,
   Trash2,
@@ -13,6 +13,7 @@ import {
   Volume2,
   Diamond,
   Play,
+  Pause,
   Wand2,
   Zap,
   Circle,
@@ -26,11 +27,18 @@ import {
   Crown,
   Heart,
   User,
+  Music,
+  VolumeX,
+  Upload,
+  Pencil,
 } from "lucide-react";
 import {
   formatDuration,
   BACKGROUND_CATEGORIES,
   BACKGROUND_PRESETS,
+  BACKGROUND_MUSIC_PRESETS,
+  volumeToDb,
+  dbToVolume,
   CURSOR_PRESETS,
   DEFAULT_CURSOR_AVATAR,
   type CursorAvatar,
@@ -41,6 +49,85 @@ import { useEditor, type ToolTab } from "../../store/editor";
 import { useTutorial } from "../../store/tutorial";
 import { TiltController } from "./TiltController";
 import { ResizeHandle } from "./ResizeHandle";
+
+interface CollapsibleCardProps {
+  id: string;
+  title: string;
+  icon?: React.ReactNode;
+  badge?: React.ReactNode;
+  actions?: React.ReactNode;
+  defaultOpen?: boolean;
+  children: React.ReactNode;
+  className?: string;
+}
+
+export function CollapsibleCard({
+  id,
+  title,
+  icon,
+  badge,
+  actions,
+  defaultOpen = true,
+  children,
+  className = "",
+}: CollapsibleCardProps) {
+  const [isOpen, setIsOpen] = useState(() => {
+    try {
+      const saved = window.localStorage.getItem(`domolens:card:${id}`);
+      if (saved !== null) return saved === "true";
+    } catch {}
+    return defaultOpen;
+  });
+
+  const toggle = () => {
+    setIsOpen((prev) => {
+      const next = !prev;
+      try {
+        window.localStorage.setItem(`domolens:card:${id}`, String(next));
+      } catch {}
+      return next;
+    });
+  };
+
+  return (
+    <div
+      className={`rounded-xl border border-neutral-800 bg-neutral-900/90 shadow-sm transition-all overflow-hidden ${className}`}
+    >
+      {/* Sleek Minimal Header */}
+      <div
+        onClick={toggle}
+        className="flex items-center justify-between px-3 py-2 cursor-pointer select-none hover:bg-neutral-800/50 transition-colors"
+      >
+        <div className="flex items-center gap-2 min-w-0">
+          <span className="text-neutral-400 hover:text-white transition-colors p-0.5">
+            {isOpen ? (
+              <ChevronDown className="size-3.5 text-neutral-400" />
+            ) : (
+              <ChevronRight className="size-3.5 text-neutral-400" />
+            )}
+          </span>
+          {icon && <span className="text-white shrink-0">{icon}</span>}
+          <span className="font-semibold text-white text-xs truncate">{title}</span>
+        </div>
+
+        <div
+          className="flex items-center gap-1.5 shrink-0"
+          onClick={(e) => e.stopPropagation()}
+        >
+          {badge}
+          {actions}
+        </div>
+      </div>
+
+      {/* Expandable Body */}
+      {isOpen && (
+        <div className="p-3 pt-2 border-t border-neutral-800/60 space-y-3">
+          {children}
+        </div>
+      )}
+    </div>
+  );
+}
 
 function AddKeyframeButton({ zoomScale }: { zoomScale: number }) {
   const currentTimeMs = useEditor((s) => s.currentTimeMs);
@@ -94,14 +181,101 @@ export function ToolsSidebar() {
   const selectEffect = useEditor((s) => s.selectEffect);
   const selectText = useEditor((s) => s.selectText);
   const selectBlock = useEditor((s) => s.selectBlock);
-  const setExportModalOpen = useEditor((s) => s.setExportModalOpen);
   const toolsSidebarWidth = useEditor((s) => s.toolsSidebarWidth);
   const resetLayoutDimensions = useEditor((s) => s.resetLayoutDimensions);
 
+  const selectedAudioId = useEditor((s) => s.selectedAudioId);
+  const selectAudio = useEditor((s) => s.selectAudio);
+  const updateAudioTrack = useEditor((s) => s.updateAudioTrack);
+  const deleteAudioTrack = useEditor((s) => s.deleteAudioTrack);
+  const addMusicTrackAtCurrentTime = useEditor((s) => s.addMusicTrackAtCurrentTime);
+  const addAudioTrack = useEditor((s) => s.addAudioTrack);
+  const applyAudioVolumeToAll = useEditor((s) => s.applyAudioVolumeToAll);
+
+  const isTraceShiftingMode = useEditor((s) => s.isTraceShiftingMode);
+  const setTraceShiftingMode = useEditor((s) => s.setTraceShiftingMode);
+  const traceWaypoints = useEditor((s) => s.traceWaypoints);
+  const addTraceWaypoint = useEditor((s) => s.addTraceWaypoint);
+  const clearTraceWaypoints = useEditor((s) => s.clearTraceWaypoints);
+  const applyTraceShifting = useEditor((s) => s.applyTraceShifting);
+  const followDrawnLine = useEditor((s) => s.followDrawnLine);
+
   const [holdDurationSec, setHoldDurationSec] = useState(1.0);
-  const [shiftDurationSec, setShiftDurationSec] = useState(0.75);
+  const [shiftDurationSec, setShiftDurationSec] = useState(1.2);
   const [zoomScale, setZoomScale] = useState(1.85);
+  const [traceDurationSec, setTraceDurationSec] = useState(4.8);
+  const [traceScale, setTraceScale] = useState(1.85);
   const [selectedBgCategory, setSelectedBgCategory] = useState<string>("all");
+
+  // Custom music audition preview state
+  const [previewingAudioId, setPreviewingAudioId] = useState<string | null>(null);
+  const audioPreviewRef = useRef<HTMLAudioElement | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (audioPreviewRef.current) {
+        audioPreviewRef.current.pause();
+        audioPreviewRef.current = null;
+      }
+    };
+  }, []);
+
+  // Self-heal incompatible desktop frames on mobile recordings (e.g. Samsung A55 with iMac frame)
+  useEffect(() => {
+    if (!project) return;
+    const isMobileProj =
+      (project.summary.width && project.summary.height && project.summary.width < project.summary.height) ||
+      project.looks.aspectRatio === "9:16" ||
+      (project.summary.name && /(android|iphone|samsung|pixel|mobile|ios|phone)/i.test(project.summary.name));
+    const isIos = /(iphone|ios)/i.test(project.summary.name || "");
+    const curFrame = project.looks.windowFrame;
+    const isDesktopFrame =
+      curFrame === "macbook" ||
+      curFrame === "laptop" ||
+      curFrame === "imac" ||
+      curFrame === "macos" ||
+      curFrame === "windows" ||
+      curFrame === "terminal" ||
+      curFrame === "chrome" ||
+      curFrame === "safari" ||
+      curFrame === "glass";
+
+    if (isMobileProj && isDesktopFrame) {
+      updateLooks({
+        windowFrame: isIos ? "iphone" : "android",
+        borderRadius: isIos ? 36 : 28,
+        padding: project.looks.padding === 0 ? 0 : 24,
+        shadow: project.looks.shadow === "none" ? "none" : "lift",
+      });
+    }
+  }, [project?.summary.id, project?.summary.width, project?.summary.height, project?.looks.aspectRatio, project?.looks.windowFrame, updateLooks]);
+
+  const toggleAudioPreview = (track: { id: string; url: string; volume?: number; muted?: boolean }) => {
+    if (previewingAudioId === track.id) {
+      if (audioPreviewRef.current) {
+        audioPreviewRef.current.pause();
+        audioPreviewRef.current = null;
+      }
+      setPreviewingAudioId(null);
+    } else {
+      if (audioPreviewRef.current) {
+        audioPreviewRef.current.pause();
+      }
+      try {
+        const audio = new Audio(track.url);
+        audio.volume = track.muted ? 0 : Math.max(0, Math.min(1, track.volume ?? 0.5));
+        audio.play().catch(() => {});
+        audio.onended = () => {
+          setPreviewingAudioId(null);
+          audioPreviewRef.current = null;
+        };
+        audioPreviewRef.current = audio;
+        setPreviewingAudioId(track.id);
+      } catch {
+        setPreviewingAudioId(null);
+      }
+    }
+  };
 
   const [bottomPanelHeight, setBottomPanelHeight] = useState<number>(() => {
     if (typeof window === "undefined" || !window.localStorage) return 180;
@@ -148,13 +322,13 @@ export function ToolsSidebar() {
     { id: "audio", label: "Audio", icon: <Volume2 className="size-3.5" /> },
     { id: "looks", label: "Canvas", icon: <Paintbrush className="size-3.5" /> },
     { id: "cursor", label: "Cursor", icon: <MousePointer className="size-3.5" /> },
-    { id: "export", label: "Export", icon: <Download className="size-3.5" /> },
   ];
 
   const selectedBlock = project?.zoomBlocks.find((b) => b.id === selectedBlockId);
   const selectedKeyframe = project?.keyframes?.find((kf) => kf.id === selectedKeyframeId);
   const selectedEffect = project?.effects?.find((e) => e.id === selectedEffectId);
   const selectedText = project?.textOverlays?.find((t) => t.id === selectedTextId);
+  const selectedAudio = project?.audioTracks?.find((a) => a.id === selectedAudioId);
 
   return (
     <aside
@@ -216,13 +390,19 @@ export function ToolsSidebar() {
         {activeToolTab === "zoom" && (
           <div className="space-y-4">
             {/* Auto-Plot Master Button */}
-            <div className="rounded-xl border border-neutral-700 bg-neutral-900 p-3 shadow-sm">
-              <div className="flex items-center justify-between mb-1.5">
-                <div className="flex items-center gap-2">
-                  <Sparkles className="size-4 text-white" />
-                  <span className="font-semibold text-white text-xs">Auto-Zoom Generator</span>
-                </div>
-                {(project?.zoomBlocks?.length ?? 0) > 0 && (
+            <CollapsibleCard
+              id="zoom-generator"
+              title="Auto-Zoom Generator"
+              icon={<Sparkles className="size-3.5 text-white" />}
+              badge={
+                (project?.zoomBlocks?.length ?? 0) > 0 ? (
+                  <span className="rounded bg-neutral-800 border border-neutral-700 px-1.5 py-0.5 text-[9px] font-mono text-neutral-300">
+                    {project?.zoomBlocks.length} Active
+                  </span>
+                ) : undefined
+              }
+              actions={
+                (project?.zoomBlocks?.length ?? 0) > 0 ? (
                   <button
                     type="button"
                     onClick={clearZoomBlocks}
@@ -231,9 +411,10 @@ export function ToolsSidebar() {
                   >
                     Clear Zooms
                   </button>
-                )}
-              </div>
-              <p className="text-[11px] text-fg-muted leading-relaxed mb-3">
+                ) : undefined
+              }
+            >
+              <p className="text-[11px] text-fg-muted leading-relaxed">
                 Starts smooth zoom 0.5s before click or typing, auto-tracks the cursor, and shifts back to full-screen frame after 1.2s of inactivity.
               </p>
 
@@ -267,18 +448,55 @@ export function ToolsSidebar() {
                 />
 
                 <div className="flex justify-between text-[11px] pt-1">
-                  <span className="text-fg-muted">Camera Shifting Speed:</span>
-                  <span className="font-mono text-white font-semibold">{shiftDurationSec.toFixed(2)}s ({Math.round(shiftDurationSec * 1000)}ms)</span>
+                  <span className="text-fg-muted">Camera Shifting & Zoom Speed:</span>
+                  <span className="font-mono text-white font-semibold">{shiftDurationSec.toFixed(1)}s ({Math.round(shiftDurationSec * 1000)}ms)</span>
                 </div>
                 <input
                   type="range"
-                  min="0.3"
-                  max="1.5"
-                  step="0.05"
+                  min="0.4"
+                  max="3.0"
+                  step="0.1"
                   value={shiftDurationSec}
                   onChange={(e) => setShiftDurationSec(parseFloat(e.target.value))}
                   className="w-full accent-white cursor-pointer h-1.5 bg-ink-800 rounded-lg"
                 />
+
+                {/* Shifting speed presets */}
+                <div className="grid grid-cols-3 gap-1 pt-0.5">
+                  {[
+                    { label: "Slow & Cinematic", sec: 1.5 },
+                    { label: "Smooth", sec: 1.1 },
+                    { label: "Snappy", sec: 0.6 },
+                  ].map((p) => (
+                    <button
+                      key={p.label}
+                      type="button"
+                      onClick={() => setShiftDurationSec(p.sec)}
+                      className={`rounded py-1 text-[9px] font-semibold border transition-colors ${
+                        Math.abs(shiftDurationSec - p.sec) < 0.05
+                          ? "bg-white text-black border-white font-bold"
+                          : "bg-neutral-800 text-neutral-400 border-neutral-700 hover:text-white"
+                      }`}
+                    >
+                      {p.label} ({p.sec}s)
+                    </button>
+                  ))}
+                </div>
+
+                {(project?.zoomBlocks?.length ?? 0) > 0 && (
+                  <button
+                    type="button"
+                    onClick={() =>
+                      applyZoomBlockSettingsToAll({
+                        shiftDurationMs: Math.round(shiftDurationSec * 1000),
+                      })
+                    }
+                    className="w-full rounded border border-neutral-700 bg-neutral-800/80 hover:bg-neutral-700 py-1 text-[10px] font-medium text-neutral-200 hover:text-white transition-colors text-center mt-0.5"
+                    title="Apply this camera shifting speed to all existing zoom blocks on the timeline"
+                  >
+                    Apply {shiftDurationSec.toFixed(1)}s Speed to All Zooms
+                  </button>
+                )}
 
                 <div className="flex items-center justify-between rounded-lg border border-ink-800 bg-ink-950/80 p-2.5 mt-2">
                   <div>
@@ -326,14 +544,434 @@ export function ToolsSidebar() {
                   Create Camera Shift Tour
                 </button>
               </div>
-            </div>
+            </CollapsibleCard>
+
+            {/* TRACE SHIFTING ANIMATION (PATH TRAJECTORY) */}
+            <CollapsibleCard
+              id="zoom-trace-shifting"
+              title="Trace Shifting (Draw to Zoom)"
+              icon={<Pencil className="size-3.5 text-white" />}
+              badge={
+                <span className="rounded bg-neutral-800 border border-neutral-700 px-1.5 py-0.5 text-[9px] font-mono text-neutral-300">
+                  {traceWaypoints.length > 0 ? "Line Ready" : "Freehand Path"}
+                </span>
+              }
+            >
+              <p className="text-[11px] text-fg-muted leading-relaxed">
+                Draw or drag a line directly on the video screen. The zoom camera smoothly zooms in, follows that line, and zooms back out. The trajectory line is an editor guide and is never rendered on the video.
+              </p>
+
+              <div className="space-y-2 bg-ink-950/60 rounded-lg p-2.5 border border-ink-800">
+                {/* Drawing Mode Toggle Button */}
+                <button
+                  type="button"
+                  onClick={() => setTraceShiftingMode(!isTraceShiftingMode)}
+                  className={`w-full rounded-lg py-2 px-3 text-xs font-bold transition-all flex items-center justify-center gap-2 ${
+                    isTraceShiftingMode
+                      ? "bg-white text-black ring-2 ring-white/50 shadow-md"
+                      : "border border-neutral-700 bg-neutral-800 text-neutral-100 hover:text-white hover:bg-neutral-700"
+                  }`}
+                >
+                  <Pencil className="size-3.5" />
+                  {isTraceShiftingMode ? "Drawing Mode Active (Drag on Screen)" : "✏️ Draw on Video Screen"}
+                </button>
+
+                {isTraceShiftingMode && (
+                  <div className="rounded-lg border border-neutral-700 bg-neutral-950 p-2 text-[10px] text-neutral-300 leading-snug flex items-start gap-1.5">
+                    <span className="size-1.5 rounded-full bg-white mt-1 shrink-0 animate-ping" />
+                    <span>
+                      <strong>Press and drag</strong> across the video canvas to draw any line or path. As you draw, the camera trajectory renders in real time.
+                    </span>
+                  </div>
+                )}
+
+                {/* Preset Motion Lines */}
+                <div className="space-y-1 pt-1 border-t border-ink-800">
+                  <span className="text-[10px] text-fg-faint block">Quick Trajectory Presets:</span>
+                  <div className="grid grid-cols-3 gap-1">
+                    {[
+                      {
+                        label: "Horizontal Scan",
+                        points: [
+                          { x: 0.20, y: 0.50 },
+                          { x: 0.50, y: 0.50 },
+                          { x: 0.80, y: 0.50 },
+                        ],
+                      },
+                      {
+                        label: "Top-to-Bottom",
+                        points: [
+                          { x: 0.50, y: 0.25 },
+                          { x: 0.50, y: 0.50 },
+                          { x: 0.50, y: 0.75 },
+                        ],
+                      },
+                      {
+                        label: "Hero Focus Loop",
+                        points: [
+                          { x: 0.50, y: 0.38 },
+                          { x: 0.65, y: 0.42 },
+                          { x: 0.50, y: 0.38 },
+                        ],
+                      },
+                    ].map((preset) => (
+                      <button
+                        key={preset.label}
+                        type="button"
+                        onClick={() => {
+                          clearTraceWaypoints();
+                          preset.points.forEach((pt) => addTraceWaypoint(pt));
+                        }}
+                        className="rounded bg-ink-800 hover:bg-ink-700 border border-ink-700 py-1 px-1 text-[9px] text-neutral-300 hover:text-white transition-colors text-center"
+                      >
+                        {preset.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Clean Trajectory Line Status */}
+                {traceWaypoints.length > 0 && (
+                  <div className="flex items-center justify-between pt-1 border-t border-ink-800 text-[10px]">
+                    <span className="text-fg-muted font-medium flex items-center gap-1.5">
+                      <span className="size-1.5 rounded-full bg-white shadow-[0_0_8px_rgba(255,255,255,0.8)]" />
+                      Trajectory Line Active
+                    </span>
+                    <button
+                      type="button"
+                      onClick={clearTraceWaypoints}
+                      className="text-[9px] text-neutral-400 hover:text-white underline"
+                    >
+                      Clear Line
+                    </button>
+                  </div>
+                )}
+
+                {/* Duration & Scale Sliders */}
+                <div className="space-y-2 pt-1 border-t border-ink-800">
+                  <div className="flex justify-between text-[11px]">
+                    <span className="text-fg-muted">Trajectory Glide Duration:</span>
+                    <span className="font-mono text-white font-semibold">{traceDurationSec.toFixed(1)}s</span>
+                  </div>
+                  <input
+                    type="range"
+                    min="1.5"
+                    max="10.0"
+                    step="0.2"
+                    value={traceDurationSec}
+                    onChange={(e) => setTraceDurationSec(parseFloat(e.target.value))}
+                    className="w-full accent-white cursor-pointer h-1.5 bg-ink-800 rounded-lg"
+                  />
+
+                  {/* Trajectory speed presets */}
+                  <div className="grid grid-cols-3 gap-1 pt-0.5">
+                    {[
+                      { label: "Slow Glide", sec: 5.5 },
+                      { label: "Smooth", sec: 4.0 },
+                      { label: "Snappy", sec: 2.5 },
+                    ].map((p) => (
+                      <button
+                        key={p.label}
+                        type="button"
+                        onClick={() => setTraceDurationSec(p.sec)}
+                        className={`rounded py-1 text-[9px] font-semibold border transition-colors ${
+                          Math.abs(traceDurationSec - p.sec) < 0.1
+                            ? "bg-white text-black border-white font-bold"
+                            : "bg-neutral-800 text-neutral-400 border-neutral-700 hover:text-white"
+                        }`}
+                      >
+                        {p.label} ({p.sec}s)
+                      </button>
+                    ))}
+                  </div>
+
+                  <div className="flex justify-between text-[11px] pt-1">
+                    <span className="text-fg-muted">Peak Zoom Scale:</span>
+                    <span className="font-mono text-white font-semibold">{traceScale.toFixed(2)}x</span>
+                  </div>
+                  <input
+                    type="range"
+                    min="1.2"
+                    max="2.8"
+                    step="0.05"
+                    value={traceScale}
+                    onChange={(e) => setTraceScale(parseFloat(e.target.value))}
+                    className="w-full accent-white cursor-pointer h-1.5 bg-ink-800 rounded-lg"
+                  />
+                </div>
+
+                {/* Primary Test & Save Buttons */}
+                <div className="space-y-1.5 pt-1">
+                  <button
+                    type="button"
+                    onClick={() =>
+                      followDrawnLine({
+                        totalDurationMs: Math.round(traceDurationSec * 1000),
+                        peakScale: traceScale,
+                      })
+                    }
+                    disabled={traceWaypoints.length === 0}
+                    className="w-full rounded-lg bg-white py-2 text-center text-xs font-bold text-black hover:bg-neutral-200 transition-colors shadow-sm flex items-center justify-center gap-1.5 disabled:opacity-40"
+                  >
+                    <Play className="size-3.5 fill-black" />
+                    ▶ Follow Drawn Line (Test Camera)
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() =>
+                      applyTraceShifting({
+                        totalDurationMs: Math.round(traceDurationSec * 1000),
+                        peakScale: traceScale,
+                      })
+                    }
+                    disabled={traceWaypoints.length === 0}
+                    className="w-full rounded-lg border border-neutral-700 bg-neutral-800 py-1.5 text-center text-xs font-semibold text-neutral-200 hover:text-white hover:bg-neutral-700 transition-colors flex items-center justify-center gap-1.5 disabled:opacity-40"
+                  >
+                    <Sparkles className="size-3 text-white" />
+                    Save Path to Timeline
+                  </button>
+                </div>
+              </div>
+            </CollapsibleCard>
+
+            {/* AUTO-ZOOM KEYFRAME BREAKDOWN INSPECTOR */}
+            {(project?.zoomBlocks?.length ?? 0) > 0 && (() => {
+              const currentBlock = selectedBlock || project?.zoomBlocks[0]!;
+              const blockKeyframes = (project?.keyframes || []).filter(
+                (k) => k.timeMs >= currentBlock.startTimeMs - 50 && k.timeMs <= currentBlock.endTimeMs + 50,
+              );
+
+              return (
+                <CollapsibleCard
+                  id="zoom-inspector"
+                  title="Auto-Zoom Inspector"
+                  icon={<Sparkles className="size-3.5 text-white" />}
+                  badge={
+                    <span className="text-[10px] font-mono text-neutral-400">
+                      {project?.zoomBlocks.length} Blocks
+                    </span>
+                  }
+                >
+                  {/* Auto-Zoom Blocks Tab Selector */}
+                  <div className="flex gap-1 overflow-x-auto pb-1 scrollbar-none text-[10px]">
+                    {project?.zoomBlocks.map((b, idx) => {
+                      const isSel = (selectedBlock?.id || project?.zoomBlocks[0]?.id) === b.id;
+                      return (
+                        <button
+                          key={b.id}
+                          type="button"
+                          onClick={() => {
+                            selectBlock(b.id);
+                            setCurrentTime(b.startTimeMs);
+                          }}
+                          className={`shrink-0 rounded-md px-2 py-1 font-medium transition-colors ${
+                            isSel
+                              ? "bg-white text-black font-bold shadow-sm"
+                              : "bg-ink-800 text-fg-muted hover:text-white hover:bg-ink-700 border border-ink-700"
+                          }`}
+                        >
+                          Zoom #{idx + 1} ({formatDuration(b.startTimeMs)})
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  {/* Selected Auto-Zoom Master Properties */}
+                  <div className="rounded-lg bg-ink-950/80 p-2.5 border border-ink-800 space-y-2">
+                    <div className="flex items-center justify-between text-[11px]">
+                      <span className="text-fg-muted font-medium">Zoom Interval:</span>
+                      <span className="font-mono text-white font-semibold">
+                        {formatDuration(currentBlock.startTimeMs)} → {formatDuration(currentBlock.endTimeMs)} ({Math.round((currentBlock.endTimeMs - currentBlock.startTimeMs) / 1000)}s)
+                      </span>
+                    </div>
+
+                    <div className="flex items-center justify-between text-[11px]">
+                      <span className="text-fg-muted">Target Scale:</span>
+                      <span className="font-mono text-white font-semibold">{currentBlock.scale.toFixed(2)}x</span>
+                    </div>
+                    <input
+                      type="range"
+                      min="1.2"
+                      max="2.8"
+                      step="0.05"
+                      value={currentBlock.scale}
+                      onChange={(e) => updateZoomBlock(currentBlock.id, { scale: parseFloat(e.target.value) })}
+                      className="w-full accent-white cursor-pointer h-1.5 bg-ink-800 rounded-lg"
+                    />
+
+                    <div className="flex items-center justify-between text-[11px] pt-1">
+                      <span className="text-fg-muted">Lead-in Shifting Speed:</span>
+                      <span className="font-mono text-white font-semibold">
+                        {currentBlock.shiftDurationMs ?? 750}ms
+                      </span>
+                    </div>
+                    <input
+                      type="range"
+                      min="300"
+                      max="1500"
+                      step="50"
+                      value={currentBlock.shiftDurationMs ?? 750}
+                      onChange={(e) => updateZoomBlock(currentBlock.id, { shiftDurationMs: parseInt(e.target.value, 10) })}
+                      className="w-full accent-white cursor-pointer h-1.5 bg-ink-800 rounded-lg"
+                    />
+
+                    {/* Keyframe Configurations on this Auto-Zoom */}
+                    <div className="pt-2 border-t border-ink-800 space-y-2">
+                      <div className="flex items-center justify-between text-[10px] font-semibold text-neutral-400 uppercase tracking-wider">
+                        <span>Keyframe Configurations ({blockKeyframes.length})</span>
+                        <span className="text-[9px] text-neutral-400">Click node to inspect</span>
+                      </div>
+
+                      {blockKeyframes.length === 0 ? (
+                        <p className="text-[10px] text-neutral-500 py-1 text-center">
+                          Keyframes synchronized to block boundaries.
+                        </p>
+                      ) : (
+                        <div className="space-y-1.5">
+                          {blockKeyframes.map((kf, kfIdx) => {
+                            const isLeadIn = kf.scale <= 1.05 && kf.timeMs <= currentBlock.startTimeMs + 80;
+                            const isPeak = kf.scale > 1.05;
+                            const isLeadOut = kf.scale <= 1.05 && kf.timeMs >= currentBlock.endTimeMs - 80;
+                            const nodeRole = isLeadIn
+                              ? "Lead-In Return (1.0x)"
+                              : isPeak
+                              ? `Focal Hold (${kf.scale.toFixed(1)}x)`
+                              : isLeadOut
+                              ? "Lead-Out Reset (1.0x)"
+                              : `Transit Step (${kf.scale.toFixed(1)}x)`;
+
+                            const isCurKf = selectedKeyframeId === kf.id;
+
+                            return (
+                              <div
+                                key={kf.id}
+                                className={`rounded-lg p-2 border transition-colors ${
+                                  isCurKf
+                                    ? "border-white bg-neutral-800/90 text-white"
+                                    : "border-neutral-800 bg-neutral-900/60 text-neutral-300 hover:border-neutral-700"
+                                }`}
+                              >
+                                <div
+                                  onClick={() => {
+                                    selectKeyframe(kf.id);
+                                    setCurrentTime(kf.timeMs);
+                                  }}
+                                  className="flex items-center justify-between cursor-pointer"
+                                >
+                                  <div className="flex items-center gap-1.5">
+                                    <Diamond className={`size-3 ${isCurKf ? "text-white fill-white" : "text-neutral-400"}`} />
+                                    <span className="text-[11px] font-semibold">{kfIdx + 1}. {nodeRole}</span>
+                                  </div>
+                                  <span className="font-mono text-[10px] text-neutral-400">
+                                    {formatDuration(kf.timeMs)}
+                                  </span>
+                                </div>
+
+                                {/* Expanded configurations if selected */}
+                                {isCurKf && (
+                                  <div className="mt-2 pt-2 border-t border-neutral-700/80 space-y-2 text-[10px]">
+                                    <div className="flex justify-between">
+                                      <span className="text-neutral-400">Scale:</span>
+                                      <span className="font-mono text-white font-semibold">{kf.scale.toFixed(2)}x</span>
+                                    </div>
+                                    <input
+                                      type="range"
+                                      min="1.0"
+                                      max="3.0"
+                                      step="0.05"
+                                      value={kf.scale}
+                                      onChange={(e) => updateKeyframe(kf.id, { scale: parseFloat(e.target.value) })}
+                                      className="w-full accent-white cursor-pointer h-1.5 bg-ink-800 rounded-lg"
+                                    />
+
+                                    <div className="flex justify-between">
+                                      <span className="text-neutral-400">Focal Target:</span>
+                                      <span className="font-mono text-white">
+                                        ({Math.round(kf.targetX * 100)}%, {Math.round(kf.targetY * 100)}%)
+                                      </span>
+                                    </div>
+                                    <div className="grid grid-cols-2 gap-1 pt-0.5">
+                                      <button
+                                        type="button"
+                                        onClick={() => updateKeyframe(kf.id, { targetX: 0.5, targetY: 0.38 })}
+                                        className="rounded bg-neutral-700 hover:bg-neutral-600 py-1 text-[9px] font-semibold text-white transition-colors"
+                                      >
+                                        Center Stage
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => updateKeyframe(kf.id, { targetX: 0.5, targetY: 0.50 })}
+                                        className="rounded bg-neutral-700 hover:bg-neutral-600 py-1 text-[9px] font-semibold text-white transition-colors"
+                                      >
+                                        Dead Center
+                                      </button>
+                                    </div>
+
+                                    <div className="flex gap-1.5 pt-1">
+                                      <button
+                                        type="button"
+                                        onClick={() => updateKeyframe(kf.id, { easing: "cubic" })}
+                                        className={`flex-1 rounded py-1 text-[9px] font-semibold ${
+                                          kf.easing === "cubic" ? "bg-white text-black font-bold" : "bg-neutral-700 text-neutral-300"
+                                        }`}
+                                      >
+                                        Cubic
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => updateKeyframe(kf.id, { easing: "spring" })}
+                                        className={`flex-1 rounded py-1 text-[9px] font-semibold ${
+                                          kf.easing === "spring" ? "bg-white text-black font-bold" : "bg-neutral-700 text-neutral-300"
+                                        }`}
+                                      >
+                                        Spring
+                                      </button>
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Master Action Buttons */}
+                    <div className="pt-2 border-t border-ink-800 flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() =>
+                          applyZoomBlockSettingsToAll({
+                            scale: currentBlock.scale,
+                            shiftDurationMs: currentBlock.shiftDurationMs ?? 750,
+                            shiftAnimation: currentBlock.shiftAnimation || "smooth",
+                          })
+                        }
+                        className="flex-1 rounded-lg border border-neutral-700 bg-neutral-800 py-1.5 text-center text-[10px] font-semibold text-white hover:bg-neutral-700 transition-colors"
+                      >
+                        Apply to All ({project?.zoomBlocks?.length ?? 1} Zooms)
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => deleteZoomBlock(currentBlock.id)}
+                        className="rounded-lg bg-neutral-800 hover:bg-neutral-700 p-1.5 text-neutral-300 hover:text-white border border-neutral-700"
+                        title="Delete this Auto-Zoom"
+                      >
+                        <Trash2 className="size-3.5" />
+                      </button>
+                    </div>
+                  </div>
+                </CollapsibleCard>
+              );
+            })()}
 
             {/* Manual Keyframe Controls */}
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <span className="text-[11px] font-semibold uppercase tracking-wider text-fg-faint">
-                  Keyframes ({project?.keyframes?.length ?? 0})
-                </span>
+            <CollapsibleCard
+              id="zoom-manual-keyframes"
+              title={`Keyframes (${project?.keyframes?.length ?? 0})`}
+              icon={<Diamond className="size-3.5 text-white" />}
+              actions={
                 <div className="flex items-center gap-2">
                   {(project?.keyframes?.length ?? 0) > 0 && (
                     <button
@@ -347,7 +985,8 @@ export function ToolsSidebar() {
                   )}
                   <AddKeyframeButton zoomScale={zoomScale} />
                 </div>
-              </div>
+              }
+            >
 
               {selectedBlock && (
                 <div className="rounded-xl border border-neutral-700 bg-neutral-900 p-2.5 space-y-2.5">
@@ -791,7 +1430,7 @@ export function ToolsSidebar() {
                                   }}
                                   className={`rounded px-1 py-1 text-[9px] capitalize font-medium transition-colors ${
                                     isCur
-                                      ? "bg-amber-400 text-black font-bold shadow-sm"
+                                      ? "bg-white text-black font-bold shadow-sm"
                                       : "bg-ink-800 text-fg-muted hover:bg-ink-700 hover:text-white"
                                   }`}
                                 >
@@ -884,11 +1523,7 @@ export function ToolsSidebar() {
                         <span className="truncate">Node #{i + 1} ({kf.scale.toFixed(1)}x)</span>
                         {kf.sound ? (
                           <span
-                            className={`rounded border text-[9px] px-1 py-0.2 shrink-0 flex items-center gap-0.5 font-medium ${
-                              kf.sound === "typing"
-                                ? "bg-amber-500/20 text-amber-300 border-amber-500/30"
-                                : "bg-cyan-500/20 text-cyan-300 border-cyan-500/30"
-                            }`}
+                            className="rounded border text-[9px] px-1 py-0.2 shrink-0 flex items-center gap-0.5 font-medium bg-white/10 text-white border-white/20"
                             title={`SFX: ${kf.sound} (${kf.soundPreset || (kf.sound === "typing" ? "mech" : "bop")})`}
                           >
                             <Volume2 className="size-2.5 shrink-0" />
@@ -939,20 +1574,19 @@ export function ToolsSidebar() {
                   ))
                 )}
               </div>
-            </div>
+            </CollapsibleCard>
           </div>
         )}
 
         {/* TAB 2: VIDEO EFFECTS */}
         {activeToolTab === "effects" && (
           <div className="space-y-4">
-            <div className="rounded-xl border border-ink-800 bg-ink-900/60 p-3 shadow-sm">
-              <div className="flex items-center justify-between mb-1.5">
-                <div className="flex items-center gap-2">
-                  <Wand2 className="size-4 text-white" />
-                  <span className="font-semibold text-white text-xs">Video Effects</span>
-                </div>
-                {(project?.effects?.length ?? 0) > 0 && (
+            <CollapsibleCard
+              id="effects-presets"
+              title="Video Effects"
+              icon={<Wand2 className="size-3.5 text-white" />}
+              actions={
+                (project?.effects?.length ?? 0) > 0 ? (
                   <button
                     type="button"
                     onClick={clearEffects}
@@ -961,9 +1595,10 @@ export function ToolsSidebar() {
                   >
                     Clear All
                   </button>
-                )}
-              </div>
-              <p className="text-[11px] text-fg-muted leading-relaxed mb-3">
+                ) : undefined
+              }
+            >
+              <p className="text-[11px] text-fg-muted leading-relaxed">
                 Apply spotlights, cinematic vignettes, motion blur, cursor glow, or color grades on the timeline.
               </p>
 
@@ -1023,16 +1658,20 @@ export function ToolsSidebar() {
                   <span>Slow-Mo (0.5x)</span>
                 </button>
               </div>
-            </div>
+            </CollapsibleCard>
 
             {/* Inspector for selected effect */}
-            {selectedEffect ? (
-              <div className="rounded-xl border border-ink-800 bg-ink-900 p-3 space-y-3">
-                <div className="flex items-center justify-between">
-                  <span className="font-semibold text-fg flex items-center gap-1.5">
-                    <Wand2 className="size-3.5 text-white" />
-                    Edit Effect
+            {selectedEffect && (
+              <CollapsibleCard
+                id="effects-inspector"
+                title={`Edit: ${selectedEffect.name}`}
+                icon={<Wand2 className="size-3.5 text-white" />}
+                badge={
+                  <span className="font-mono text-[10px] text-neutral-400">
+                    {Math.round(selectedEffect.intensity * 100)}%
                   </span>
+                }
+                actions={
                   <button
                     type="button"
                     onClick={() => deleteEffect(selectedEffect.id)}
@@ -1041,8 +1680,8 @@ export function ToolsSidebar() {
                   >
                     <Trash2 className="size-3.5" />
                   </button>
-                </div>
-
+                }
+              >
                 <div>
                   <label className="text-[10px] text-fg-faint uppercase font-semibold">Effect Name</label>
                   <input
@@ -1142,18 +1781,15 @@ export function ToolsSidebar() {
                   <Trash2 className="size-3" />
                   Delete Effect
                 </button>
-              </div>
-            ) : (
-              <p className="text-[11px] text-fg-faint">
-                Select an effect on the timeline or click an effect preset above to add one.
-              </p>
+              </CollapsibleCard>
             )}
 
             {/* List of active video effects */}
-            <div className="space-y-1.5">
-              <span className="text-[11px] font-semibold uppercase tracking-wider text-fg-faint">
-                Active Effects ({project?.effects?.length ?? 0})
-              </span>
+            <CollapsibleCard
+              id="effects-active-list"
+              title={`Active Effects (${project?.effects?.length ?? 0})`}
+              icon={<Sparkles className="size-3.5 text-white" />}
+            >
               {(!project?.effects || project.effects.length === 0) ? (
                 <div className="rounded-lg border border-ink-800 bg-ink-900/40 p-3 text-center text-[11px] text-fg-faint">
                   No effects added yet. Click an effect above to add to timeline.
@@ -1192,39 +1828,29 @@ export function ToolsSidebar() {
                   </div>
                 ))
               )}
-            </div>
+            </CollapsibleCard>
           </div>
         )}
 
         {/* TAB 2: TEXT & CAPTIONS */}
         {activeToolTab === "text" && (
           <div className="space-y-4">
-            <div className="flex items-center justify-between">
-              <span className="text-[11px] font-semibold uppercase tracking-wider text-fg-faint">
-                Text Overlays ({project?.textOverlays?.length ?? 0})
-              </span>
-              <button
-                type="button"
-                onClick={() => addTextOverlay("New Caption")}
-                className="flex items-center gap-1 rounded bg-neutral-800 border border-neutral-700 px-2 py-1 text-[11px] font-medium text-white hover:border-white"
-              >
-                <Plus className="size-3" /> Add Text
-              </button>
-            </div>
-
-            {selectedText ? (
-              <div className="rounded-xl border border-ink-800 bg-ink-900 p-3 space-y-3">
-                <div className="flex items-center justify-between">
-                  <span className="font-semibold text-fg">Edit Caption</span>
+            {selectedText && (
+              <CollapsibleCard
+                id="text-editor"
+                title={`Edit Caption: ${selectedText.text}`}
+                icon={<Type className="size-3.5 text-white" />}
+                actions={
                   <button
                     type="button"
                     onClick={() => deleteTextOverlay(selectedText.id)}
                     className="text-danger hover:opacity-80 p-0.5"
+                    title="Delete caption"
                   >
                     <Trash2 className="size-3.5" />
                   </button>
-                </div>
-
+                }
+              >
                 <div>
                   <label className="text-[10px] text-fg-faint uppercase font-semibold">Content</label>
                   <input
@@ -1275,47 +1901,473 @@ export function ToolsSidebar() {
                     Bottom Subtitle
                   </button>
                 </div>
-              </div>
-            ) : (
-              <p className="text-[11px] text-fg-faint">
-                Select a text track or click "Add Text" to insert captions.
-              </p>
+              </CollapsibleCard>
             )}
 
             {/* List of text overlays */}
-            <div className="space-y-1.5">
-              {project?.textOverlays?.map((t) => (
-                <div
-                  key={t.id}
-                  onClick={() => selectText(t.id)}
-                  className={`flex items-center justify-between rounded-lg border p-2 cursor-pointer transition-colors ${
-                    selectedTextId === t.id
-                      ? "border-white bg-white/10 text-white font-medium"
-                      : "border-ink-800 bg-ink-900/60 text-fg-muted hover:border-ink-700"
-                  }`}
+            <CollapsibleCard
+              id="text-captions-list"
+              title={`Captions List (${project?.textOverlays?.length ?? 0})`}
+              icon={<Type className="size-3.5 text-white" />}
+              actions={
+                <button
+                  type="button"
+                  onClick={() => addTextOverlay("New Caption")}
+                  className="flex items-center gap-1 rounded bg-neutral-800 border border-neutral-700 px-2 py-0.5 text-[10px] font-medium text-white hover:border-white"
                 >
-                  <div className="flex items-center gap-2 truncate">
-                    <Type className="size-3.5 text-white shrink-0" />
-                    <span className="truncate font-medium">{t.text}</span>
-                  </div>
-                  <span className="font-mono text-[10px] text-fg-faint shrink-0">
-                    {formatDuration(t.startTimeMs)}
-                  </span>
+                  <Plus className="size-3" /> Add Caption
+                </button>
+              }
+            >
+              {(!project?.textOverlays || project.textOverlays.length === 0) ? (
+                <div className="rounded-lg border border-ink-800 bg-ink-900/40 p-3 text-center text-[11px] text-fg-faint">
+                  No captions added yet. Click &quot;Add Caption&quot; above to insert one.
                 </div>
-              ))}
-            </div>
+              ) : (
+                project.textOverlays.map((t) => (
+                  <div
+                    key={t.id}
+                    onClick={() => selectText(t.id)}
+                    className={`flex items-center justify-between rounded-lg border p-2 cursor-pointer transition-colors ${
+                      selectedTextId === t.id
+                        ? "border-white bg-white/10 text-white font-medium"
+                        : "border-ink-800 bg-ink-900/60 text-fg-muted hover:border-ink-700"
+                    }`}
+                  >
+                    <div className="flex items-center gap-2 truncate">
+                      <Type className="size-3.5 text-white shrink-0" />
+                      <span className="truncate font-medium">{t.text}</span>
+                    </div>
+                    <span className="font-mono text-[10px] text-fg-faint shrink-0">
+                      {formatDuration(t.startTimeMs)}
+                    </span>
+                  </div>
+                ))
+              )}
+            </CollapsibleCard>
           </div>
         )}
 
         {/* TAB 3: AUDIO & MUSIC */}
-        {activeToolTab === "audio" && (
+        {activeToolTab === "audio" && (() => {
+          const musicTracks = (project?.audioTracks || []).filter((t) => t.type === "music" || !t.type);
+          const activeMusicTrack = musicTracks.find((t) => t.id === selectedAudioId) || musicTracks[0];
+
+          const handleMusicUpload = (file: File) => {
+            const url = URL.createObjectURL(file);
+            const trackName = file.name.replace(/\.[^/.]+$/, "");
+            const tempAudio = new Audio(url);
+            const onReady = () => {
+              const dur =
+                tempAudio.duration && isFinite(tempAudio.duration) && tempAudio.duration > 0
+                  ? Math.round(tempAudio.duration * 1000)
+                  : project?.summary.durationMs || 60000;
+              addAudioTrack(trackName, url, "music", {
+                startTimeMs: 0,
+                durationMs: dur,
+                gainDb: -6,
+                volume: dbToVolume(-6),
+                fadeInMs: 1500,
+                fadeOutMs: 2000,
+              });
+            };
+            tempAudio.onloadedmetadata = onReady;
+            tempAudio.onerror = onReady;
+          };
+
+          return (
           <div className="space-y-4">
-            {/* 0. Auto AFX Master Generator */}
-            <div className="rounded-xl border border-neutral-700 bg-neutral-900 p-3 shadow-sm">
-              <div className="flex items-center gap-2 mb-1.5">
-                <Volume2 className="size-4 text-white" />
-                <span className="font-semibold text-white text-xs">Auto AFX Generator</span>
+            {/* 1. Upload Custom Music */}
+            <CollapsibleCard
+              id="audio-upload"
+              title="Upload Custom Music"
+              icon={<Upload className="size-3.5 text-white" />}
+              badge={
+                <span className="rounded bg-neutral-800 border border-neutral-700 px-1.5 py-0.5 text-[9px] font-mono text-neutral-300">
+                  MP3 / WAV / M4A
+                </span>
+              }
+            >
+              <p className="text-[11px] text-fg-muted leading-relaxed">
+                Import your own music, background soundtrack, or voiceover file. Full configuration is available immediately below.
+              </p>
+
+              {/* Drag & Drop Upload Dropzone */}
+              <label
+                onDragOver={(e) => {
+                  e.preventDefault();
+                }}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  const file = e.dataTransfer.files?.[0];
+                  if (file) handleMusicUpload(file);
+                }}
+                className="group relative flex flex-col items-center justify-center rounded-xl border border-dashed border-neutral-700 hover:border-white bg-neutral-950/80 hover:bg-neutral-900/90 p-4 transition-all cursor-pointer text-center"
+              >
+                <div className="flex size-9 items-center justify-center rounded-full bg-neutral-900 border border-neutral-700 group-hover:border-white text-white mb-2 transition-colors">
+                  <Upload className="size-4" />
+                </div>
+                <span className="text-xs font-semibold text-white">
+                  Drop audio file here or click to browse
+                </span>
+                <span className="text-[10px] text-neutral-400 mt-0.5">
+                  Supports MP3, WAV, M4A, AAC, OGG, FLAC
+                </span>
+                <input
+                  type="file"
+                  accept="audio/*,.mp3,.wav,.m4a,.aac,.ogg,.flac"
+                  className="hidden"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file) handleMusicUpload(file);
+                  }}
+                />
+              </label>
+            </CollapsibleCard>
+
+            {/* 2. Background Music & Soundtracks Library */}
+            <CollapsibleCard
+              id="audio-music"
+              title="Music Tracks & Soundtrack Library"
+              icon={<Music className="size-3.5 text-white" />}
+              badge={
+                <span className="rounded bg-neutral-800 border border-neutral-700 px-1.5 py-0.5 text-[9px] font-mono text-neutral-300">
+                  {musicTracks.length} Active
+                </span>
+              }
+            >
+              {/* Active Music Tracks List */}
+              {musicTracks.length > 0 && (
+                <div className="space-y-1.5">
+                  <span className="text-[10px] text-fg-faint block">Active Timeline Tracks:</span>
+                  <div className="space-y-1.5">
+                    {musicTracks.map((track) => {
+                      const isSelected = activeMusicTrack?.id === track.id;
+                      const isPreviewing = previewingAudioId === track.id;
+                      const isCustom = !track.url.startsWith("music://");
+
+                      return (
+                        <div
+                          key={track.id}
+                          onClick={() => selectAudio(track.id)}
+                          className={`flex items-center justify-between rounded-lg border p-2 cursor-pointer transition-colors ${
+                            isSelected
+                              ? "border-white bg-white/10 text-white font-medium"
+                              : "border-neutral-800 bg-neutral-950/60 text-neutral-300 hover:border-neutral-700"
+                          }`}
+                        >
+                          <div className="flex items-center gap-2 min-w-0">
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                toggleAudioPreview(track);
+                              }}
+                              className={`flex size-6 shrink-0 items-center justify-center rounded-full border transition-colors ${
+                                isPreviewing
+                                  ? "bg-white text-black border-white"
+                                  : "border-neutral-700 bg-neutral-800 hover:border-white text-white"
+                              }`}
+                              title={isPreviewing ? "Pause Preview" : "Preview Track"}
+                            >
+                              {isPreviewing ? <Pause className="size-2.5 fill-current" /> : <Play className="size-2.5 fill-current ml-0.5" />}
+                            </button>
+
+                            <div className="min-w-0">
+                              <div className="flex items-center gap-1.5">
+                                <span className="text-[11px] font-semibold text-white truncate">
+                                  {track.name}
+                                </span>
+                                <span className="rounded bg-neutral-800 px-1 py-0.2 text-[8px] font-mono text-neutral-400 uppercase">
+                                  {isCustom ? "Custom" : "Preset"}
+                                </span>
+                              </div>
+                              <span className="text-[9px] text-neutral-400 block font-mono">
+                                {formatDuration(track.durationMs)} • {(track.gainDb ?? 0) >= 0 ? "+" : ""}{(track.gainDb ?? 0).toFixed(1)} dB
+                              </span>
+                            </div>
+                          </div>
+
+                          <div className="flex items-center gap-1 shrink-0" onClick={(e) => e.stopPropagation()}>
+                            <button
+                              type="button"
+                              onClick={() => updateAudioTrack(track.id, { muted: !track.muted })}
+                              className={`rounded p-1 text-[9px] border transition-colors ${
+                                track.muted
+                                  ? "bg-white text-black border-white"
+                                  : "bg-neutral-800 text-neutral-300 border-neutral-700 hover:text-white"
+                              }`}
+                              title={track.muted ? "Unmute Track" : "Mute Track"}
+                            >
+                              {track.muted ? <VolumeX className="size-3" /> : <Volume2 className="size-3" />}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => deleteAudioTrack(track.id)}
+                              className="rounded p-1 text-danger hover:bg-danger/20 border border-neutral-800 transition-colors"
+                              title="Delete Track"
+                            >
+                              <Trash2 className="size-3" />
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* Music Presets Grid */}
+              <div className="space-y-1.5 pt-1 border-t border-ink-800">
+                <span className="text-[10px] text-fg-faint block">Soundtrack Library Presets:</span>
+                <div className="grid grid-cols-2 gap-1.5">
+                  {BACKGROUND_MUSIC_PRESETS.map((preset) => (
+                    <button
+                      key={preset.id}
+                      type="button"
+                      onClick={() => addMusicTrackAtCurrentTime(preset.id, preset.name)}
+                      className="rounded-lg border border-neutral-800 bg-ink-950/70 hover:bg-neutral-800 p-2 text-left transition-colors group"
+                      title={preset.description}
+                    >
+                      <div className="flex items-center justify-between">
+                        <span className="text-[11px] font-semibold text-white group-hover:text-white">
+                          {preset.name}
+                        </span>
+                        <Plus className="size-3 text-neutral-400 group-hover:text-white" />
+                      </div>
+                      <span className="text-[9px] text-neutral-400 block mt-0.5 line-clamp-1">
+                        {preset.genre} • {preset.tempoBpm} BPM
+                      </span>
+                    </button>
+                  ))}
+                </div>
               </div>
+            </CollapsibleCard>
+
+            {/* 3. Music Track Inspector & Settings */}
+            {activeMusicTrack && (
+              <CollapsibleCard
+                id="audio-inspector"
+                title={`Track Settings: ${activeMusicTrack.name}`}
+                icon={<Sliders className="size-3.5 text-white" />}
+                badge={
+                  <span className="rounded bg-neutral-800 border border-neutral-700 px-1.5 py-0.5 text-[9px] font-mono text-neutral-300">
+                    {(activeMusicTrack.gainDb ?? 0) >= 0 ? "+" : ""}{(activeMusicTrack.gainDb ?? 0).toFixed(1)} dB
+                  </span>
+                }
+              >
+                {/* Track Name Renaming */}
+                <div>
+                  <label className="text-[10px] font-medium text-fg-muted block mb-1">
+                    Track Title / Name
+                  </label>
+                  <input
+                    type="text"
+                    value={activeMusicTrack.name}
+                    onChange={(e) => updateAudioTrack(activeMusicTrack.id, { name: e.target.value })}
+                    className="w-full rounded-md border border-neutral-700 bg-neutral-900 px-2 py-1 text-xs text-white"
+                    placeholder="Soundtrack name..."
+                  />
+                </div>
+
+                {/* Audition Player & Mute */}
+                <div className="flex items-center justify-between rounded-lg border border-neutral-800 bg-neutral-950 p-2">
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => toggleAudioPreview(activeMusicTrack)}
+                      className="flex items-center gap-1.5 rounded-md bg-white text-black font-semibold px-2.5 py-1 text-[10px] hover:bg-neutral-200 transition-colors shadow-sm"
+                    >
+                      {previewingAudioId === activeMusicTrack.id ? (
+                        <>
+                          <Pause className="size-3 fill-black" />
+                          <span>Pause Preview</span>
+                        </>
+                      ) : (
+                        <>
+                          <Play className="size-3 fill-black" />
+                          <span>Audition Playback</span>
+                        </>
+                      )}
+                    </button>
+                    {previewingAudioId === activeMusicTrack.id && (
+                      <span className="text-[10px] text-neutral-400 animate-pulse">Playing...</span>
+                    )}
+                  </div>
+
+                  <div className="flex items-center gap-1">
+                    <button
+                      type="button"
+                      onClick={() => updateAudioTrack(activeMusicTrack.id, { muted: !activeMusicTrack.muted })}
+                      className={`rounded p-1 text-[9px] border transition-colors ${
+                        activeMusicTrack.muted
+                          ? "bg-white text-black border-white"
+                          : "bg-neutral-800 text-neutral-300 border-neutral-700 hover:text-white"
+                      }`}
+                      title={activeMusicTrack.muted ? "Unmute Track" : "Mute Track"}
+                    >
+                      {activeMusicTrack.muted ? <VolumeX className="size-3" /> : <Volume2 className="size-3" />}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => deleteAudioTrack(activeMusicTrack.id)}
+                      className="rounded p-1 text-danger hover:bg-danger/20 border border-neutral-800 transition-colors"
+                      title="Delete Track"
+                    >
+                      <Trash2 className="size-3" />
+                    </button>
+                  </div>
+                </div>
+
+                {/* Timing: Start Offset & Duration */}
+                <div className="space-y-2 pt-1 border-t border-ink-800">
+                  <div className="flex justify-between items-center text-[10px]">
+                    <span className="text-fg-muted">Timeline Start:</span>
+                    <span className="font-mono text-white">{formatDuration(activeMusicTrack.startTimeMs)}</span>
+                  </div>
+                  <input
+                    type="range"
+                    min="0"
+                    max={project?.summary.durationMs || 60000}
+                    step="250"
+                    value={activeMusicTrack.startTimeMs}
+                    onChange={(e) => updateAudioTrack(activeMusicTrack.id, { startTimeMs: parseInt(e.target.value, 10) })}
+                    className="w-full accent-white cursor-pointer h-1.5 bg-ink-800 rounded-lg"
+                  />
+
+                  <div className="flex justify-between items-center text-[10px]">
+                    <span className="text-fg-muted">Track Duration:</span>
+                    <span className="font-mono text-white">{formatDuration(activeMusicTrack.durationMs)}</span>
+                  </div>
+                  <input
+                    type="range"
+                    min="1000"
+                    max={Math.max(activeMusicTrack.durationMs, project?.summary.durationMs || 60000)}
+                    step="500"
+                    value={activeMusicTrack.durationMs}
+                    onChange={(e) => updateAudioTrack(activeMusicTrack.id, { durationMs: parseInt(e.target.value, 10) })}
+                    className="w-full accent-white cursor-pointer h-1.5 bg-ink-800 rounded-lg"
+                  />
+
+                  <button
+                    type="button"
+                    onClick={() =>
+                      updateAudioTrack(activeMusicTrack.id, {
+                        startTimeMs: 0,
+                        durationMs: project?.summary.durationMs || 60000,
+                      })
+                    }
+                    className="w-full rounded border border-neutral-700 bg-neutral-800/80 hover:bg-neutral-700 py-1 text-[10px] font-medium text-neutral-300 hover:text-white transition-colors text-center"
+                    title="Span music across entire video length"
+                  >
+                    Fit Entire Video Duration ({formatDuration(project?.summary.durationMs || 0)})
+                  </button>
+                </div>
+
+                {/* Decibel Gain Adjustment */}
+                <div className="space-y-1 pt-1 border-t border-ink-800">
+                  <div className="flex items-center justify-between text-[11px]">
+                    <span className="text-fg-muted font-medium">Decibel Gain (dB):</span>
+                    <span className="font-mono text-white font-semibold">
+                      {(activeMusicTrack.gainDb ?? 0) > 0 ? "+" : ""}{(activeMusicTrack.gainDb ?? 0).toFixed(1)} dB ({Math.round(dbToVolume(activeMusicTrack.gainDb ?? 0) * 100)}%)
+                    </span>
+                  </div>
+                  <input
+                    type="range"
+                    min="-36"
+                    max="12"
+                    step="0.5"
+                    value={activeMusicTrack.gainDb ?? 0}
+                    onChange={(e) => {
+                      const db = parseFloat(e.target.value);
+                      updateAudioTrack(activeMusicTrack.id, {
+                        gainDb: db,
+                        volume: dbToVolume(db),
+                      });
+                    }}
+                    className="w-full accent-white cursor-pointer h-1.5 bg-ink-800 rounded-lg"
+                  />
+                  <div className="grid grid-cols-5 gap-1 pt-1">
+                    {[-18, -12, -6, 0, 3].map((dbVal) => (
+                      <button
+                        key={dbVal}
+                        type="button"
+                        onClick={() =>
+                          updateAudioTrack(activeMusicTrack.id, {
+                            gainDb: dbVal,
+                            volume: dbToVolume(dbVal),
+                          })
+                        }
+                        className={`rounded py-0.5 text-[9px] font-semibold border transition-colors ${
+                          Math.round(activeMusicTrack.gainDb ?? 0) === dbVal
+                            ? "bg-white text-black border-white font-bold"
+                            : "bg-neutral-800 text-neutral-400 border-neutral-700 hover:text-white"
+                        }`}
+                      >
+                        {dbVal > 0 ? `+${dbVal}` : dbVal} dB
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Fade In & Fade Out Envelopes */}
+                <div className="grid grid-cols-2 gap-2 pt-1 border-t border-ink-800">
+                  <div className="space-y-1">
+                    <div className="flex justify-between text-[10px] text-fg-muted">
+                      <span>Fade In:</span>
+                      <span className="font-mono text-white">
+                        {(((activeMusicTrack.fadeInMs ?? 0) / 1000)).toFixed(1)}s
+                      </span>
+                    </div>
+                    <input
+                      type="range"
+                      min="0"
+                      max="5000"
+                      step="250"
+                      value={activeMusicTrack.fadeInMs ?? 0}
+                      onChange={(e) => updateAudioTrack(activeMusicTrack.id, { fadeInMs: parseInt(e.target.value, 10) })}
+                      className="w-full accent-white cursor-pointer h-1.5 bg-ink-800 rounded-lg"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <div className="flex justify-between text-[10px] text-fg-muted">
+                      <span>Fade Out:</span>
+                      <span className="font-mono text-white">
+                        {(((activeMusicTrack.fadeOutMs ?? 0) / 1000)).toFixed(1)}s
+                      </span>
+                    </div>
+                    <input
+                      type="range"
+                      min="0"
+                      max="5000"
+                      step="250"
+                      value={activeMusicTrack.fadeOutMs ?? 0}
+                      onChange={(e) => updateAudioTrack(activeMusicTrack.id, { fadeOutMs: parseInt(e.target.value, 10) })}
+                      className="w-full accent-white cursor-pointer h-1.5 bg-ink-800 rounded-lg"
+                    />
+                  </div>
+                </div>
+
+                {/* Apply dB to All Audio Action Button */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    const curDb = activeMusicTrack.gainDb ?? 0;
+                    applyAudioVolumeToAll(dbToVolume(curDb), curDb, "all");
+                  }}
+                  className="w-full rounded-lg bg-neutral-800 hover:bg-neutral-700 border border-neutral-700 py-1.5 text-center text-[10px] font-semibold text-white transition-colors"
+                >
+                  Apply {activeMusicTrack.gainDb ?? 0} dB to All Audio
+                </button>
+              </CollapsibleCard>
+            )}
+
+            {/* 2. Auto AFX Master Generator */}
+            <CollapsibleCard
+              id="audio-auto-afx"
+              title="Auto AFX Generator"
+              icon={<Volume2 className="size-3.5 text-white" />}
+            >
               <p className="text-[11px] text-fg-muted leading-relaxed mb-3">
                 Automatically attaches tactile click bops to clicks and clean mechanical typing sounds.
               </p>
@@ -1327,22 +2379,25 @@ export function ToolsSidebar() {
                 <Sparkles className="size-3.5 fill-black" />
                 Apply Auto AFX
               </button>
-            </div>
+            </CollapsibleCard>
 
             {/* 1. Click Sound Effects */}
-            <div className="rounded-xl border border-ink-800 bg-ink-900/80 p-3 shadow-sm space-y-3">
-              <div className="flex items-center justify-between">
-                <div>
-                  <span className="block text-xs font-semibold text-white">Click Sound Effects</span>
-                  <span className="block text-[10px] text-fg-faint">Tactile bop sound on every button click</span>
-                </div>
+            <CollapsibleCard
+              id="audio-click-sfx"
+              title="Click Sound Effects"
+              icon={<Volume2 className="size-3.5 text-white" />}
+              badge={
                 <input
                   type="checkbox"
                   checked={project?.audioSettings?.clickSoundEnabled ?? true}
                   onChange={(e) => updateAudioSettings({ clickSoundEnabled: e.target.checked })}
                   className="size-4 accent-white rounded cursor-pointer"
                 />
-              </div>
+              }
+            >
+              <span className="block text-[10px] text-fg-faint -mt-1">
+                Tactile bop sound on every button click
+              </span>
 
               {(project?.audioSettings?.clickSoundEnabled ?? true) && (
                 <div className="space-y-2 pt-1 border-t border-ink-800/80">
@@ -1374,9 +2429,9 @@ export function ToolsSidebar() {
                   </div>
 
                   <div className="flex items-center justify-between text-[11px] pt-1">
-                    <span className="text-fg-muted">Click Volume:</span>
+                    <span className="text-fg-muted">Click Volume & Gain:</span>
                     <span className="font-mono text-white font-semibold">
-                      {Math.round((project?.audioSettings?.clickSoundVolume ?? 0.7) * 100)}%
+                      {Math.round((project?.audioSettings?.clickSoundVolume ?? 0.7) * 100)}% ({volumeToDb(project?.audioSettings?.clickSoundVolume ?? 0.7).toFixed(1)} dB)
                     </span>
                   </div>
                   <input
@@ -1389,32 +2444,48 @@ export function ToolsSidebar() {
                     className="w-full accent-white cursor-pointer h-1.5 bg-ink-800 rounded-lg"
                   />
 
-                  <button
-                    type="button"
-                    onClick={() => playClickSoundPreview()}
-                    className="w-full mt-1 rounded-lg border border-ink-700 bg-ink-800/60 py-1 text-[11px] font-medium text-fg-muted hover:text-white hover:bg-ink-700 transition-colors flex items-center justify-center gap-1.5"
-                  >
-                    <Play className="size-3 fill-current" />
-                    <span>Test Click Bop</span>
-                  </button>
+                  <div className="flex items-center gap-2 mt-1">
+                    <button
+                      type="button"
+                      onClick={() => playClickSoundPreview()}
+                      className="flex-1 rounded-lg border border-ink-700 bg-ink-800/60 py-1 text-[11px] font-medium text-fg-muted hover:text-white hover:bg-ink-700 transition-colors flex items-center justify-center gap-1.5"
+                    >
+                      <Play className="size-3 fill-current" />
+                      <span>Test Click Bop</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const vol = project?.audioSettings?.clickSoundVolume ?? 0.7;
+                        applyAudioVolumeToAll(vol, volumeToDb(vol), "sfx");
+                      }}
+                      className="rounded-lg border border-neutral-700 bg-neutral-800 hover:bg-neutral-700 py-1 px-2 text-[10px] font-semibold text-neutral-300 hover:text-white transition-colors"
+                      title="Apply this click volume to all SFX tracks"
+                    >
+                      Apply to All SFX
+                    </button>
+                  </div>
                 </div>
               )}
-            </div>
+            </CollapsibleCard>
 
             {/* 2. Typing Keystroke Sound Effects */}
-            <div className="rounded-xl border border-ink-800 bg-ink-900/80 p-3 shadow-sm space-y-3">
-              <div className="flex items-center justify-between">
-                <div>
-                  <span className="block text-xs font-semibold text-white">Auto Typing Sounds</span>
-                  <span className="block text-[10px] text-fg-faint">Plays mechanical key sounds during typing</span>
-                </div>
+            <CollapsibleCard
+              id="audio-typing-sfx"
+              title="Auto Typing Sounds"
+              icon={<Volume2 className="size-3.5 text-white" />}
+              badge={
                 <input
                   type="checkbox"
                   checked={project?.audioSettings?.typingSoundEnabled ?? true}
                   onChange={(e) => updateAudioSettings({ typingSoundEnabled: e.target.checked })}
                   className="size-4 accent-white rounded cursor-pointer"
                 />
-              </div>
+              }
+            >
+              <span className="block text-[10px] text-fg-faint -mt-1">
+                Plays mechanical key sounds during typing
+              </span>
 
               {(project?.audioSettings?.typingSoundEnabled ?? true) && (
                 <div className="space-y-2 pt-1 border-t border-ink-800/80">
@@ -1456,9 +2527,9 @@ export function ToolsSidebar() {
                   </div>
 
                   <div className="flex items-center justify-between text-[11px] pt-1">
-                    <span className="text-fg-muted">Typing Volume:</span>
+                    <span className="text-fg-muted">Typing Volume & Gain:</span>
                     <span className="font-mono text-white font-semibold">
-                      {Math.round((project?.audioSettings?.typingSoundVolume ?? 0.6) * 100)}%
+                      {Math.round((project?.audioSettings?.typingSoundVolume ?? 0.6) * 100)}% ({volumeToDb(project?.audioSettings?.typingSoundVolume ?? 0.6).toFixed(1)} dB)
                     </span>
                   </div>
                   <input
@@ -1471,133 +2542,230 @@ export function ToolsSidebar() {
                     className="w-full accent-white cursor-pointer h-1.5 bg-ink-800 rounded-lg"
                   />
 
-                  <button
-                    type="button"
-                    onClick={() => playTypingSoundPreview()}
-                    className="w-full mt-1 rounded-lg border border-ink-700 bg-ink-800/60 py-1 text-[11px] font-medium text-fg-muted hover:text-white hover:bg-ink-700 transition-colors flex items-center justify-center gap-1.5"
-                  >
-                    <Play className="size-3 fill-current" />
-                    <span>Test Typing Burst</span>
-                  </button>
+                  <div className="flex items-center gap-2 mt-1">
+                    <button
+                      type="button"
+                      onClick={() => playTypingSoundPreview()}
+                      className="flex-1 rounded-lg border border-ink-700 bg-ink-800/60 py-1 text-[11px] font-medium text-fg-muted hover:text-white hover:bg-ink-700 transition-colors flex items-center justify-center gap-1.5"
+                    >
+                      <Play className="size-3 fill-current" />
+                      <span>Test Typing Burst</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const vol = project?.audioSettings?.typingSoundVolume ?? 0.6;
+                        applyAudioVolumeToAll(vol, volumeToDb(vol), "sfx");
+                      }}
+                      className="rounded-lg border border-neutral-700 bg-neutral-800 hover:bg-neutral-700 py-1 px-2 text-[10px] font-semibold text-neutral-300 hover:text-white transition-colors"
+                      title="Apply this typing volume to all SFX tracks"
+                    >
+                      Apply to All SFX
+                    </button>
+                  </div>
                 </div>
               )}
-            </div>
+            </CollapsibleCard>
           </div>
-        )}
+          );
+        })()}
 
         {/* TAB 4: CANVAS & LOOKS */}
         {activeToolTab === "looks" && (
-          <div className="space-y-4">
-            {/* Header */}
-            <div className="flex items-center justify-between">
-              <span className="text-[11px] font-semibold uppercase tracking-wider text-fg-faint">
-                Canvas Presets
-              </span>
-              <span className="text-[10px] text-fg-muted font-mono">
-                {BACKGROUND_PRESETS.length} Presets
-              </span>
-            </div>
+          <div className="space-y-3">
+            {/* 1. Canvas Background Presets */}
+            <CollapsibleCard
+              id="looks-presets"
+              title="Canvas Presets"
+              icon={<Paintbrush className="size-3.5" />}
+              badge={
+                <span className="rounded bg-neutral-800 px-1.5 py-0.5 text-[9px] font-mono text-neutral-400">
+                  {BACKGROUND_PRESETS.length} Presets
+                </span>
+              }
+            >
+              {/* Category Filter Tabs */}
+              <div className="flex gap-1 overflow-x-auto pb-1 scrollbar-none text-[10px]">
+                <button
+                  type="button"
+                  onClick={() => setSelectedBgCategory("all")}
+                  className={`shrink-0 rounded-md px-2 py-1 font-medium transition-colors ${
+                    selectedBgCategory === "all"
+                      ? "bg-white text-black font-semibold shadow-sm"
+                      : "bg-ink-900 text-fg-muted hover:text-white hover:bg-ink-800 border border-ink-800"
+                  }`}
+                >
+                  All ({BACKGROUND_PRESETS.length})
+                </button>
+                {BACKGROUND_CATEGORIES.map((cat) => {
+                  const count = BACKGROUND_PRESETS.filter((p) => p.category === cat.id).length;
+                  const isActive = selectedBgCategory === cat.id;
+                  return (
+                    <button
+                      key={cat.id}
+                      type="button"
+                      onClick={() => setSelectedBgCategory(cat.id)}
+                      className={`shrink-0 rounded-md px-2 py-1 font-medium transition-colors whitespace-nowrap ${
+                        isActive
+                          ? "bg-white text-black font-semibold shadow-sm"
+                          : "bg-ink-900 text-fg-muted hover:text-white hover:bg-ink-800 border border-ink-800"
+                      }`}
+                    >
+                      {cat.label} ({count})
+                    </button>
+                  );
+                })}
+              </div>
 
-            {/* Category Filter Tabs */}
-            <div className="flex gap-1 overflow-x-auto pb-1 scrollbar-none text-[10px]">
-              <button
-                type="button"
-                onClick={() => setSelectedBgCategory("all")}
-                className={`shrink-0 rounded-md px-2 py-1 font-medium transition-colors ${
-                  selectedBgCategory === "all"
-                    ? "bg-white text-black font-semibold shadow-sm"
-                    : "bg-ink-900 text-fg-muted hover:text-white hover:bg-ink-800 border border-ink-800"
-                }`}
-              >
-                All ({BACKGROUND_PRESETS.length})
-              </button>
-              {BACKGROUND_CATEGORIES.map((cat) => {
-                const count = BACKGROUND_PRESETS.filter((p) => p.category === cat.id).length;
-                const isActive = selectedBgCategory === cat.id;
-                return (
-                  <button
-                    key={cat.id}
-                    type="button"
-                    onClick={() => setSelectedBgCategory(cat.id)}
-                    className={`shrink-0 rounded-md px-2 py-1 font-medium transition-colors whitespace-nowrap ${
-                      isActive
-                        ? "bg-white text-black font-semibold shadow-sm"
-                        : "bg-ink-900 text-fg-muted hover:text-white hover:bg-ink-800 border border-ink-800"
-                    }`}
-                  >
-                    {cat.label} ({count})
-                  </button>
+              {/* Categorized Preset Selector Grid */}
+              <div className="max-h-72 overflow-y-auto space-y-3 pr-1 scrollbar-thin">
+                {(selectedBgCategory === "all"
+                  ? BACKGROUND_CATEGORIES
+                  : BACKGROUND_CATEGORIES.filter((c) => c.id === selectedBgCategory)
+                ).map((cat) => {
+                  const catPresets = BACKGROUND_PRESETS.filter((p) => p.category === cat.id);
+                  if (catPresets.length === 0) return null;
+
+                  return (
+                    <div key={cat.id} className="space-y-1.5">
+                      <div className="flex items-center justify-between text-[10px] text-fg-muted font-medium">
+                        <span className="uppercase tracking-wider text-fg-faint font-semibold">
+                          {cat.label}
+                        </span>
+                        <span className="text-[9px] text-fg-faint font-mono">
+                          {catPresets.length}
+                        </span>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-2">
+                        {catPresets.map((preset) => {
+                          const isSelected = project?.looks.backgroundValue === preset.value;
+                          return (
+                            <button
+                              key={preset.id}
+                              type="button"
+                              onClick={() =>
+                                updateLooks({
+                                  backgroundType: preset.type,
+                                  backgroundValue: preset.value,
+                                })
+                              }
+                              className={`group relative h-16 w-full overflow-hidden rounded-lg border text-left transition-all ${
+                                isSelected
+                                  ? "border-white ring-2 ring-white/60 shadow-md scale-[1.02]"
+                                  : "border-ink-800 hover:border-neutral-500 hover:scale-[1.01]"
+                              }`}
+                              style={{ background: preset.value }}
+                              title={`${preset.name} (${cat.label})`}
+                            >
+                              {/* Contrast Protection Scrim */}
+                              <div className="absolute inset-0 flex flex-col justify-between p-2 bg-gradient-to-t from-black/80 via-black/25 to-transparent">
+                                <div className="flex items-center justify-between">
+                                  <span className="text-[8px] font-semibold uppercase tracking-wider text-white/75 truncate">
+                                    {preset.type}
+                                  </span>
+                                  {isSelected && (
+                                    <div className="flex size-3.5 items-center justify-center rounded-full bg-white text-black shadow">
+                                      <Check className="size-2.5 stroke-[3]" />
+                                    </div>
+                                  )}
+                                </div>
+                                <span className="text-[11px] font-bold text-white drop-shadow-sm truncate">
+                                  {preset.name}
+                                </span>
+                              </div>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </CollapsibleCard>
+
+            {/* 2. Aspect Ratio & Window Framing */}
+            <CollapsibleCard
+              id="looks-framing"
+              title="Aspect Ratio & Window Framing"
+              icon={<Sliders className="size-3.5" />}
+              badge={
+                <span className="rounded bg-neutral-800 px-1.5 py-0.5 text-[9px] font-mono text-neutral-400">
+                  {project?.looks.aspectRatio === "auto" ? "Native" : project?.looks.aspectRatio || "16:9"}
+                </span>
+              }
+            >
+              {/* Master Device Framing Toggle: Enabled | Disabled */}
+              {(() => {
+                const isMobileRecording = Boolean(
+                  (project?.summary.width && project?.summary.height && project?.summary.width < project?.summary.height) ||
+                  project?.looks.aspectRatio === "9:16" ||
+                  (project?.summary.name && /(android|iphone|samsung|pixel|mobile|ios|phone)/i.test(project.summary.name))
                 );
-              })}
-            </div>
-
-            {/* Categorized Preset Selector Grid */}
-            <div className="max-h-80 overflow-y-auto space-y-3.5 pr-1 scrollbar-thin">
-              {(selectedBgCategory === "all"
-                ? BACKGROUND_CATEGORIES
-                : BACKGROUND_CATEGORIES.filter((c) => c.id === selectedBgCategory)
-              ).map((cat) => {
-                const catPresets = BACKGROUND_PRESETS.filter((p) => p.category === cat.id);
-                if (catPresets.length === 0) return null;
+                const isIos = /(iphone|ios)/i.test(project?.summary.name || "");
+                const isFramingActive = (project?.looks.windowFrame ?? "none") !== "none" && (project?.looks.padding ?? 32) > 0;
 
                 return (
-                  <div key={cat.id} className="space-y-1.5">
-                    <div className="flex items-center justify-between text-[10px] text-fg-muted font-medium">
-                      <span className="uppercase tracking-wider text-fg-faint font-semibold">
-                        {cat.label}
-                      </span>
-                      <span className="text-[9px] text-fg-faint font-mono">
-                        {catPresets.length}
+                  <div className="flex items-center justify-between pb-2 border-b border-ink-800/80">
+                    <div>
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-[11px] font-semibold text-white">Device Framing</span>
+                        <span className="rounded bg-neutral-800 px-1.5 py-0.5 text-[8px] font-mono uppercase text-neutral-300">
+                          {isMobileRecording ? "Mobile Mode" : "Laptop/Desktop"}
+                        </span>
+                      </div>
+                      <span className="block text-[9px] text-fg-muted mt-0.5">
+                        {isFramingActive
+                          ? isMobileRecording
+                            ? "Phone chassis active"
+                            : "Laptop frame active"
+                          : "Frameless canvas (0 margin)"}
                       </span>
                     </div>
-
-                    <div className="grid grid-cols-2 gap-2">
-                      {catPresets.map((preset) => {
-                        const isSelected = project?.looks.backgroundValue === preset.value;
-                        return (
-                          <button
-                            key={preset.id}
-                            type="button"
-                            onClick={() =>
-                              updateLooks({
-                                backgroundType: preset.type,
-                                backgroundValue: preset.value,
-                              })
-                            }
-                            className={`group relative h-16 w-full overflow-hidden rounded-lg border text-left transition-all ${
-                              isSelected
-                                ? "border-white ring-2 ring-white/60 shadow-md scale-[1.02]"
-                                : "border-ink-800 hover:border-neutral-500 hover:scale-[1.01]"
-                            }`}
-                            style={{ background: preset.value }}
-                            title={`${preset.name} (${cat.label})`}
-                          >
-                            {/* Contrast Protection Scrim */}
-                            <div className="absolute inset-0 flex flex-col justify-between p-2 bg-gradient-to-t from-black/80 via-black/25 to-transparent">
-                              <div className="flex items-center justify-between">
-                                <span className="text-[8px] font-semibold uppercase tracking-wider text-white/75 truncate">
-                                  {preset.type}
-                                </span>
-                                {isSelected && (
-                                  <div className="flex size-3.5 items-center justify-center rounded-full bg-white text-black shadow">
-                                    <Check className="size-2.5 stroke-[3]" />
-                                  </div>
-                                )}
-                              </div>
-                              <span className="text-[11px] font-bold text-white drop-shadow-sm truncate">
-                                {preset.name}
-                              </span>
-                            </div>
-                          </button>
-                        );
-                      })}
+                    <div className="flex items-center gap-1 bg-ink-900 border border-ink-800 p-0.5 rounded-lg">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const targetFrame = isMobileRecording ? (isIos ? "iphone" : "android") : "macbook";
+                          updateLooks({
+                            windowFrame: targetFrame,
+                            padding: isMobileRecording ? 24 : 32,
+                            borderRadius: isMobileRecording ? (isIos ? 36 : 28) : 14,
+                            shadow: "lift",
+                            fit: "contain",
+                          });
+                        }}
+                        className={`px-2 py-0.5 text-[10px] font-semibold rounded-md transition-all ${
+                          isFramingActive
+                            ? "bg-white text-black font-bold shadow-sm"
+                            : "text-fg-muted hover:text-white"
+                        }`}
+                      >
+                        Enabled
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          updateLooks({
+                            windowFrame: "none",
+                            padding: 0,
+                            borderRadius: 0,
+                            shadow: "none",
+                          });
+                        }}
+                        className={`px-2 py-0.5 text-[10px] font-semibold rounded-md transition-all ${
+                          !isFramingActive
+                            ? "bg-white text-black font-bold shadow-sm"
+                            : "text-fg-muted hover:text-white"
+                        }`}
+                      >
+                        Disabled
+                      </button>
                     </div>
                   </div>
                 );
-              })}
-            </div>
+              })()}
 
-            <div className="space-y-3 pt-2">
               {/* Aspect Ratio & Display Mode */}
               <div className="space-y-1.5">
                 <div className="flex justify-between items-center text-[11px]">
@@ -1619,7 +2787,35 @@ export function ToolsSidebar() {
                       <button
                         key={asp.id}
                         type="button"
-                        onClick={() => updateLooks({ aspectRatio: asp.id })}
+                        onClick={() => {
+                          if (asp.id === "9:16") {
+                            const curFrame = project?.looks.windowFrame;
+                            const isDesktopFrame = !curFrame || curFrame === "terminal" || curFrame === "macos" || curFrame === "windows" || curFrame === "macbook" || curFrame === "none";
+                            if (isDesktopFrame) {
+                              updateLooks({
+                                aspectRatio: "9:16",
+                                windowFrame: "android",
+                                borderRadius: 28,
+                                padding: 24,
+                                fit: "contain",
+                              });
+                              return;
+                            }
+                          } else if (asp.id === "16:9") {
+                            const curFrame = project?.looks.windowFrame;
+                            if (curFrame === "android" || curFrame === "iphone") {
+                              updateLooks({
+                                aspectRatio: "16:9",
+                                windowFrame: "macbook",
+                                borderRadius: 14,
+                                padding: 32,
+                                fit: "contain",
+                              });
+                              return;
+                            }
+                          }
+                          updateLooks({ aspectRatio: asp.id });
+                        }}
                         className={`rounded-md py-1 text-[10px] font-semibold text-center transition-all ${
                           isSelected
                             ? "bg-white text-black shadow-sm font-bold"
@@ -1633,70 +2829,184 @@ export function ToolsSidebar() {
                 </div>
               </div>
 
-              {/* Quick Framing Presets: MacBook Terminal vs macOS Window vs Full Screen */}
-              <div className="grid grid-cols-3 gap-1 pt-1">
-                <button
-                  type="button"
-                  onClick={() =>
-                    updateLooks({
-                      padding: 32,
-                      borderRadius: 16,
-                      shadow: "lift",
-                      windowFrame: "terminal",
-                      fit: "contain",
-                    })
-                  }
-                  className={`rounded-lg py-1.5 px-1.5 text-[9.5px] font-semibold border transition-all truncate text-center ${
-                    project?.looks.windowFrame === "terminal"
-                      ? "border-emerald-400 bg-emerald-500/15 text-emerald-300 font-bold"
-                      : "border-ink-800 bg-ink-900/60 text-fg-muted hover:text-white hover:border-ink-700"
-                  }`}
-                  title="MacBook Terminal window frame with traffic lights and terminal title"
-                >
-                  MacBook Terminal
-                </button>
-                <button
-                  type="button"
-                  onClick={() =>
-                    updateLooks({
-                      padding: 32,
-                      borderRadius: 16,
-                      shadow: "lift",
-                      windowFrame: "macos",
-                      fit: "contain",
-                    })
-                  }
-                  className={`rounded-lg py-1.5 px-1.5 text-[9.5px] font-semibold border transition-all truncate text-center ${
-                    project?.looks.windowFrame === "macos"
-                      ? "border-white bg-white/15 text-white font-bold"
-                      : "border-ink-800 bg-ink-900/60 text-fg-muted hover:text-white hover:border-ink-700"
-                  }`}
-                  title="macOS studio window mockup frame"
-                >
-                  macOS Window
-                </button>
-                <button
-                  type="button"
-                  onClick={() =>
-                    updateLooks({
-                      padding: 0,
-                      borderRadius: 0,
-                      shadow: "none",
-                      windowFrame: "none",
-                      aspectRatio: "auto",
-                      fit: "contain",
-                    })
-                  }
-                  className={`rounded-lg py-1.5 px-1.5 text-[9.5px] font-semibold border transition-all truncate text-center ${
-                    (project?.looks.padding ?? 0) === 0 && project?.looks.windowFrame === "none"
-                      ? "border-amber-400 bg-amber-500/15 text-amber-300 font-bold"
-                      : "border-ink-800 bg-ink-900/60 text-fg-muted hover:text-white hover:border-ink-700"
-                  }`}
-                  title="Make recording fill the whole screen edge-to-edge with zero margins"
-                >
-                  Full Screen (0 Margin)
-                </button>
-              </div>
+              {/* Quick Framing Presets: Adaptive for Mobile vs Laptop/Desktop */}
+              {(() => {
+                const isMobileProj =
+                  (project?.summary.width && project?.summary.height && project?.summary.width < project?.summary.height) ||
+                  project?.looks.aspectRatio === "9:16";
+                return (
+                  <div className={`grid ${isMobileProj ? "grid-cols-4" : "grid-cols-4"} gap-1 pt-1`}>
+                    {isMobileProj ? (
+                      <>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            updateLooks({
+                              padding: 24,
+                              borderRadius: 24,
+                              shadow: "lift",
+                              windowFrame: "android",
+                              fit: "contain",
+                            })
+                          }
+                          className={`rounded-lg py-1.5 px-1 text-[9px] font-semibold border transition-all truncate text-center ${
+                            project?.looks.windowFrame === "android"
+                              ? "border-white bg-white/20 text-white font-bold"
+                              : "border-ink-800 bg-ink-900/60 text-fg-muted hover:text-white hover:border-ink-700"
+                          }`}
+                          title="Android Flagship punch-hole phone frame"
+                        >
+                          Android
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            updateLooks({
+                              padding: 24,
+                              borderRadius: 36,
+                              shadow: "lift",
+                              windowFrame: "iphone",
+                              fit: "contain",
+                            })
+                          }
+                          className={`rounded-lg py-1.5 px-1 text-[9px] font-semibold border transition-all truncate text-center ${
+                            project?.looks.windowFrame === "iphone"
+                              ? "border-white bg-white/20 text-white font-bold"
+                              : "border-ink-800 bg-ink-900/60 text-fg-muted hover:text-white hover:border-ink-700"
+                          }`}
+                          title="iPhone Pro Dynamic Island phone frame"
+                        >
+                          iPhone Pro
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            updateLooks({
+                              padding: 24,
+                              borderRadius: 24,
+                              shadow: "lift",
+                              windowFrame: "ipad",
+                              fit: "contain",
+                            })
+                          }
+                          className={`rounded-lg py-1.5 px-1 text-[9px] font-semibold border transition-all truncate text-center ${
+                            project?.looks.windowFrame === "ipad"
+                              ? "border-white bg-white/20 text-white font-bold"
+                              : "border-ink-800 bg-ink-900/60 text-fg-muted hover:text-white hover:border-ink-700"
+                          }`}
+                          title="iPad Tablet symmetrical bezel frame"
+                        >
+                          iPad
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            updateLooks({
+                              padding: 0,
+                              borderRadius: 0,
+                              shadow: "none",
+                              windowFrame: "none",
+                              fit: "contain",
+                            })
+                          }
+                          className={`rounded-lg py-1.5 px-1 text-[9px] font-semibold border transition-all truncate text-center ${
+                            (project?.looks.padding ?? 0) === 0 && project?.looks.windowFrame === "none"
+                              ? "border-white bg-white/20 text-white font-bold"
+                              : "border-ink-800 bg-ink-900/60 text-fg-muted hover:text-white hover:border-ink-700"
+                          }`}
+                          title="Edge-to-edge clean screen (0 Margin)"
+                        >
+                          Raw (0 Margin)
+                        </button>
+                      </>
+                    ) : (
+                      <>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            updateLooks({
+                              padding: 32,
+                              borderRadius: 14,
+                              shadow: "lift",
+                              windowFrame: "macbook",
+                              fit: "contain",
+                            })
+                          }
+                          className={`rounded-lg py-1.5 px-1 text-[9px] font-semibold border transition-all truncate text-center ${
+                            project?.looks.windowFrame === "macbook"
+                              ? "border-white bg-white/20 text-white font-bold"
+                              : "border-ink-800 bg-ink-900/60 text-fg-muted hover:text-white hover:border-ink-700"
+                          }`}
+                          title="MacBook Pro notch & aluminum chassis"
+                        >
+                          MacBook Pro
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            updateLooks({
+                              padding: 32,
+                              borderRadius: 16,
+                              shadow: "lift",
+                              windowFrame: "terminal",
+                              fit: "contain",
+                            })
+                          }
+                          className={`rounded-lg py-1.5 px-1 text-[9px] font-semibold border transition-all truncate text-center ${
+                            project?.looks.windowFrame === "terminal"
+                              ? "border-white bg-white/20 text-white font-bold"
+                              : "border-ink-800 bg-ink-900/60 text-fg-muted hover:text-white hover:border-ink-700"
+                          }`}
+                          title="MacBook Terminal window frame with traffic lights"
+                        >
+                          Terminal
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            updateLooks({
+                              padding: 32,
+                              borderRadius: 16,
+                              shadow: "lift",
+                              windowFrame: "macos",
+                              fit: "contain",
+                            })
+                          }
+                          className={`rounded-lg py-1.5 px-1 text-[9px] font-semibold border transition-all truncate text-center ${
+                            project?.looks.windowFrame === "macos"
+                              ? "border-white bg-white/20 text-white font-bold"
+                              : "border-ink-800 bg-ink-900/60 text-fg-muted hover:text-white hover:border-ink-700"
+                          }`}
+                          title="macOS studio window mockup frame"
+                        >
+                          macOS Window
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            updateLooks({
+                              padding: 0,
+                              borderRadius: 0,
+                              shadow: "none",
+                              windowFrame: "none",
+                              aspectRatio: "auto",
+                              fit: "contain",
+                            })
+                          }
+                          className={`rounded-lg py-1.5 px-1 text-[9px] font-semibold border transition-all truncate text-center ${
+                            (project?.looks.padding ?? 0) === 0 && project?.looks.windowFrame === "none"
+                              ? "border-white bg-white/20 text-white font-bold"
+                              : "border-ink-800 bg-ink-900/60 text-fg-muted hover:text-white hover:border-ink-700"
+                          }`}
+                          title="Make recording fill the whole screen edge-to-edge with zero margins"
+                        >
+                          Full Screen
+                        </button>
+                      </>
+                    )}
+                  </div>
+                );
+              })()}
 
               {/* Framing Fit Mode */}
               <div className="pt-1">
@@ -1755,53 +3065,179 @@ export function ToolsSidebar() {
                 <input
                   type="range"
                   min="0"
-                  max="36"
+                  max="48"
                   value={project?.looks.borderRadius ?? 16}
                   onChange={(e) => updateLooks({ borderRadius: parseInt(e.target.value, 10) })}
                   className="w-full accent-white cursor-pointer h-1.5 bg-ink-800 rounded-lg mt-1"
                 />
               </div>
 
-              {/* Window Mockup Frame */}
-              <div className="pt-2 border-t border-ink-800/80">
-                <span className="block text-[11px] font-semibold text-white mb-1.5">
-                  Window Frame Shell
-                </span>
-                <div className="grid grid-cols-2 gap-1.5">
-                  {[
-                    { id: "macos" as const, label: "macOS Window", desc: "Cupertino traffic lights" },
-                    { id: "windows" as const, label: "Windows Terminal", desc: "Win 11 PowerShell with controls" },
-                    { id: "terminal" as const, label: "macOS Terminal", desc: "Dark zsh terminal prompt" },
-                    { id: "chrome" as const, label: "Google Chrome", desc: "Tab strip + Omnibox URL" },
-                    { id: "safari" as const, label: "Safari Browser", desc: "Unified address bar" },
-                    { id: "glass" as const, label: "Frosted Glass", desc: "Translucent glass shell" },
-                    { id: "none" as const, label: "Frameless", desc: "Edge-to-edge raw canvas" },
-                  ].map((wf) => {
-                    const isActive = (project?.looks.windowFrame || "macos") === wf.id;
-                    return (
-                      <button
-                        key={wf.id}
-                        type="button"
-                        onClick={() => updateLooks({ windowFrame: wf.id })}
-                        className={`rounded-lg py-1.5 px-2 text-left transition-all border ${
-                          isActive
-                            ? "bg-white text-black font-bold shadow-sm border-white"
-                            : "bg-ink-900 border-ink-800 text-fg-muted hover:text-white hover:bg-ink-800"
-                        }`}
-                      >
-                        <span className="block text-[11px] font-semibold leading-tight">{wf.label}</span>
-                        <span className={`block text-[9px] leading-tight mt-0.5 ${isActive ? "text-neutral-700 font-medium" : "text-fg-faint"}`}>
-                          {wf.desc}
+              {/* Device Chassis & Window Mockup Frames */}
+              {(() => {
+                const isMobileRecording = Boolean(
+                  (project?.summary.width && project?.summary.height && project?.summary.width < project?.summary.height) ||
+                  project?.looks.aspectRatio === "9:16" ||
+                  (project?.summary.name && /(android|iphone|samsung|pixel|mobile|ios|phone)/i.test(project.summary.name))
+                );
+
+                return (
+                  <div className="pt-2 border-t border-ink-800/80 space-y-3">
+                    {/* 1. Physical Device Chassis */}
+                    <div>
+                      <div className="flex items-center justify-between mb-1.5">
+                        <span className="text-[11px] font-semibold text-white">
+                          Device Frames
                         </span>
-                      </button>
-                    );
-                  })}
-                </div>
+                        <span className="text-[9px] font-medium text-neutral-400">
+                          {isMobileRecording ? "Mobile & Tablet Active" : "Laptop & Desktop Active"}
+                        </span>
+                      </div>
+                      <div className="grid grid-cols-2 gap-1.5">
+                        {[
+                          { id: "iphone" as const, label: "iPhone Pro", desc: "Dynamic Island + home bar", defaultRadius: 36, isMobileOnly: true },
+                          { id: "android" as const, label: "Android Flagship", desc: "Punch-hole + nav bar", defaultRadius: 24, isMobileOnly: true },
+                          { id: "macbook" as const, label: "MacBook Pro", desc: "Camera notch + aluminum lip", defaultRadius: 14, isDesktopOnly: true },
+                          { id: "laptop" as const, label: "Modern Laptop", desc: "Webcam bezel + hinge deck", defaultRadius: 10, isDesktopOnly: true },
+                          { id: "ipad" as const, label: "iPad Tablet", desc: "Symmetrical front camera", defaultRadius: 24, isMobileOnly: false },
+                          { id: "imac" as const, label: "iMac Display", desc: "Studio chin + stand neck", defaultRadius: 12, isDesktopOnly: true },
+                        ].map((df) => {
+                          const isActive = project?.looks.windowFrame === df.id;
+                          const isDisabled = isMobileRecording ? Boolean(df.isDesktopOnly) : Boolean(df.isMobileOnly);
+                          const disabledBadge = isMobileRecording ? "Laptop only" : "Phone only";
 
-              </div>
+                          return (
+                            <button
+                              key={df.id}
+                              type="button"
+                              disabled={isDisabled}
+                              onClick={() => {
+                                if (isDisabled) return;
+                                updateLooks({
+                                  windowFrame: df.id,
+                                  borderRadius:
+                                    project?.looks.borderRadius === 0 || !project?.looks.borderRadius
+                                      ? df.defaultRadius
+                                      : project.looks.borderRadius,
+                                  padding: (project?.looks.padding ?? 0) === 0 ? (isMobileRecording ? 24 : 32) : project?.looks.padding,
+                                  shadow: (project?.looks.shadow ?? "none") === "none" ? "lift" : project?.looks.shadow,
+                                });
+                              }}
+                              className={`rounded-lg py-1.5 px-2 text-left transition-all border ${
+                                isDisabled
+                                  ? "opacity-35 cursor-not-allowed bg-ink-950/60 border-ink-800/40 text-fg-faint pointer-events-none"
+                                  : isActive
+                                  ? "bg-white text-black font-bold shadow-sm border-white"
+                                  : "bg-ink-900 border-ink-800 text-fg-muted hover:text-white hover:bg-ink-800"
+                              }`}
+                              title={isDisabled ? `Disabled for this recording (${disabledBadge})` : `${df.label} chassis`}
+                            >
+                              <div className="flex items-center justify-between gap-1">
+                                <span className="block text-[11px] font-semibold leading-tight truncate">{df.label}</span>
+                                {isDisabled && (
+                                  <span className="text-[7.5px] font-mono px-1 py-0.2 rounded bg-ink-800/80 text-neutral-400 border border-ink-700/60 shrink-0">
+                                    {disabledBadge}
+                                  </span>
+                                )}
+                              </div>
+                              <span className={`block text-[9px] leading-tight mt-0.5 ${isActive && !isDisabled ? "text-neutral-700 font-medium" : "text-fg-faint"}`}>
+                                {df.desc}
+                              </span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
 
+                    {/* 2. Desktop Window Shells */}
+                    <div>
+                      <div className="flex items-center justify-between mb-1.5">
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-[11px] font-semibold text-white">
+                            Window Shells
+                          </span>
+                          {isMobileRecording && (
+                            <span className="text-[8px] font-mono px-1.5 py-0.5 rounded bg-ink-900 text-neutral-500 border border-ink-800 uppercase">
+                              Laptop only
+                            </span>
+                          )}
+                        </div>
+                        <span className="text-[9px] font-medium text-neutral-400">
+                          {isMobileRecording ? "Disabled on Mobile" : "OS & Browsers"}
+                        </span>
+                      </div>
+                      <div className="grid grid-cols-2 gap-1.5">
+                        {[
+                          { id: "macos" as const, label: "macOS Window", desc: "Cupertino traffic lights", isDesktopOnly: true },
+                          { id: "windows" as const, label: "Windows 11", desc: "Win 11 PowerShell tab + controls", isDesktopOnly: true },
+                          { id: "terminal" as const, label: "macOS Terminal", desc: "Dark zsh terminal prompt", isDesktopOnly: true },
+                          { id: "chrome" as const, label: "Google Chrome", desc: "Tab strip + Omnibox URL", isDesktopOnly: true },
+                          { id: "safari" as const, label: "Safari Browser", desc: "Unified address bar", isDesktopOnly: true },
+                          { id: "glass" as const, label: "Frosted Glass", desc: "Translucent glass shell", isDesktopOnly: true },
+                          { id: "none" as const, label: "Frameless", desc: "Edge-to-edge raw canvas", isDesktopOnly: false },
+                        ].map((wf) => {
+                          const isActive = (project?.looks.windowFrame || "macos") === wf.id;
+                          const isDisabled = isMobileRecording && wf.isDesktopOnly;
+
+                          return (
+                            <button
+                              key={wf.id}
+                              type="button"
+                              disabled={isDisabled}
+                              onClick={() => {
+                                if (isDisabled) return;
+                                if (wf.id === "none") {
+                                  updateLooks({ windowFrame: "none", padding: 0, borderRadius: 0, shadow: "none" });
+                                } else {
+                                  updateLooks({
+                                    windowFrame: wf.id,
+                                    padding: (project?.looks.padding ?? 0) === 0 ? 32 : project?.looks.padding,
+                                    shadow: (project?.looks.shadow ?? "none") === "none" ? "lift" : project?.looks.shadow,
+                                  });
+                                }
+                              }}
+                              className={`rounded-lg py-1.5 px-2 text-left transition-all border ${
+                                isDisabled
+                                  ? "opacity-35 cursor-not-allowed bg-ink-950/60 border-ink-800/40 text-fg-faint pointer-events-none"
+                                  : isActive
+                                  ? "bg-white text-black font-bold shadow-sm border-white"
+                                  : "bg-ink-900 border-ink-800 text-fg-muted hover:text-white hover:bg-ink-800"
+                              }`}
+                              title={isDisabled ? "Desktop window shells are disabled for mobile recordings" : wf.label}
+                            >
+                              <div className="flex items-center justify-between gap-1">
+                                <span className="block text-[11px] font-semibold leading-tight truncate">{wf.label}</span>
+                                {isDisabled && (
+                                  <span className="text-[7.5px] font-mono px-1 py-0.2 rounded bg-ink-800/80 text-neutral-400 border border-ink-700/60 shrink-0">
+                                    Laptop only
+                                  </span>
+                                )}
+                              </div>
+                              <span className={`block text-[9px] leading-tight mt-0.5 ${isActive && !isDisabled ? "text-neutral-700 font-medium" : "text-fg-faint"}`}>
+                                {wf.desc}
+                              </span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()}
+            </CollapsibleCard>
+
+            {/* 3. 3D Tilt & Camera Physics */}
+            <CollapsibleCard
+              id="looks-tilt"
+              title="3D Tilt & Camera Physics"
+              icon={<Sparkles className="size-3.5" />}
+              badge={
+                <span className="rounded bg-neutral-800 px-1.5 py-0.5 text-[9px] font-mono text-neutral-400 capitalize">
+                  {project?.looks.cameraPhysics || "spring"}
+                </span>
+              }
+            >
               {/* 3D Perspective Tilt Plot Box & Kinetic Motion Engine */}
-              <div className="pt-2 border-t border-ink-800/80">
+              <div>
                 <TiltController />
               </div>
 
@@ -1835,9 +3271,27 @@ export function ToolsSidebar() {
                   })}
                 </div>
               </div>
+            </CollapsibleCard>
 
+            {/* 4. Ambient Glow & Brand Accent */}
+            <CollapsibleCard
+              id="looks-ambient"
+              title="Ambient Glow & Brand Accent"
+              icon={<SunMedium className="size-3.5" />}
+              badge={
+                <span
+                  className={`rounded px-1.5 py-0.5 text-[9px] font-semibold ${
+                    project?.looks.ambientBackdropBlur
+                      ? "bg-white text-black"
+                      : "bg-neutral-800 text-neutral-400"
+                  }`}
+                >
+                  {project?.looks.ambientBackdropBlur ? "Glow On" : "Off"}
+                </span>
+              }
+            >
               {/* Ambient Video Blur Glow Toggle */}
-              <div className="pt-2 border-t border-ink-800/80 flex items-center justify-between">
+              <div className="flex items-center justify-between">
                 <div>
                   <span className="block text-xs font-semibold text-white">Ambient Blur Glow</span>
                   <span className="block text-[10px] text-fg-faint">
@@ -1863,31 +3317,42 @@ export function ToolsSidebar() {
                 <div className="flex items-center gap-2">
                   <input
                     type="color"
-                    value={project?.looks.brandAccentColor || "#6366f1"}
+                    value={project?.looks.brandAccentColor || "#ffffff"}
                     onChange={(e) => updateLooks({ brandAccentColor: e.target.value })}
                     className="size-6 rounded cursor-pointer bg-transparent border-0 p-0"
                   />
                   <span className="font-mono text-[11px] text-white">
-                    {project?.looks.brandAccentColor || "#6366f1"}
+                    {project?.looks.brandAccentColor || "#ffffff"}
                   </span>
                 </div>
               </div>
-            </div>
+            </CollapsibleCard>
           </div>
         )}
 
         {/* TAB 5: CURSOR & AUTOTRACKING (OPENSCREEN) */}
         {activeToolTab === "cursor" && (
-          <div className="space-y-4">
-            <span className="text-[11px] font-semibold uppercase tracking-wider text-fg-faint">
-              OpenScreen Auto-Tracking & Cursor
-            </span>
-
-            {/* 1. Auto-Track Camera Toggle */}
-            <div className="rounded-xl border border-ink-800 bg-ink-900/80 p-3 shadow-sm space-y-3">
+          <div className="space-y-3">
+            {/* 1. Dynamic Camera Reframing */}
+            <CollapsibleCard
+              id="cursor-reframing"
+              title="Dynamic Camera Reframing"
+              icon={<Crosshair className="size-3.5" />}
+              badge={
+                <span
+                  className={`rounded px-1.5 py-0.5 text-[9px] font-semibold ${
+                    project?.looks.autoTrackCursor
+                      ? "bg-white text-black"
+                      : "bg-neutral-800 text-neutral-400"
+                  }`}
+                >
+                  {project?.looks.autoTrackCursor ? "Active" : "Off"}
+                </span>
+              }
+            >
               <div className="flex items-center justify-between">
                 <div>
-                  <span className="block text-xs font-semibold text-white">Dynamic Camera Reframing</span>
+                  <span className="block text-xs font-semibold text-white">Auto-Track Cursor</span>
                   <span className="block text-[10px] text-fg-faint">
                     Gently reframes camera on highlights or wide drags
                   </span>
@@ -1901,7 +3366,7 @@ export function ToolsSidebar() {
               </div>
 
               {Boolean(project?.looks.autoTrackCursor) && (
-                <div className="space-y-1 pt-1 border-t border-ink-800/80">
+                <div className="space-y-1 pt-2 border-t border-ink-800/80">
                   <div className="flex justify-between text-[11px]">
                     <span className="text-fg-muted">Follow Zoom Scale</span>
                     <span className="font-mono text-white font-semibold">
@@ -1919,59 +3384,94 @@ export function ToolsSidebar() {
                   />
                 </div>
               )}
-            </div>
+            </CollapsibleCard>
 
-            {/* 2. Expanded Cursor Size Multiplier & Quick Presets */}
-            <div className="rounded-xl border border-ink-800 bg-ink-900/80 p-3 shadow-sm space-y-2">
-              <div className="flex justify-between text-[11px]">
-                <span className="text-fg-muted">Cursor Size</span>
-                <span className="font-mono text-white font-semibold">
-                  {(project?.looks.cursorSize ?? 1.4).toFixed(2)}x ({Math.round((project?.looks.cursorSize ?? 1.4) * 100)}%)
+            {/* 2. Cursor Size Multiplier & Trajectory Smoothing */}
+            <CollapsibleCard
+              id="cursor-size-motion"
+              title="Cursor Size & Smoothing"
+              icon={<MousePointer className="size-3.5" />}
+              badge={
+                <span className="rounded bg-neutral-800 px-1.5 py-0.5 text-[9px] font-mono text-neutral-400">
+                  {(project?.looks.cursorSize ?? 1.4).toFixed(1)}x
                 </span>
+              }
+            >
+              <div className="space-y-2">
+                <div className="flex justify-between text-[11px]">
+                  <span className="text-fg-muted">Cursor Size</span>
+                  <span className="font-mono text-white font-semibold">
+                    {(project?.looks.cursorSize ?? 1.4).toFixed(2)}x ({Math.round((project?.looks.cursorSize ?? 1.4) * 100)}%)
+                  </span>
+                </div>
+                <input
+                  type="range"
+                  min="0.6"
+                  max="3.0"
+                  step="0.05"
+                  value={project?.looks.cursorSize ?? 1.4}
+                  onChange={(e) => updateLooks({ cursorSize: parseFloat(e.target.value) })}
+                  className="w-full accent-white cursor-pointer h-1.5 bg-ink-800 rounded-lg"
+                />
+
+                {/* Quick Presets: S, M, L, XL */}
+                <div className="grid grid-cols-4 gap-1.5 pt-1">
+                  {[
+                    { label: "S", value: 0.8, tooltip: "Small (0.8x)" },
+                    { label: "M", value: 1.4, tooltip: "Medium (1.4x - Default)" },
+                    { label: "L", value: 2.0, tooltip: "Large (2.0x)" },
+                    { label: "XL", value: 2.8, tooltip: "Extra Large (2.8x)" },
+                  ].map((preset) => {
+                    const isPresetActive = Math.abs((project?.looks.cursorSize ?? 1.4) - preset.value) < 0.04;
+                    return (
+                      <button
+                        key={preset.label}
+                        type="button"
+                        onClick={() => updateLooks({ cursorSize: preset.value })}
+                        className={`rounded-md py-1 text-[10px] font-semibold transition-all ${
+                          isPresetActive
+                            ? "bg-white text-black font-bold shadow-sm"
+                            : "bg-ink-800 text-fg-muted hover:text-white hover:bg-ink-700"
+                        }`}
+                        title={preset.tooltip}
+                      >
+                        {preset.label} ({preset.value}x)
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
-              <input
-                type="range"
-                min="0.6"
-                max="3.0"
-                step="0.05"
-                value={project?.looks.cursorSize ?? 1.4}
-                onChange={(e) => updateLooks({ cursorSize: parseFloat(e.target.value) })}
-                className="w-full accent-white cursor-pointer h-1.5 bg-ink-800 rounded-lg"
-              />
 
-              {/* Quick Presets: S, M, L, XL */}
-              <div className="grid grid-cols-4 gap-1.5 pt-1">
-                {[
-                  { label: "S", value: 0.8, tooltip: "Small (0.8x)" },
-                  { label: "M", value: 1.4, tooltip: "Medium (1.4x - Default)" },
-                  { label: "L", value: 2.0, tooltip: "Large (2.0x)" },
-                  { label: "XL", value: 2.8, tooltip: "Extra Large (2.8x)" },
-                ].map((preset) => {
-                  const isPresetActive = Math.abs((project?.looks.cursorSize ?? 1.4) - preset.value) < 0.04;
-                  return (
-                    <button
-                      key={preset.label}
-                      type="button"
-                      onClick={() => updateLooks({ cursorSize: preset.value })}
-                      className={`rounded-md py-1 text-[10px] font-semibold transition-all ${
-                        isPresetActive
-                          ? "bg-white text-black font-bold shadow-sm"
-                          : "bg-ink-800 text-fg-muted hover:text-white hover:bg-ink-700"
-                      }`}
-                      title={preset.tooltip}
-                    >
-                      {preset.label} ({preset.value}x)
-                    </button>
-                  );
-                })}
+              {/* Trajectory Smoothing Presets */}
+              <div className="space-y-2 pt-2 border-t border-ink-800/80">
+                <label className="text-[11px] text-fg-muted block">Cursor Motion Smoothing</label>
+                <div className="grid grid-cols-3 gap-1.5">
+                  {[
+                    { id: "none" as const, label: "Raw (None)" },
+                    { id: "smooth" as const, label: "Balanced" },
+                    { id: "cinematic" as const, label: "Cinematic" },
+                  ].map((sm) => {
+                    const isActive = (project?.looks.cursorSmoothing ?? "smooth") === sm.id;
+                    return (
+                      <button
+                        key={sm.id}
+                        type="button"
+                        onClick={() => updateLooks({ cursorSmoothing: sm.id })}
+                        className={`rounded-lg py-1.5 px-2 text-[10px] font-semibold transition-all ${
+                          isActive
+                            ? "bg-white text-black font-bold shadow-sm"
+                            : "bg-ink-800 text-fg-muted hover:text-white hover:bg-ink-700"
+                        }`}
+                      >
+                        {sm.label}
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
+            </CollapsibleCard>
 
-              <p className="text-[10px] text-fg-faint">
-                Smooth vector pointer scale from 0.6x (compact) to 3.0x (presentation).
-              </p>
-            </div>
-
-            {/* 3. Presenter Avatar Badge Customization Controls */}
+            {/* 3. Presenter Avatar Badge Customization */}
             {(() => {
               const avatar = project?.looks.cursorAvatar ?? DEFAULT_CURSOR_AVATAR;
               const updateAvatar = (partial: Partial<CursorAvatar>) => {
@@ -1985,7 +3485,22 @@ export function ToolsSidebar() {
               };
 
               return (
-                <div className="rounded-xl border border-ink-800 bg-ink-900/80 p-3 shadow-sm space-y-3">
+                <CollapsibleCard
+                  id="cursor-avatar"
+                  title="Presenter Avatar Badge"
+                  icon={<User className="size-3.5" />}
+                  badge={
+                    <span
+                      className={`rounded px-1.5 py-0.5 text-[9px] font-semibold ${
+                        avatar.enabled
+                          ? "bg-white text-black"
+                          : "bg-neutral-800 text-neutral-400"
+                      }`}
+                    >
+                      {avatar.enabled ? "Active" : "Off"}
+                    </span>
+                  }
+                >
                   {/* Avatar Enable Toggle */}
                   <div className="flex items-center justify-between">
                     <div>
@@ -2125,38 +3640,38 @@ export function ToolsSidebar() {
                         </div>
                       )}
 
-                      {/* Badge Accent Color */}
+                      {/* Badge Accent Color (Monochrome / Neutral Palette) */}
                       <div>
                         <div className="flex items-center justify-between mb-1">
                           <label className="text-[10px] font-medium text-fg-muted">Badge Color</label>
-                          <span className="font-mono text-[10px] text-white">{avatar.color || "#6366f1"}</span>
+                          <span className="font-mono text-[10px] text-white">{avatar.color || "#ffffff"}</span>
                         </div>
                         <div className="flex items-center gap-2">
                           <input
                             type="color"
-                            value={avatar.color || "#6366f1"}
+                            value={avatar.color || "#ffffff"}
                             onChange={(e) => updateAvatar({ color: e.target.value })}
                             className="size-6 rounded cursor-pointer bg-transparent border-0 p-0"
                           />
                           <div className="flex flex-wrap gap-1">
                             {[
-                              "#6366f1",
-                              "#ec4899",
-                              "#10b981",
-                              "#f59e0b",
-                              "#3b82f6",
-                              "#8b5cf6",
-                              "#ef4444",
-                              "#06b6d4",
+                              "#ffffff",
+                              "#e4e4e7",
+                              "#a1a1aa",
+                              "#71717a",
+                              "#52525b",
+                              "#27272a",
+                              "#18181b",
+                              "#09090b",
                             ].map((c) => (
                               <button
                                 key={c}
                                 type="button"
                                 onClick={() => updateAvatar({ color: c })}
                                 className={`size-4 rounded-full border transition-transform ${
-                                  (avatar.color || "#6366f1") === c
+                                  (avatar.color || "#ffffff") === c
                                     ? "scale-125 border-white ring-1 ring-white"
-                                    : "border-ink-800"
+                                    : "border-neutral-700"
                                 }`}
                                 style={{ backgroundColor: c }}
                               />
@@ -2186,7 +3701,7 @@ export function ToolsSidebar() {
                         <div className="flex items-center gap-1.5">
                           <div
                             className="flex size-6 shrink-0 items-center justify-center rounded-full text-[10px] font-bold text-white shadow-sm overflow-hidden"
-                            style={{ backgroundColor: avatar.color || "#6366f1" }}
+                            style={{ backgroundColor: avatar.color || "#ffffff", color: avatar.color === "#ffffff" ? "#000000" : "#ffffff" }}
                           >
                             {avatar.type === "initials" && (avatar.value || "DL")}
                             {avatar.type === "text" && (avatar.value || "Host")}
@@ -2218,123 +3733,65 @@ export function ToolsSidebar() {
                       </div>
                     </div>
                   )}
-                </div>
+                </CollapsibleCard>
               );
             })()}
 
-            {/* 4. Trajectory Smoothing Presets */}
-            <div className="space-y-2">
-              <label className="text-[11px] text-fg-muted block">Cursor Motion Smoothing</label>
-              <div className="grid grid-cols-3 gap-1.5">
-                {[
-                  { id: "none" as const, label: "Raw (None)" },
-                  { id: "smooth" as const, label: "Balanced" },
-                  { id: "cinematic" as const, label: "Cinematic" },
-                ].map((sm) => {
-                  const isActive = (project?.looks.cursorSmoothing ?? "smooth") === sm.id;
-                  return (
-                    <button
-                      key={sm.id}
-                      type="button"
-                      onClick={() => updateLooks({ cursorSmoothing: sm.id })}
-                      className={`rounded-lg py-1.5 px-2 text-[10px] font-semibold transition-all ${
-                        isActive
-                          ? "bg-white text-black font-bold shadow-sm"
-                          : "bg-ink-800 text-fg-muted hover:text-white hover:bg-ink-700"
-                      }`}
-                    >
-                      {sm.label}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-
-            {/* 5. Pointer Style (Catalog of 24 Presets) */}
-            <div className="space-y-2">
-              <div className="flex justify-between items-center">
-                <label className="text-[11px] text-fg-muted block">Cursor Pointer Style</label>
-                <span className="text-[10px] text-fg-faint font-mono">24 Designs</span>
-              </div>
-              <div className="grid grid-cols-2 gap-1.5 max-h-56 overflow-y-auto pr-1 scrollbar-thin">
-                {CURSOR_PRESETS.map((cur) => {
-                  const isActive = project?.looks.cursorStyle === cur.id;
-                  return (
-                    <button
-                      key={cur.id}
-                      type="button"
-                      onClick={() => updateLooks({ cursorStyle: cur.id, showCursor: cur.id !== "hidden" })}
-                      className={`rounded-lg border p-2 text-left text-xs transition-all ${
-                        isActive
-                          ? "border-white bg-white/20 text-white font-bold ring-1 ring-white/50"
-                          : "border-ink-800 bg-ink-900 text-fg-muted hover:text-fg hover:border-neutral-600"
-                      }`}
-                      title={`${cur.name}: ${cur.description}`}
-                    >
-                      <span className="block truncate font-semibold text-[11px] text-fg">{cur.name}</span>
-                      <span className="block text-[9px] text-fg-faint capitalize">{cur.category}</span>
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-
-            {/* 5. Click Ripples */}
-            <div className="flex items-center justify-between rounded-xl border border-ink-800 bg-ink-900 p-3">
-              <div>
-                <span className="block text-xs font-semibold text-fg">Click Ripples</span>
-                <span className="block text-[10px] text-fg-faint">
-                  Expand glowing rings on click locations
+            {/* 4. Pointer Style & Click Ripples */}
+            <CollapsibleCard
+              id="cursor-style-ripples"
+              title="Cursor Pointer Style & Ripples"
+              icon={<Sparkles className="size-3.5" />}
+              badge={
+                <span className="rounded bg-neutral-800 px-1.5 py-0.5 text-[9px] font-mono text-neutral-400">
+                  {project?.looks.showClickRipples ? "Ripples On" : "24 Designs"}
                 </span>
-              </div>
-              <input
-                type="checkbox"
-                checked={project?.looks.showClickRipples ?? true}
-                onChange={(e) => updateLooks({ showClickRipples: e.target.checked })}
-                className="size-4 accent-white rounded cursor-pointer"
-              />
-            </div>
-          </div>
-        )}
-
-        {/* TAB 6: EXPORT */}
-        {activeToolTab === "export" && (
-          <div className="space-y-4">
-            <span className="text-[11px] font-semibold uppercase tracking-wider text-fg-faint">
-              Export Rendering
-            </span>
-
-            <div className="space-y-2">
-              <div className="rounded-xl border border-ink-800 bg-ink-900 p-3 space-y-2">
-                <div className="flex justify-between text-xs">
-                  <span className="text-fg font-medium">Quality Profile</span>
-                  <span className="text-white font-bold">1080p 60 FPS</span>
+              }
+            >
+              <div className="space-y-2">
+                <div className="flex justify-between items-center">
+                  <label className="text-[11px] text-fg-muted block">Cursor Pointer Style</label>
+                  <span className="text-[10px] text-fg-faint font-mono">24 Designs</span>
                 </div>
-                <p className="text-[11px] text-fg-faint">
-                  Ultra-smooth spring camera motion with zero jitter and crisp UI text.
-                </p>
-              </div>
-
-              <div className="grid grid-cols-2 gap-2 text-center text-xs">
-                <div className="rounded-lg border border-ink-800 bg-ink-900/60 p-2">
-                  <span className="text-fg-faint text-[10px] block">Encoder</span>
-                  <span className="font-semibold text-fg">H.264 / MP4</span>
-                </div>
-                <div className="rounded-lg border border-ink-800 bg-ink-900/60 p-2">
-                  <span className="text-fg-faint text-[10px] block">Platform</span>
-                  <span className="font-semibold text-fg">Desktop & Mobile</span>
+                <div className="grid grid-cols-2 gap-1.5 max-h-52 overflow-y-auto pr-1 scrollbar-thin">
+                  {CURSOR_PRESETS.map((cur) => {
+                    const isActive = project?.looks.cursorStyle === cur.id;
+                    return (
+                      <button
+                        key={cur.id}
+                        type="button"
+                        onClick={() => updateLooks({ cursorStyle: cur.id, showCursor: cur.id !== "hidden" })}
+                        className={`rounded-lg border p-2 text-left text-xs transition-all ${
+                          isActive
+                            ? "border-white bg-white/20 text-white font-bold ring-1 ring-white/50"
+                            : "border-ink-800 bg-ink-900 text-fg-muted hover:text-fg hover:border-neutral-600"
+                        }`}
+                        title={`${cur.name}: ${cur.description}`}
+                      >
+                        <span className="block truncate font-semibold text-[11px] text-fg">{cur.name}</span>
+                        <span className="block text-[9px] text-fg-faint capitalize">{cur.category}</span>
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
 
-              <button
-                type="button"
-                onClick={() => setExportModalOpen(true)}
-                className="w-full rounded-xl bg-white py-2.5 text-center text-xs font-bold text-black hover:bg-neutral-200 transition-colors shadow-sm flex items-center justify-center gap-2 mt-3"
-              >
-                <Download className="size-4" />
-                Render & Export Video
-              </button>
-            </div>
+              {/* Click Ripples Toggle */}
+              <div className="flex items-center justify-between pt-2 border-t border-ink-800/80">
+                <div>
+                  <span className="block text-xs font-semibold text-fg">Click Ripples</span>
+                  <span className="block text-[10px] text-fg-faint">
+                    Expand glowing rings on click locations
+                  </span>
+                </div>
+                <input
+                  type="checkbox"
+                  checked={project?.looks.showClickRipples ?? true}
+                  onChange={(e) => updateLooks({ showClickRipples: e.target.checked })}
+                  className="size-4 accent-white rounded cursor-pointer"
+                />
+              </div>
+            </CollapsibleCard>
           </div>
         )}
       </div>
@@ -2383,6 +3840,60 @@ export function ToolsSidebar() {
                 className="flex-1 rounded bg-danger/10 text-danger hover:bg-danger/20 py-1 text-[10px] font-semibold transition-colors text-center"
               >
                 Delete Block
+              </button>
+            </div>
+          </div>
+        ) : selectedAudio ? (
+          <div className="space-y-2">
+            <div className="flex items-center justify-between pb-1 border-b border-ink-800">
+              <span className="font-semibold text-white text-[11px] flex items-center gap-1.5 truncate">
+                <Volume2 className="size-3 text-white shrink-0" />
+                Audio: {selectedAudio.name}
+              </span>
+              <button
+                type="button"
+                onClick={() => selectAudio(null)}
+                className="text-[10px] text-neutral-400 hover:text-white"
+              >
+                Close
+              </button>
+            </div>
+            <div className="flex justify-between text-[10px] text-neutral-400">
+              <span>Gain: <b className="text-white font-mono">{(selectedAudio.gainDb ?? 0).toFixed(1)} dB</b></span>
+              <span>Fade: <b className="text-white font-mono">{(((selectedAudio.fadeInMs ?? 0) / 1000)).toFixed(1)}s in / {(((selectedAudio.fadeOutMs ?? 0) / 1000)).toFixed(1)}s out</b></span>
+            </div>
+            <input
+              type="range"
+              min="-36"
+              max="12"
+              step="0.5"
+              value={selectedAudio.gainDb ?? 0}
+              onChange={(e) => {
+                const db = parseFloat(e.target.value);
+                updateAudioTrack(selectedAudio.id, {
+                  gainDb: db,
+                  volume: dbToVolume(db),
+                });
+              }}
+              className="w-full accent-white cursor-pointer h-1.5 bg-ink-800 rounded-lg"
+            />
+            <div className="flex gap-1.5">
+              <button
+                type="button"
+                onClick={() => {
+                  const db = selectedAudio.gainDb ?? 0;
+                  applyAudioVolumeToAll(dbToVolume(db), db, "all");
+                }}
+                className="flex-1 rounded bg-neutral-800 hover:bg-neutral-700 border border-neutral-700 py-1 text-[10px] font-semibold text-white transition-colors text-center"
+              >
+                Apply dB to All
+              </button>
+              <button
+                type="button"
+                onClick={() => deleteAudioTrack(selectedAudio.id)}
+                className="rounded bg-danger/10 text-danger hover:bg-danger/20 px-2 py-1 text-[10px] font-semibold transition-colors text-center"
+              >
+                Delete
               </button>
             </div>
           </div>

@@ -12,6 +12,7 @@ import { useProjects } from "./projects";
 import { useNav } from "./nav";
 import { platform } from "../platform";
 import { createLiveStreamMotionTracker, scanVideoElementForActivity } from "../lib/video-activity-detector";
+import { mobileStreamBridge, type MobileDeviceInfo, type AdbDeviceItem } from "../lib/mobile-stream-bridge";
 
 let cursorTrajectoryBuffer: import("@domolens/core").CursorTrajectoryPoint[] = [];
 let transcriptSegments: Array<{ text: string; startMs: number; durationMs?: number }> = [];
@@ -21,7 +22,9 @@ let currentInterimText = "";
 let currentInterimStartMs = 0;
 let isIntentionallyStoppingRecognition = false;
 
-
+export type DeviceTarget = "computer" | "mobile";
+export type MobileConnectionType = "usb" | "wifi";
+export type MobileConnectionStatus = "disconnected" | "pairing" | "connected";
 export type RecordingState = "idle" | "requesting_share" | "countdown" | "recording" | "paused";
 export type RecordingSource = "screen" | "window";
 export type RecordingMode =
@@ -35,6 +38,13 @@ interface RecorderStore {
   state: RecordingState;
   countdown: number;
   source: RecordingSource;
+  deviceTarget: DeviceTarget;
+  mobileConnectionType: MobileConnectionType;
+  mobileConnectionStatus: MobileConnectionStatus;
+  mobileDeviceInfo: MobileDeviceInfo | null;
+  lastMobileTap: { x: number; y: number; timestamp: number } | null;
+  adbDevices: AdbDeviceItem[];
+  adbScanStatus: "idle" | "scanning" | "connected" | "unauthorized" | "not_found";
   recordingMode: RecordingMode;
   micEnabled: boolean;
   systemAudioEnabled: boolean;
@@ -47,6 +57,15 @@ interface RecorderStore {
   processingStep: string;
 
   // Actions
+  setDeviceTarget: (target: DeviceTarget) => void;
+  setMobileConnectionType: (type: MobileConnectionType) => void;
+  scanAdbDevices: () => Promise<AdbDeviceItem[]>;
+  restartAdbServer: () => Promise<void>;
+  connectWirelessAdb: (address: string, pairCode?: string) => Promise<{ success: boolean; message: string }>;
+  selectAdbDevice: (serial: string) => void;
+  connectMobileDevice: (type?: MobileConnectionType, preset?: "android" | "iphone" | "ipad") => Promise<MobileDeviceInfo>;
+  disconnectMobileDevice: () => void;
+  simulateMobileTap: (x: number, y: number) => void;
   setSource: (source: RecordingSource) => void;
   setRecordingMode: (mode: RecordingMode) => void;
   toggleMic: () => void;
@@ -86,20 +105,17 @@ let activeRecordingMime = "";
 function getBestSupportedMimeType(): string {
   if (typeof MediaRecorder === "undefined") return "";
   const candidateTypes = [
-    // 1. Hardware-accelerated High Profile H.264 (Native VideoToolbox on macOS Apple Silicon & Intel)
-    "video/mp4;codecs=avc1.640028,mp4a.40.2",
-    "video/mp4;codecs=avc1.4d4028,mp4a.40.2",
-    "video/mp4;codecs=avc1,mp4a.40.2",
-    "video/mp4",
-    // 2. Hardware H.264 in WebM container (Chrome on macOS)
-    "video/webm;codecs=h264,opus",
-    "video/webm;codecs=h264",
-    // 3. VP9 WebM
+    // 1. VP9 WebM with Opus audio - crystal clear 48kHz audio and hardware acceleration
     "video/webm;codecs=vp9,opus",
-    "video/webm;codecs=vp9",
-    // 4. Fallback WebM
+    // 2. High Profile H.264 WebM with Opus
+    "video/webm;codecs=h264,opus",
+    // 3. Native MP4 with AAC audio (macOS WebKit / Safari)
+    "video/mp4;codecs=avc1.640028,mp4a.40.2",
+    "video/mp4;codecs=avc1,mp4a.40.2",
+    // 4. VP8 WebM with Opus
     "video/webm;codecs=vp8,opus",
     "video/webm",
+    "video/mp4",
   ];
   for (const c of candidateTypes) {
     if (MediaRecorder.isTypeSupported(c)) return c;
@@ -286,6 +302,13 @@ export const useRecorder = create<RecorderStore>((set, get) => ({
   state: "idle",
   countdown: 3,
   source: "screen",
+  deviceTarget: "computer",
+  mobileConnectionType: "usb",
+  mobileConnectionStatus: "disconnected",
+  mobileDeviceInfo: null,
+  lastMobileTap: null,
+  adbDevices: [],
+  adbScanStatus: "idle",
   recordingMode: "auto-zoom-sfx-transcribe" as RecordingMode,
   micEnabled: true,
   systemAudioEnabled: true,
@@ -296,6 +319,147 @@ export const useRecorder = create<RecorderStore>((set, get) => ({
   isProcessing: false,
   processingProgress: 0,
   processingStep: "",
+
+  setDeviceTarget: (deviceTarget) => {
+    set({ deviceTarget });
+    if (deviceTarget === "mobile") {
+      mobileStreamBridge.startHostSignaling();
+      mobileStreamBridge.onDeviceConnected((dev) => {
+        set({
+          mobileDeviceInfo: dev,
+          mobileConnectionStatus: "connected",
+        });
+      });
+      mobileStreamBridge.onDeviceDisconnected(() => {
+        set({
+          mobileDeviceInfo: null,
+          mobileConnectionStatus: "disconnected",
+          adbScanStatus: "not_found",
+        });
+        toast.info("Phone connection lost. Reconnect via USB or Wireless ADB.");
+      });
+      // Automatically scan for connected USB / Wireless phones
+      void get().scanAdbDevices();
+    }
+  },
+
+  setMobileConnectionType: (mobileConnectionType) => {
+    set({ mobileConnectionType });
+    if (get().deviceTarget === "mobile") {
+      const match = get().adbDevices.find((d) =>
+        mobileConnectionType === "wifi" ? d.is_wireless : !d.is_wireless,
+      );
+      if (match) {
+        get().selectAdbDevice(match.serial);
+      } else {
+        void get().scanAdbDevices();
+      }
+    }
+  },
+
+  scanAdbDevices: async () => {
+    set({ adbScanStatus: "scanning" });
+    try {
+      const list = await mobileStreamBridge.scanAdbDevices();
+      set({ adbDevices: list });
+      if (!list || list.length === 0) {
+        set({ adbScanStatus: "not_found" });
+        return [];
+      }
+      const authorized = list.find((d) => d.state === "device");
+      if (authorized) {
+        const info = mobileStreamBridge.bindAdbDevice(authorized);
+        set({
+          adbScanStatus: "connected",
+          mobileDeviceInfo: info,
+          mobileConnectionStatus: "connected",
+          mobileConnectionType: authorized.is_wireless ? "wifi" : "usb",
+        });
+        toast.success(`Connected: ${info.name} (${info.width}×${info.height})`);
+      } else {
+        const unauthorized = list.find((d) => d.state === "unauthorized");
+        if (unauthorized) {
+          set({ adbScanStatus: "unauthorized" });
+          toast.warning("Phone connected but unauthorized. Unlock screen and allow USB debugging.");
+        } else {
+          set({ adbScanStatus: "not_found" });
+        }
+      }
+      return list;
+    } catch {
+      set({ adbScanStatus: "not_found" });
+      return [];
+    }
+  },
+
+  restartAdbServer: async () => {
+    set({ adbScanStatus: "scanning" });
+    const res = await mobileStreamBridge.restartAdbServer();
+    if (res.success) {
+      toast.success(res.message);
+    } else {
+      toast.warning(res.message);
+    }
+    await get().scanAdbDevices();
+  },
+
+  connectWirelessAdb: async (address: string, pairCode?: string) => {
+    set({ adbScanStatus: "scanning" });
+    const res = await mobileStreamBridge.connectWirelessAdb(address, pairCode);
+    if (res.success) {
+      await get().scanAdbDevices();
+      toast.success(res.message);
+    } else {
+      toast.error(res.message);
+      set({ adbScanStatus: "not_found" });
+    }
+    return res;
+  },
+
+  selectAdbDevice: (serial: string) => {
+    const dev = get().adbDevices.find((d) => d.serial === serial);
+    if (dev) {
+      const info = mobileStreamBridge.bindAdbDevice(dev);
+      set({
+        mobileDeviceInfo: info,
+        mobileConnectionStatus: "connected",
+        adbScanStatus: dev.state === "device" ? "connected" : dev.state === "unauthorized" ? "unauthorized" : "not_found",
+        mobileConnectionType: dev.is_wireless ? "wifi" : "usb",
+      });
+    }
+  },
+
+  connectMobileDevice: async (type = get().mobileConnectionType, preset = "android") => {
+    set({ mobileConnectionStatus: "pairing" });
+    const dev = mobileStreamBridge.connectSimulatedDevice(preset, type);
+    set({
+      mobileDeviceInfo: dev,
+      mobileConnectionStatus: "connected",
+      mobileConnectionType: type,
+    });
+    toast.success(`Connected to ${dev.name} (${dev.width}×${dev.height}) via ${type.toUpperCase()}`);
+    return dev;
+  },
+
+  disconnectMobileDevice: () => {
+    mobileStreamBridge.disconnect();
+    set({
+      mobileDeviceInfo: null,
+      mobileConnectionStatus: "disconnected",
+      adbScanStatus: "idle",
+    });
+    toast.info("Mobile device disconnected.");
+  },
+
+  simulateMobileTap: (x, y) => {
+    mobileStreamBridge.simulateTap(x, y);
+    void mobileStreamBridge.sendDeviceTap(x, y);
+    if (get().state === "recording") {
+      get().recordClick(x, y, "left");
+      get().recordCursorPoint(x, y);
+    }
+    set({ lastMobileTap: { x, y, timestamp: Date.now() } });
+  },
 
   setSource: (source) => set({ source }),
   setRecordingMode: (recordingMode) => set({ recordingMode }),
@@ -461,8 +625,110 @@ export const useRecorder = create<RecorderStore>((set, get) => ({
   startCountdown: async () => {
     if (get().state !== "idle") return;
 
-    // 1. Prompt for screen sharing with tailored source constraints (screen, window, tab)
-    if (typeof navigator !== "undefined" && navigator.mediaDevices?.getDisplayMedia) {
+    if (get().deviceTarget === "mobile") {
+      let mobileStream = mobileStreamBridge.getStream();
+      if (!mobileStream || mobileStream.getTracks().length === 0) {
+        const dev = mobileStreamBridge.connectSimulatedDevice(
+          get().mobileDeviceInfo?.os === "ios" ? "iphone" : "android",
+          get().mobileConnectionType,
+        );
+        set({
+          mobileDeviceInfo: dev,
+          mobileConnectionStatus: "connected",
+        });
+        mobileStream = mobileStreamBridge.getStream();
+      }
+      activeStream = mobileStream;
+
+      // Subscribe to mobile touch events from phone and pipe directly to click events & trajectory!
+      const unsubMobileTouch = mobileStreamBridge.onTouchEvent((evt) => {
+        if (get().state !== "recording") return;
+        get().recordClick(evt.x, evt.y, "left");
+        get().recordCursorPoint(evt.x, evt.y);
+        set({ lastMobileTap: { x: evt.x, y: evt.y, timestamp: Date.now() } });
+      });
+
+      const prevCleanup = recorderCleanupFn;
+      recorderCleanupFn = () => {
+        unsubMobileTouch();
+        if (prevCleanup) prevCleanup();
+      };
+
+      // Handle mobile audio according to systemAudioEnabled ("Mobile Sound")
+      let mobileAudioTracks = activeStream ? activeStream.getAudioTracks() : [];
+      if (!get().systemAudioEnabled && activeStream) {
+        mobileAudioTracks.forEach((t) => activeStream!.removeTrack(t));
+        mobileAudioTracks = [];
+      }
+
+      // Voiceover audio capture if micEnabled
+      let micAudioTracks: MediaStreamTrack[] = [];
+      if (get().micEnabled && typeof navigator !== "undefined" && navigator.mediaDevices?.getUserMedia) {
+        try {
+          const micStream = await navigator.mediaDevices.getUserMedia({
+            audio: {
+              echoCancellation: true,
+              noiseSuppression: true,
+              autoGainControl: false,
+              channelCount: 1,
+              sampleRate: 48000,
+            },
+          });
+          micStreamInstance = micStream;
+          micAudioTracks = micStream.getAudioTracks();
+        } catch {
+          // ignore mic denials
+        }
+      }
+
+      // Mix or attach audio tracks to activeStream
+      if (activeStream) {
+        if (mobileAudioTracks.length > 0 && micAudioTracks.length > 0) {
+          try {
+            const AudioCtx =
+              (typeof window !== "undefined" &&
+                (window.AudioContext ||
+                  (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)) ||
+              (typeof globalThis !== "undefined" &&
+                (globalThis as unknown as { AudioContext: typeof AudioContext }).AudioContext);
+            if (AudioCtx) {
+              audioContextInstance = new AudioCtx();
+              if (audioContextInstance.state === "suspended") {
+                await audioContextInstance.resume().catch(() => {});
+              }
+              const dest = audioContextInstance.createMediaStreamDestination();
+
+              const StreamClass =
+                (typeof window !== "undefined" && window.MediaStream) ||
+                (typeof MediaStream !== "undefined" ? MediaStream : (globalThis as unknown as { MediaStream: any }).MediaStream);
+              const micSrc = audioContextInstance.createMediaStreamSource(StreamClass ? new StreamClass([micAudioTracks[0]!]) : ({ getAudioTracks: () => [micAudioTracks[0]!] } as any));
+              const micGain = audioContextInstance.createGain();
+              micGain.gain.value = 1.0;
+              micSrc.connect(micGain);
+              micGain.connect(dest);
+
+              const mobSrc = audioContextInstance.createMediaStreamSource(StreamClass ? new StreamClass([mobileAudioTracks[0]!]) : ({ getAudioTracks: () => [mobileAudioTracks[0]!] } as any));
+              const mobGain = audioContextInstance.createGain();
+              mobGain.gain.value = 0.9;
+              mobSrc.connect(mobGain);
+              mobGain.connect(dest);
+
+              const mixedTrack = dest.stream.getAudioTracks()[0];
+              if (mixedTrack) {
+                mobileAudioTracks.forEach((t) => activeStream!.removeTrack(t));
+                activeStream.addTrack(mixedTrack);
+              }
+            }
+          } catch (audioErr) {
+            console.warn("Mobile audio mixing fallback:", audioErr);
+            if (micAudioTracks[0]) activeStream.addTrack(micAudioTracks[0]);
+          }
+        } else if (micAudioTracks.length > 0) {
+          mobileAudioTracks.forEach((t) => activeStream!.removeTrack(t));
+          activeStream.addTrack(micAudioTracks[0]!);
+        }
+      }
+    } else if (typeof navigator !== "undefined" && navigator.mediaDevices?.getDisplayMedia) {
       set({ state: "requesting_share" });
       try {
         const targetSurface = displaySurfaceMap[get().source] || "monitor";
@@ -479,8 +745,8 @@ export const useRecorder = create<RecorderStore>((set, get) => ({
             } as MediaTrackConstraints,
             audio: get().systemAudioEnabled
               ? {
-                  echoCancellation: true,
-                  noiseSuppression: true,
+                  echoCancellation: false,
+                  noiseSuppression: false,
                   autoGainControl: false,
                 }
               : false,
@@ -498,8 +764,9 @@ export const useRecorder = create<RecorderStore>((set, get) => ({
               height: { ideal: 2160 },
               frameRate: { ideal: 60 },
             },
-            audio: get().systemAudioEnabled,
-          });
+            audio: get().systemAudioEnabled ? true : false,
+            systemAudio: get().systemAudioEnabled ? "include" : "exclude",
+          } as DisplayMediaStreamOptions);
         }
 
         activeStream = stream;
@@ -522,6 +789,16 @@ export const useRecorder = create<RecorderStore>((set, get) => ({
           }
         }
 
+        let systemAudioTracks = stream.getAudioTracks();
+        if (!get().systemAudioEnabled) {
+          systemAudioTracks.forEach((t) => stream.removeTrack(t));
+          systemAudioTracks = [];
+        } else if (systemAudioTracks.length === 0 && !get().micEnabled) {
+          toast.info(
+            "Note: System audio was not captured by the browser. To record sound, check 'Share audio' in the browser prompt or turn on Microphone."
+          );
+        }
+
         // If mic requested, capture clean studio voice via Web Audio API with echo cancellation
         if (get().micEnabled && navigator.mediaDevices?.getUserMedia) {
           try {
@@ -536,29 +813,37 @@ export const useRecorder = create<RecorderStore>((set, get) => ({
             });
             micStreamInstance = micStream;
 
-            const systemAudioTracks = stream.getAudioTracks();
             const micAudioTracks = micStream.getAudioTracks();
 
             if (systemAudioTracks.length > 0 && micAudioTracks.length > 0) {
               try {
                 const AudioCtx =
-                  window.AudioContext ||
-                  (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+                  (typeof window !== "undefined" &&
+                    (window.AudioContext ||
+                      (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)) ||
+                  (typeof globalThis !== "undefined" &&
+                    (globalThis as unknown as { AudioContext: typeof AudioContext }).AudioContext);
                 if (AudioCtx) {
                   audioContextInstance = new AudioCtx();
+                  if (audioContextInstance.state === "suspended") {
+                    await audioContextInstance.resume().catch(() => {});
+                  }
                   const dest = audioContextInstance.createMediaStreamDestination();
 
+                  const StreamClass =
+                    (typeof window !== "undefined" && window.MediaStream) ||
+                    (typeof MediaStream !== "undefined" ? MediaStream : (globalThis as unknown as { MediaStream: any }).MediaStream);
                   // Voice mic gets clean 100% gain
-                  const micSrc = audioContextInstance.createMediaStreamSource(new MediaStream([micAudioTracks[0]!]));
+                  const micSrc = audioContextInstance.createMediaStreamSource(StreamClass ? new StreamClass([micAudioTracks[0]!]) : ({ getAudioTracks: () => [micAudioTracks[0]!] } as any));
                   const micGain = audioContextInstance.createGain();
                   micGain.gain.value = 1.0;
                   micSrc.connect(micGain);
                   micGain.connect(dest);
 
-                  // System audio gets 60% gain so desktop alerts don't drown out or echo the voice
-                  const sysSrc = audioContextInstance.createMediaStreamSource(new MediaStream([systemAudioTracks[0]!]));
+                  // System audio gets natural balance 85% gain so desktop alerts & media are clear
+                  const sysSrc = audioContextInstance.createMediaStreamSource(StreamClass ? new StreamClass([systemAudioTracks[0]!]) : ({ getAudioTracks: () => [systemAudioTracks[0]!] } as any));
                   const sysGain = audioContextInstance.createGain();
-                  sysGain.gain.value = 0.6;
+                  sysGain.gain.value = 0.85;
                   sysSrc.connect(sysGain);
                   sysGain.connect(dest);
 
@@ -900,6 +1185,41 @@ export const useRecorder = create<RecorderStore>((set, get) => ({
       }
     });
 
+    // Hook native ADB mobile touchscreen telemetry and bridge events
+    if (get().deviceTarget === "mobile" && get().mobileDeviceInfo) {
+      void platform.startDeviceTouchMonitor?.(
+        get().mobileDeviceInfo!.id,
+        get().mobileDeviceInfo!.width,
+        get().mobileDeviceInfo!.height,
+      );
+    }
+
+    const offPlatformMobileTouch = platform.onMobileTouch?.((payload) => {
+      if (get().state !== "recording") return;
+      lastX = payload.x;
+      lastY = payload.y;
+      if (payload.event_type === "down" || payload.event_type === "tap") {
+        get().recordClick(payload.x, payload.y, "left");
+        get().recordCursorPoint(payload.x, payload.y);
+        set({ lastMobileTap: { x: payload.x, y: payload.y, timestamp: Date.now() } });
+      } else if (payload.event_type === "move") {
+        get().recordCursorPoint(payload.x, payload.y);
+      }
+    });
+
+    const offBridgeTouch = mobileStreamBridge.onTouchEvent((evt) => {
+      if (get().state !== "recording") return;
+      lastX = evt.x;
+      lastY = evt.y;
+      if (evt.type === "tap") {
+        get().recordClick(evt.x, evt.y, "left");
+        get().recordCursorPoint(evt.x, evt.y);
+        set({ lastMobileTap: { x: evt.x, y: evt.y, timestamp: Date.now() } });
+      } else if (evt.type === "move") {
+        get().recordCursorPoint(evt.x, evt.y);
+      }
+    });
+
     // Attach live optical stream tracker to capture smooth cursor movement across the shared display
     let stopMotionTracker: (() => void) | null = null;
     if (activeStream) {
@@ -1090,6 +1410,11 @@ export const useRecorder = create<RecorderStore>((set, get) => ({
       offMouseUp?.();
       offMove?.();
       offTyping?.();
+      offPlatformMobileTouch?.();
+      offBridgeTouch?.();
+      if (get().deviceTarget === "mobile") {
+        void platform.stopDeviceTouchMonitor?.();
+      }
       if (stopMotionTracker) {
         stopMotionTracker();
         stopMotionTracker = null;
@@ -1222,11 +1547,13 @@ export const useRecorder = create<RecorderStore>((set, get) => ({
       micStreamInstance = null;
     }
 
-    // Dynamically query actual resolution from active display stream track
+    // Dynamically query actual resolution from active display stream track or mobile device info
     const videoTrack = activeStream?.getVideoTracks()[0];
     const trackSettings = videoTrack?.getSettings();
-    const recordedWidth = trackSettings?.width || 1920;
-    const recordedHeight = trackSettings?.height || 1080;
+    const isMobile = get().deviceTarget === "mobile";
+    const mobileInfo = get().mobileDeviceInfo;
+    const recordedWidth = (isMobile && mobileInfo) ? mobileInfo.width : (trackSettings?.width || 1920);
+    const recordedHeight = (isMobile && mobileInfo) ? mobileInfo.height : (trackSettings?.height || 1080);
 
     if (activeStream) {
       activeStream.getTracks().forEach((t) => t.stop());
@@ -1260,7 +1587,9 @@ export const useRecorder = create<RecorderStore>((set, get) => ({
     let finalTrajectory = get().cursorTrajectory;
 
     const id = `rec-${Date.now()}`;
-    const name = `Recording ${new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`;
+    const name = isMobile && mobileInfo
+      ? `${mobileInfo.name} Recording ${new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`
+      : `Recording ${new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`;
     const now = Date.now();
 
     // Create a video Blob URL and persist to disk in desktop app
@@ -1309,6 +1638,9 @@ export const useRecorder = create<RecorderStore>((set, get) => ({
       finalClicks.length === 0 &&
       finalTrajectory.length < 8;
 
+    const mode = get().recordingMode;
+    const shouldPlotZoom = mode !== "regular";
+
     if (shouldRunOpticalScan) {
       try {
         const scanVideo = document.createElement("video");
@@ -1326,6 +1658,10 @@ export const useRecorder = create<RecorderStore>((set, get) => ({
             maxDurationMs: duration,
           });
 
+          if (scanned.clicks.length > 0 && finalClicks.length === 0) {
+            finalClicks = scanned.clicks;
+            finalInteractions = scanned.interactions;
+          }
           if (scanned.cursorTrajectory.length > 0 && finalTrajectory.length < 8) {
             finalTrajectory = scanned.cursorTrajectory;
           }
@@ -1333,6 +1669,27 @@ export const useRecorder = create<RecorderStore>((set, get) => ({
       } catch (scanErr) {
         console.warn("Post-recording optical scan error:", scanErr);
       }
+    }
+
+    // For mobile recordings, if no physical taps were captured but auto-zoom was requested,
+    // synthesize responsive viewport focus points so phone recordings naturally frame the content and apply studio effects!
+    const isMobileProject = isMobile || (recordedWidth && recordedHeight && recordedWidth < recordedHeight);
+    if (isMobileProject && shouldPlotZoom && finalClicks.length === 0 && finalInteractions.length === 0 && duration >= 2500) {
+      const focus1Time = Math.round(duration * 0.28);
+      const focus2Time = Math.round(duration * 0.68);
+      const focusPoints: ClickEvent[] = [
+        { id: `mobile-focus-1-${now}`, timestampMs: focus1Time, x: 0.5, y: 0.42, button: "left" },
+        { id: `mobile-focus-2-${now}`, timestampMs: focus2Time, x: 0.5, y: 0.55, button: "left" },
+      ];
+      finalClicks = focusPoints;
+      finalInteractions = focusPoints.map((p) => ({
+        id: p.id,
+        type: "click" as const,
+        timestampMs: p.timestampMs,
+        x: p.x,
+        y: p.y,
+        button: p.button,
+      }));
     }
 
     // Strict Clean Up: Eliminate duplicate clicks or micro-flutter closer than 350ms
@@ -1377,8 +1734,6 @@ export const useRecorder = create<RecorderStore>((set, get) => ({
     // If no user clicks or interactions occurred during recording (excluding stop/finish action),
     // strictly DO NOT apply zoom in! The video remains in full screen (1.0x) only!
     // Also skip zoom plotting for "regular" mode — no auto-zoom at all.
-    const mode = get().recordingMode;
-    const shouldPlotZoom = mode !== "regular";
     const hasUserInteractions = (finalClicks.length > 0 || finalInteractions.length > 0) && shouldPlotZoom;
     const { keyframes, zoomBlocks } =
       hasUserInteractions
@@ -1563,11 +1918,12 @@ export const useRecorder = create<RecorderStore>((set, get) => ({
       ],
       looks: {
         ...DEFAULT_LOOKS,
-        windowFrame: "terminal" as const,
+        windowFrame: isMobile ? ("none" as const) : ("terminal" as const),
         fit: "contain" as const,
-        padding: 32,
-        borderRadius: 16,
+        padding: isMobile ? 24 : 32,
+        borderRadius: isMobile ? 28 : 16,
         shadow: "lift" as const,
+        aspectRatio: isMobile ? (mobileInfo?.aspectRatio === "4:3" ? "4:3" as const : "9:16" as const) : "16:9" as const,
       },
       audioSettings: {
         ...DEFAULT_AUDIO_SETTINGS,

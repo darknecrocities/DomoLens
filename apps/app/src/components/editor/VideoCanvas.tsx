@@ -13,6 +13,9 @@ import {
   Check,
   Heart,
   User,
+  Pencil,
+  Play,
+  GripVertical,
 } from "lucide-react";
 import {
   calculateActiveEffectsState,
@@ -23,7 +26,10 @@ import {
   screenToVideoCoordinates,
   smoothCursorTrajectory,
   mapVideoPointToViewport,
+  viewportToVideoPoint,
   ensureCursorTrajectory,
+  processDrawnTracePath,
+  pointsToSmoothSvgPath,
   TEXT_CARD_STYLE_DEFINITIONS,
   type CursorAvatar,
   type CursorStyle,
@@ -80,16 +86,16 @@ export function CanvasCursorSvg({ cursorStyle }: { cursorStyle: CursorStyle }) {
     case "sleek-dot":
       return (
         <svg viewBox="0 0 20 20" className="size-5 drop-shadow-md">
-          <circle cx="10" cy="10" r="8" fill="rgba(99, 102, 241, 0.2)" stroke="rgba(99, 102, 241, 0.5)" strokeWidth="1.5" />
-          <circle cx="10" cy="10" r="3.5" fill="#ffffff" stroke="#6366f1" strokeWidth="1.5" />
+          <circle cx="10" cy="10" r="8" fill="rgba(255, 255, 255, 0.2)" stroke="rgba(255, 255, 255, 0.6)" strokeWidth="1.5" />
+          <circle cx="10" cy="10" r="3.5" fill="#ffffff" stroke="#000000" strokeWidth="1.5" />
         </svg>
       );
     case "laser-dot":
       return (
-        <svg viewBox="0 0 16 16" className="size-4 filter drop-shadow-[0_0_8px_rgba(239,68,68,0.9)]">
-          <circle cx="8" cy="8" r="7" fill="rgba(239, 68, 68, 0.35)" />
-          <circle cx="8" cy="8" r="4.5" fill="#ef4444" />
-          <circle cx="8" cy="8" r="2" fill="#ffffff" />
+        <svg viewBox="0 0 16 16" className="size-4 filter drop-shadow-[0_0_8px_rgba(255,255,255,0.9)]">
+          <circle cx="8" cy="8" r="7" fill="rgba(255, 255, 255, 0.35)" />
+          <circle cx="8" cy="8" r="4.5" fill="#ffffff" />
+          <circle cx="8" cy="8" r="2" fill="#000000" />
         </svg>
       );
     case "ring":
@@ -109,26 +115,26 @@ export function CanvasCursorSvg({ cursorStyle }: { cursorStyle: CursorStyle }) {
     case "focus-reticle":
       return (
         <svg viewBox="0 0 24 24" className="size-6 drop-shadow-md">
-          <path d="M4 8 L4 4 L8 4 M16 4 L20 4 L20 8 M4 16 L4 20 L8 20 M16 20 L20 20 L20 16" stroke="#38bdf8" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" fill="none" />
-          <circle cx="12" cy="12" r="2" fill="#38bdf8" />
+          <path d="M4 8 L4 4 L8 4 M16 4 L20 4 L20 8 M4 16 L4 20 L8 20 M16 20 L20 20 L20 16" stroke="#ffffff" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" fill="none" />
+          <circle cx="12" cy="12" r="2" fill="#ffffff" />
         </svg>
       );
     case "sonar-pulse":
       return (
         <svg viewBox="0 0 24 24" className="size-6 drop-shadow-md">
-          <circle cx="12" cy="12" r="9.5" stroke="rgba(16, 185, 129, 0.6)" strokeWidth="1" strokeDasharray="3 2" fill="rgba(16, 185, 129, 0.1)" />
-          <circle cx="12" cy="12" r="4.5" stroke="#10b981" strokeWidth="1.2" fill="rgba(16, 185, 129, 0.2)" />
-          <path d="M12 0 L12 3 M12 21 L12 24 M0 12 L3 12 M21 12 L24 12" stroke="#34d399" strokeWidth="1.2" strokeLinecap="round" />
-          <circle cx="12" cy="12" r="2" fill="#34d399" />
+          <circle cx="12" cy="12" r="9.5" stroke="rgba(255, 255, 255, 0.6)" strokeWidth="1" strokeDasharray="3 2" fill="rgba(255, 255, 255, 0.1)" />
+          <circle cx="12" cy="12" r="4.5" stroke="#ffffff" strokeWidth="1.2" fill="rgba(255, 255, 255, 0.2)" />
+          <path d="M12 0 L12 3 M12 21 L12 24 M0 12 L3 12 M21 12 L24 12" stroke="#ffffff" strokeWidth="1.2" strokeLinecap="round" />
+          <circle cx="12" cy="12" r="2" fill="#ffffff" />
         </svg>
       );
     case "obsidian-glow":
       return (
-        <svg viewBox="0 0 24 24" className="size-6 filter drop-shadow-[0_0_8px_rgba(168,85,247,0.85)]">
+        <svg viewBox="0 0 24 24" className="size-6 filter drop-shadow-[0_0_8px_rgba(255,255,255,0.7)]">
           <path
             d="M0 0 L0 18 L5 13.5 L9 22 L12 20.5 L8 12.5 L14.5 12.5 Z"
             fill="#09090b"
-            stroke="#c084fc"
+            stroke="#ffffff"
             strokeWidth="1.5"
             strokeLinejoin="round"
           />
@@ -136,10 +142,10 @@ export function CanvasCursorSvg({ cursorStyle }: { cursorStyle: CursorStyle }) {
       );
     case "neon-laser":
       return (
-        <svg viewBox="0 0 24 24" className="size-6 filter drop-shadow-[0_0_8px_rgba(6,182,212,0.8)]">
-          <path d="M2 2 L8 22 L12 14 Z" fill="#06b6d4" />
-          <path d="M2 2 L12 14 L20 12 Z" fill="#ec4899" />
-          <path d="M2 2 L8 22 L12 14 L20 12 Z M2 2 L12 14" stroke="#ffffff" strokeWidth="1" strokeLinejoin="round" fill="none" />
+        <svg viewBox="0 0 24 24" className="size-6 filter drop-shadow-[0_0_8px_rgba(255,255,255,0.8)]">
+          <path d="M2 2 L8 22 L12 14 Z" fill="#ffffff" />
+          <path d="M2 2 L12 14 L20 12 Z" fill="#71717a" />
+          <path d="M2 2 L8 22 L12 14 L20 12 Z M2 2 L12 14" stroke="#000000" strokeWidth="1" strokeLinejoin="round" fill="none" />
         </svg>
       );
     case "spotlight-glow":
@@ -148,25 +154,24 @@ export function CanvasCursorSvg({ cursorStyle }: { cursorStyle: CursorStyle }) {
           <defs>
             <radialGradient id="canvasSpotlightGlowGrad" cx="50%" cy="50%" r="50%">
               <stop offset="0%" stopColor="#ffffff" stopOpacity="0.45" />
-              <stop offset="50%" stopColor="#f59e0b" stopOpacity="0.2" />
-              <stop offset="100%" stopColor="#f59e0b" stopOpacity="0" />
+              <stop offset="100%" stopColor="#ffffff" stopOpacity="0" />
             </radialGradient>
           </defs>
           <circle cx="16" cy="16" r="14" fill="url(#canvasSpotlightGlowGrad)" />
-          <circle cx="16" cy="16" r="3.5" fill="#ffffff" stroke="#f59e0b" strokeWidth="1.5" />
+          <circle cx="16" cy="16" r="3.5" fill="#ffffff" stroke="#000000" strokeWidth="1.5" />
         </svg>
       );
     case "aurora-trail":
       return (
-        <svg viewBox="0 0 24 24" className="size-6 filter drop-shadow-[0_0_8px_rgba(45,212,191,0.7)]">
+        <svg viewBox="0 0 24 24" className="size-6 filter drop-shadow-[0_0_8px_rgba(255,255,255,0.7)]">
           <defs>
             <linearGradient id="canvasAuroraGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-              <stop offset="0%" stopColor="#2dd4bf" />
-              <stop offset="100%" stopColor="#a855f7" />
+              <stop offset="0%" stopColor="#ffffff" />
+              <stop offset="100%" stopColor="#71717a" />
             </linearGradient>
           </defs>
-          <path d="M10 16 Q14 18 19 21" stroke="#a855f7" strokeWidth="1.5" strokeLinecap="round" opacity="0.7" fill="none" />
-          <path d="M13 13 Q17 14 22 16" stroke="#2dd4bf" strokeWidth="1.5" strokeLinecap="round" opacity="0.6" fill="none" />
+          <path d="M10 16 Q14 18 19 21" stroke="#ffffff" strokeWidth="1.5" strokeLinecap="round" opacity="0.7" fill="none" />
+          <path d="M13 13 Q17 14 22 16" stroke="#a1a1aa" strokeWidth="1.5" strokeLinecap="round" opacity="0.6" fill="none" />
           <path d="M2 2 L5 18 L10 13 L17 11 Z" fill="url(#canvasAuroraGrad)" stroke="#ffffff" strokeWidth="1.2" strokeLinejoin="round" />
         </svg>
       );
@@ -175,9 +180,8 @@ export function CanvasCursorSvg({ cursorStyle }: { cursorStyle: CursorStyle }) {
         <svg viewBox="0 0 24 24" className="size-6 drop-shadow-md">
           <defs>
             <linearGradient id="canvasGradientBeamGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-              <stop offset="0%" stopColor="#ff7a1a" />
-              <stop offset="50%" stopColor="#ec4899" />
-              <stop offset="100%" stopColor="#6366f1" />
+              <stop offset="0%" stopColor="#ffffff" />
+              <stop offset="100%" stopColor="#52525b" />
             </linearGradient>
           </defs>
           <path
@@ -192,18 +196,18 @@ export function CanvasCursorSvg({ cursorStyle }: { cursorStyle: CursorStyle }) {
     case "precision-pen":
       return (
         <svg viewBox="0 0 24 24" className="size-6 drop-shadow-md">
-          <path d="M2 2 L9 5 L16 13 L13 16 L5 9 Z" fill="#e2e8f0" stroke="#0f172a" strokeWidth="1.2" strokeLinejoin="round" />
-          <path d="M13 16 L16 13 L20 17 L17 20 Z" fill="#eab308" stroke="#0f172a" strokeWidth="1.2" strokeLinejoin="round" />
-          <line x1="2" y1="2" x2="8" y2="8" stroke="#0f172a" strokeWidth="1.2" />
-          <circle cx="8" cy="8" r="1.5" fill="#0f172a" />
+          <path d="M2 2 L9 5 L16 13 L13 16 L5 9 Z" fill="#ffffff" stroke="#000000" strokeWidth="1.2" strokeLinejoin="round" />
+          <path d="M13 16 L16 13 L20 17 L17 20 Z" fill="#71717a" stroke="#000000" strokeWidth="1.2" strokeLinejoin="round" />
+          <line x1="2" y1="2" x2="8" y2="8" stroke="#000000" strokeWidth="1.2" />
+          <circle cx="8" cy="8" r="1.5" fill="#000000" />
         </svg>
       );
     case "highlighter":
       return (
-        <svg viewBox="0 0 24 24" className="size-6 filter drop-shadow-[0_0_6px_rgba(250,204,21,0.5)]">
-          <path d="M2 2 L6 1 L9 6 L4 8 Z" fill="#fde047" stroke="#ca8a04" strokeWidth="1" strokeLinejoin="round" />
-          <path d="M4 8 L9 6 L12 10 L7 12 Z" fill="#334155" stroke="#0f172a" strokeWidth="1" strokeLinejoin="round" />
-          <path d="M7 12 L12 10 L19 19 L14 21 Z" fill="#facc15" stroke="#0f172a" strokeWidth="1" strokeLinejoin="round" />
+        <svg viewBox="0 0 24 24" className="size-6 filter drop-shadow-[0_0_6px_rgba(255,255,255,0.5)]">
+          <path d="M2 2 L6 1 L9 6 L4 8 Z" fill="#ffffff" stroke="#000000" strokeWidth="1" strokeLinejoin="round" />
+          <path d="M4 8 L9 6 L12 10 L7 12 Z" fill="#3f3f46" stroke="#000000" strokeWidth="1" strokeLinejoin="round" />
+          <path d="M7 12 L12 10 L19 19 L14 21 Z" fill="#a1a1aa" stroke="#000000" strokeWidth="1" strokeLinejoin="round" />
         </svg>
       );
     case "tactile-pointer":
@@ -355,16 +359,126 @@ export function VideoCanvas({ project, currentTimeMs: propTimeMs }: VideoCanvasP
   const currentTimeMs = propTimeMs ?? storeTimeMs;
   const { summary, zoomBlocks, looks, clicks, keyframes, effects } = project;
   const isPlaying = useEditor((s) => s.isPlaying);
+
+  const isTraceShiftingMode = useEditor((s) => s.isTraceShiftingMode);
+  const traceWaypoints = useEditor((s) => s.traceWaypoints);
+  const addTraceWaypoint = useEditor((s) => s.addTraceWaypoint);
+  const addTraceStroke = useEditor((s) => s.addTraceStroke);
+  const setTraceShiftingMode = useEditor((s) => s.setTraceShiftingMode);
+  const applyTraceShifting = useEditor((s) => s.applyTraceShifting);
+  const followDrawnLine = useEditor((s) => s.followDrawnLine);
+  const clearTraceWaypoints = useEditor((s) => s.clearTraceWaypoints);
+
   const videoRef = useRef<HTMLVideoElement>(null);
   const viewportRef = useRef<HTMLDivElement>(null);
+  const tiltWrapperRef = useRef<HTMLDivElement>(null);
   const prevTimeRef = useRef(currentTimeMs);
   const triggeredEventsRef = useRef<Set<string>>(new Set());
   const lastClickSfxPlaybackTimeRef = useRef<number>(-999999);
   const [clickShiftMarker, setClickShiftMarker] = useState<{ x: number; y: number; id: number } | null>(null);
 
-  const handleCanvasClick = (e: React.MouseEvent<HTMLDivElement>) => {
+  // Live freehand drawing state
+  const [isDrawingStroke, setIsDrawingStroke] = useState(false);
+  const [liveStrokePoints, setLiveStrokePoints] = useState<Array<{ x: number; y: number }>>([]);
+  const strokePointsRef = useRef<Array<{ x: number; y: number }>>([]);
+  const [cursorScreenPos, setCursorScreenPos] = useState<{ x: number; y: number } | null>(null);
+
+  // Floating canvas banner draggable state
+  const [bannerPos, setBannerPos] = useState<{ x: number; y: number } | null>(null);
+  const bannerRef = useRef<HTMLDivElement>(null);
+  const bannerDragStateRef = useRef<{
+    isDragging: boolean;
+    startX: number;
+    startY: number;
+    initLeft: number;
+    initTop: number;
+  }>({
+    isDragging: false,
+    startX: 0,
+    startY: 0,
+    initLeft: 0,
+    initTop: 0,
+  });
+
+  const handleBannerPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (e.button !== 0) return;
+    const bannerEl = bannerRef.current;
+    const viewportEl = viewportRef.current;
+    if (!bannerEl || !viewportEl) return;
+
+    e.preventDefault();
+    e.stopPropagation();
+
+    try {
+      bannerEl.setPointerCapture(e.pointerId);
+    } catch {}
+
+    const bannerRect = bannerEl.getBoundingClientRect();
+    const viewportRect = viewportEl.getBoundingClientRect();
+
+    const currentLeft = bannerRect.left - viewportRect.left;
+    const currentTop = bannerRect.top - viewportRect.top;
+
+    bannerDragStateRef.current = {
+      isDragging: true,
+      startX: e.clientX,
+      startY: e.clientY,
+      initLeft: currentLeft,
+      initTop: currentTop,
+    };
+  };
+
+  const handleBannerPointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (!bannerDragStateRef.current.isDragging) return;
+    e.preventDefault();
+    e.stopPropagation();
+
+    const bannerEl = bannerRef.current;
+    const viewportEl = viewportRef.current;
+    if (!bannerEl || !viewportEl) return;
+
+    const viewportRect = viewportEl.getBoundingClientRect();
+    const bannerRect = bannerEl.getBoundingClientRect();
+
+    const dx = e.clientX - bannerDragStateRef.current.startX;
+    const dy = e.clientY - bannerDragStateRef.current.startY;
+
+    const nextLeft = bannerDragStateRef.current.initLeft + dx;
+    const nextTop = bannerDragStateRef.current.initTop + dy;
+
+    const maxLeft = Math.max(8, viewportRect.width - bannerRect.width - 8);
+    const maxTop = Math.max(8, viewportRect.height - bannerRect.height - 8);
+
+    const clampedLeft = Math.max(8, Math.min(maxLeft, nextLeft));
+    const clampedTop = Math.max(8, Math.min(maxTop, nextTop));
+
+    setBannerPos({ x: clampedLeft, y: clampedTop });
+  };
+
+  const handleBannerPointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (!bannerDragStateRef.current.isDragging) return;
+    e.preventDefault();
+    e.stopPropagation();
+    bannerDragStateRef.current.isDragging = false;
+    try {
+      if (bannerRef.current?.hasPointerCapture(e.pointerId)) {
+        bannerRef.current.releasePointerCapture(e.pointerId);
+      }
+    } catch {}
+  };
+
+  const handlePointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (!isTraceShiftingMode) return;
+    if (bannerDragStateRef.current.isDragging) return;
+    e.preventDefault();
+    e.stopPropagation();
+
     const container = viewportRef.current;
     if (!container) return;
+
+    try {
+      e.currentTarget.setPointerCapture(e.pointerId);
+    } catch {}
 
     const rect = container.getBoundingClientRect();
     const clickX = e.clientX - rect.left;
@@ -378,8 +492,111 @@ export function VideoCanvas({ project, currentTimeMs: propTimeMs }: VideoCanvasP
       camera,
     );
 
+    strokePointsRef.current = [videoCoords];
+    setLiveStrokePoints([videoCoords]);
+    setCursorScreenPos({ x: clickX, y: clickY });
+    setIsDrawingStroke(true);
+  };
+
+  const handlePointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (!isTraceShiftingMode) return;
+    const container = viewportRef.current;
+    if (!container) return;
+
+    const rect = container.getBoundingClientRect();
+    const clickX = e.clientX - rect.left;
+    const clickY = e.clientY - rect.top;
+    const u = Math.min(1, Math.max(0, clickX / (rect.width || 1)));
+    const v = Math.min(1, Math.max(0, clickY / (rect.height || 1)));
+    setCursorScreenPos({ x: u * 100, y: v * 100 });
+
+    if (!isDrawingStroke || strokePointsRef.current.length === 0) return;
+    e.preventDefault();
+    e.stopPropagation();
+
+    const videoCoords = viewportToVideoPoint(
+      u,
+      v,
+      videoAspectRef.current,
+      viewAspectRef.current,
+    );
+
+    const lastPt = strokePointsRef.current[strokePointsRef.current.length - 1]!;
+    const dist = Math.hypot(videoCoords.x - lastPt.x, videoCoords.y - lastPt.y);
+
+    // Keep points spaced with organic interval (at least ~0.012 distance)
+    if (dist >= 0.012) {
+      strokePointsRef.current.push(videoCoords);
+      setLiveStrokePoints([...strokePointsRef.current]);
+    }
+  };
+
+  const handlePointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (!isTraceShiftingMode || !isDrawingStroke) return;
+    e.preventDefault();
+    e.stopPropagation();
+
+    try {
+      e.currentTarget.releasePointerCapture(e.pointerId);
+    } catch {}
+
+    setIsDrawingStroke(false);
+    setCursorScreenPos(null);
+
+    const pts = strokePointsRef.current;
+    strokePointsRef.current = [];
+    setLiveStrokePoints([]);
+
+    if (pts.length === 0) return;
+
+    if (pts.length === 1) {
+      // Single tap / click: add individual waypoint
+      addTraceWaypoint(pts[0]!);
+      const rect = viewportRef.current?.getBoundingClientRect();
+      const u = rect ? Math.min(1, Math.max(0, (e.clientX - rect.left) / (rect.width || 1))) : 0.5;
+      const v = rect ? Math.min(1, Math.max(0, (e.clientY - rect.top) / (rect.height || 1))) : 0.5;
+      setClickShiftMarker({ x: u * 100, y: v * 100, id: Date.now() });
+      setTimeout(() => setClickShiftMarker(null), 600);
+    } else {
+      // Freehand stroke drawn! Smooth and resample to clean camera path
+      const smoothed = processDrawnTracePath(pts, {
+        maxPoints: 16,
+        smoothingPasses: 1,
+        minDistance: 0.015,
+      });
+      addTraceStroke(smoothed);
+    }
+  };
+
+  const handlePointerCancel = () => {
+    setIsDrawingStroke(false);
+    setCursorScreenPos(null);
+    strokePointsRef.current = [];
+    setLiveStrokePoints([]);
+  };
+
+  const handleCanvasClick = (e: React.MouseEvent<HTMLDivElement>) => {
+    // If in trace mode, handled by pointer events
+    if (isTraceShiftingMode) return;
+
+    const container = viewportRef.current;
+    if (!container) return;
+
+    const rect = container.getBoundingClientRect();
+    const clickX = e.clientX - rect.left;
+    const clickY = e.clientY - rect.top;
+    const u = Math.min(1, Math.max(0, clickX / (rect.width || 1)));
+    const v = Math.min(1, Math.max(0, clickY / (rect.height || 1)));
+
+    const videoCoords = viewportToVideoPoint(
+      u,
+      v,
+      videoAspectRef.current,
+      viewAspectRef.current,
+    );
+
     useEditor.getState().shiftCameraTarget(videoCoords.x, videoCoords.y);
-    setClickShiftMarker({ x: clickX, y: clickY, id: Date.now() });
+    setClickShiftMarker({ x: u * 100, y: v * 100, id: Date.now() });
     setTimeout(() => setClickShiftMarker(null), 600);
   };
 
@@ -405,7 +622,7 @@ export function VideoCanvas({ project, currentTimeMs: propTimeMs }: VideoCanvasP
       maxGlideGapMs: 1000,
     } as const;
     return (tMs: number) => {
-      return calculateCameraAtTime(tMs, zoomBlocks, 1000, 400, smoothedTrajectory, keyframes, opts);
+      return calculateCameraAtTime(tMs, zoomBlocks, 1200, 800, smoothedTrajectory, keyframes, opts);
     };
   }, [
     zoomBlocks,
@@ -419,6 +636,7 @@ export function VideoCanvas({ project, currentTimeMs: propTimeMs }: VideoCanvasP
   ]);
   const computeCameraRef = useRef(computeCamera);
   computeCameraRef.current = computeCamera;
+  const cameraStageRef = useRef<HTMLDivElement>(null);
   const zoomLayerRef = useRef<HTMLDivElement>(null);
   const cursorOverlayRef = useRef<HTMLDivElement>(null);
   const glareOverlayRef = useRef<HTMLDivElement>(null);
@@ -456,27 +674,16 @@ export function VideoCanvas({ project, currentTimeMs: propTimeMs }: VideoCanvasP
     }
   }, [effectsState.playbackRate]);
 
-  // Synchronize video voice/audio with clip settings (unmute video so recorded voice actually plays!)
-  const primaryClip = project.clips?.[0];
-  const isClipMuted = primaryClip?.muted ?? false;
-  const clipVolume = primaryClip?.volume ?? 1;
-  useEffect(() => {
-    const video = videoRef.current;
-    if (!video) return;
-    video.muted = isClipMuted;
-    video.volume = Math.max(0, Math.min(1, clipVolume));
-  }, [isClipMuted, clipVolume]);
-
-  // When playback starts, immediately seed the zoom layer transform via DOM so
+  // When playback starts, immediately seed the whole canvas camera stage transform via DOM so
   // there is no single-frame blank between React removing the inline style and
   // the first rAF frame writing the correct value.
   useEffect(() => {
     if (!isPlaying) return;
-    const layer = zoomLayerRef.current;
-    if (!layer) return;
+    const stage = cameraStageRef.current;
+    if (!stage) return;
     const cam = computeCameraRef.current(currentTimeMs);
     const mapped = mapVideoPointToViewport(cam.x, cam.y, videoAspectRef.current, viewAspectRef.current);
-    layer.style.transform = `scale(${cam.scale}) translate3d(${(0.5 - mapped.x) * 100}%, ${(0.5 - mapped.y) * 100}%, 0)`;
+    stage.style.transform = `scale(${cam.scale}) translate3d(${(0.5 - mapped.x) * 100}%, ${(0.5 - mapped.y) * 100}%, 0)`;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isPlaying]);
 
@@ -522,16 +729,16 @@ export function VideoCanvas({ project, currentTimeMs: propTimeMs }: VideoCanvasP
         return;
       }
 
-      // Smooth 60fps camera without React: write transform straight to the layer
-      const layer = zoomLayerRef.current;
-      if (layer) {
+      // Smooth 60fps camera without React: write transform straight to the whole canvas camera stage
+      const stage = cameraStageRef.current;
+      if (stage) {
         const cam = computeCameraRef.current(frameMs);
         // Apply viewport aspect-ratio correction to prevent camera shaking when
         // video aspect ≠ viewport aspect (the React render path uses camView, so rAF must too)
         const vAspect = videoAspectRef.current;
         const vpAspect = viewAspectRef.current;
         const mapped = mapVideoPointToViewport(cam.x, cam.y, vAspect, vpAspect);
-        layer.style.transform = `scale(${cam.scale}) translate3d(${(0.5 - mapped.x) * 100}%, ${(0.5 - mapped.y) * 100}%, 0)`;
+        stage.style.transform = `scale(${cam.scale}) translate3d(${(0.5 - mapped.x) * 100}%, ${(0.5 - mapped.y) * 100}%, 0)`;
 
         // Drive cursor overlay at 60fps via direct DOM — avoids React 12Hz throttle lag
         const cursorEl = cursorOverlayRef.current;
@@ -542,11 +749,11 @@ export function VideoCanvas({ project, currentTimeMs: propTimeMs }: VideoCanvasP
         }
 
         // Drive 3D frame tilt & kinetic motion at 60fps via direct DOM
-        const vp = viewportRef.current;
+        const targetTiltEl = tiltWrapperRef.current || viewportRef.current;
         const lk = looksRef.current;
-        if (vp && (lk.tiltAnimation !== "none" || lk.tiltX || lk.tiltY || lk.tiltZ || lk.tiltAngle)) {
+        if (targetTiltEl && (lk.tiltAnimation !== "none" || lk.tiltX || lk.tiltY || lk.tiltZ || lk.tiltAngle)) {
           const t3D = evaluate3DTiltAtTime(frameMs, lk, interactionsRef.current, keyframesRef.current);
-          vp.style.transform = `perspective(${t3D.perspective}px) rotateX(${t3D.rotateX}deg) rotateY(${t3D.rotateY}deg) rotateZ(${t3D.rotateZ}deg)`;
+          targetTiltEl.style.transform = `perspective(${t3D.perspective}px) rotateX(${t3D.rotateX}deg) rotateY(${t3D.rotateY}deg) rotateZ(${t3D.rotateZ}deg)`;
           if (glareOverlayRef.current && lk.tiltGlare) {
             glareOverlayRef.current.style.background = `radial-gradient(circle at ${t3D.glareX}% ${t3D.glareY}%, rgba(255, 255, 255, 0.16) 0%, transparent 65%)`;
           }
@@ -574,7 +781,20 @@ export function VideoCanvas({ project, currentTimeMs: propTimeMs }: VideoCanvasP
       } else {
         rafId = requestAnimationFrame(onFrame);
       }
-    }).catch(() => {});
+    }).catch(() => {
+      // If browser autoplay policy blocked unmuted playback, try playing muted so preview does not stall
+      if (!isClipMuted && video && active) {
+        video.muted = true;
+        video.play().then(() => {
+          if (!active) return;
+          if ("requestVideoFrameCallback" in video) {
+            rVfcId = (video as unknown as { requestVideoFrameCallback: (cb: () => void) => number }).requestVideoFrameCallback(onFrame);
+          } else {
+            rafId = requestAnimationFrame(onFrame);
+          }
+        }).catch(() => {});
+      }
+    });
 
     return () => {
       active = false;
@@ -737,6 +957,17 @@ export function VideoCanvas({ project, currentTimeMs: propTimeMs }: VideoCanvasP
     setResolvedMediaSrc(primaryUrl);
   }, [rawMedia, isExplicitSample]);
 
+  // Synchronize video voice/audio with clip settings (unmute video so recorded voice actually plays!)
+  const primaryClip = project.clips?.[0];
+  const isClipMuted = primaryClip?.muted ?? false;
+  const clipVolume = primaryClip?.volume ?? 1;
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video) return;
+    video.muted = isClipMuted;
+    video.volume = Math.max(0, Math.min(1, clipVolume));
+  }, [isClipMuted, clipVolume, resolvedMediaSrc]);
+
   const thumbnailSrc = summary.thumbnail ? platform.mediaUrl(summary.thumbnail) : null;
   const [naturalAspectRatio, setNaturalAspectRatio] = useState<string | null>(() => {
     if (summary.width && summary.height && summary.width > 0 && summary.height > 0) {
@@ -751,7 +982,26 @@ export function VideoCanvas({ project, currentTimeMs: propTimeMs }: VideoCanvasP
     }
   }, [summary.width, summary.height]);
 
+  const isPhoneOrTablet =
+    (looks.padding ?? 32) > 0 &&
+    (looks.windowFrame === "android" ||
+     looks.windowFrame === "iphone" ||
+     looks.windowFrame === "ipad");
+
+  const isAndroid = isPhoneOrTablet && looks.windowFrame === "android";
+  const isIphone = isPhoneOrTablet && looks.windowFrame === "iphone";
+  const isIpad = isPhoneOrTablet && looks.windowFrame === "ipad";
+
+  const isMobileRecording = Boolean(
+    (summary.width && summary.height && summary.width < summary.height) ||
+    looks.aspectRatio === "9:16" ||
+    (summary.name && /(android|iphone|samsung|pixel|mobile|ios|phone)/i.test(summary.name))
+  );
+
   const viewportAspectRatio = useMemo(() => {
+    if (isPhoneOrTablet || isMobileRecording) {
+      return naturalAspectRatio || (summary.width && summary.height ? `${summary.width} / ${summary.height}` : "9 / 16");
+    }
     if (looks.aspectRatio && looks.aspectRatio !== "auto") {
       if (looks.aspectRatio === "9:16") return "9 / 16";
       if (looks.aspectRatio === "1:1") return "1 / 1";
@@ -759,7 +1009,7 @@ export function VideoCanvas({ project, currentTimeMs: propTimeMs }: VideoCanvasP
       if (looks.aspectRatio === "16:9") return "16 / 9";
     }
     return naturalAspectRatio || (summary.width && summary.height ? `${summary.width} / ${summary.height}` : "16 / 9");
-  }, [looks.aspectRatio, naturalAspectRatio, summary.width, summary.height]);
+  }, [isPhoneOrTablet, summary.source, looks.aspectRatio, naturalAspectRatio, summary.width, summary.height]);
 
   const parseAspect = (v: string | null | undefined): number | null => {
     if (!v) return null;
@@ -783,8 +1033,47 @@ export function VideoCanvas({ project, currentTimeMs: propTimeMs }: VideoCanvasP
     glow: "0 10px 36px -10px rgb(255 255 255 / 0.35)",
   };
 
+  // Responsive Canvas Viewport Measurement: ensures device frame remains firmly fixed and full-size on screen
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [containerSize, setContainerSize] = useState<{ width: number; height: number }>({ width: 0, height: 0 });
+
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    const updateSize = () => {
+      const rect = el.getBoundingClientRect();
+      const padPx = looks.padding === 0 ? 0 : Math.min(looks.padding, Math.max(8, Math.min(rect.width, rect.height) * 0.08));
+      const availW = Math.max(80, rect.width - 2 * padPx);
+      const availH = Math.max(80, rect.height - 2 * padPx);
+      setContainerSize({ width: availW, height: availH });
+    };
+    updateSize();
+    const ro = new ResizeObserver(updateSize);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [looks.padding]);
+
+  const frameDimensions = useMemo(() => {
+    const { width: availW, height: availH } = containerSize;
+    const aspect = viewAspectNum || (summary.width && summary.height ? summary.width / summary.height : 16 / 9);
+    if (!availW || !availH || !aspect) {
+      return { maxWidth: "100%", maxHeight: "100%", aspectRatio: viewportAspectRatio };
+    }
+    const containerAspect = availW / availH;
+    if (containerAspect > aspect) {
+      const h = Math.round(availH);
+      const w = Math.round(availH * aspect);
+      return { width: `${w}px`, height: `${h}px` };
+    } else {
+      const w = Math.round(availW);
+      const h = Math.round(availW / aspect);
+      return { width: `${w}px`, height: `${h}px` };
+    }
+  }, [containerSize, viewAspectNum, viewportAspectRatio, summary.width, summary.height]);
+
   return (
     <div
+      ref={containerRef}
       className="relative flex size-full items-center justify-center overflow-hidden"
       style={{
         background: looks.backgroundValue,
@@ -815,21 +1104,140 @@ export function VideoCanvas({ project, currentTimeMs: propTimeMs }: VideoCanvasP
         </div>
       )}
 
-      {/* Video Viewport with Framing, 3D Tilt, and Click-to-Shift */}
+      {/* Whole Canvas Camera Stage: zooms and shifts the entire framed video screen across the canvas */}
       <div
-        ref={viewportRef}
-        data-tutorial-target="canvas-player"
-        onClick={handleCanvasClick}
-        className="relative flex flex-col max-h-full max-w-full overflow-hidden bg-ink-950 cursor-crosshair group select-none transition-transform duration-300"
+        ref={cameraStageRef}
+        className="relative flex items-center justify-center will-change-transform shrink-0"
         style={{
-          aspectRatio: viewportAspectRatio,
-          borderRadius: `${looks.borderRadius}px`,
-          boxShadow: looks.padding === 0 ? "none" : (shadowStyles[looks.shadow] || shadowStyles.lift),
-          transform: `perspective(${tilt3D.perspective}px) rotateX(${tilt3D.rotateX}deg) rotateY(${tilt3D.rotateY}deg) rotateZ(${tilt3D.rotateZ}deg)`,
-          transformStyle: "preserve-3d",
+          ...frameDimensions,
+          transform: isPlaying
+            ? undefined
+            : `scale(${camera.scale}) translate3d(${(0.5 - camView.x) * 100}%, ${(0.5 - camView.y) * 100}%, 0)`,
+          transformOrigin: "center center",
+          transition: isPlaying ? "none" : "transform 0.1s ease-out",
         }}
-        title="Click anywhere to shift camera focal center"
       >
+        {/* 3D Tilt Wrapper: maintains 3D perspective physics for entire chassis & screen */}
+        <div
+          ref={tiltWrapperRef}
+          className="relative flex items-center justify-center size-full pointer-events-none transition-transform duration-300"
+          style={{
+            transform: `perspective(${tilt3D.perspective}px) rotateX(${tilt3D.rotateX}deg) rotateY(${tilt3D.rotateY}deg) rotateZ(${tilt3D.rotateZ}deg)`,
+            transformStyle: "preserve-3d",
+          }}
+        >
+        {/* Physical Smartphone / Tablet Chassis Body with Real Hardware Edges */}
+        <div
+          className={`relative flex flex-col items-center justify-center size-full pointer-events-auto transition-all duration-300 select-none ${
+            isPhoneOrTablet
+              ? isIphone
+                ? "bg-gradient-to-b from-[#2e2e34] via-[#1e1e22] to-[#121215] border-[3px] border-[#4b4b52]"
+                : isAndroid
+                ? "bg-gradient-to-b from-[#2a2a2e] via-[#1c1c1f] to-[#111113] border-[3px] border-[#3f3f46]"
+                : "bg-gradient-to-b from-[#28282c] via-[#1a1a1d] to-[#111113] border-[3px] border-[#44444c]"
+              : ""
+          }`}
+          style={{
+            paddingTop: isPhoneOrTablet ? (isIpad ? "14px" : "12px") : "0px",
+            paddingBottom: isPhoneOrTablet ? (isIpad ? "14px" : "12px") : "0px",
+            paddingLeft: isPhoneOrTablet ? (isIpad ? "14px" : "8px") : "0px",
+            paddingRight: isPhoneOrTablet ? (isIpad ? "14px" : "8px") : "0px",
+            boxShadow:
+              looks.padding === 0
+                ? "none"
+                : isPhoneOrTablet
+                ? "0 0 0 1px rgba(255,255,255,0.25), 0 0 0 2px rgba(0,0,0,0.9), 0 25px 65px -12px rgba(0,0,0,0.95), 0 0 25px rgba(0,0,0,0.5)"
+                : "none",
+            borderRadius: isPhoneOrTablet
+              ? isIphone
+                ? `${Math.max(42, (looks.borderRadius || 36) + 10)}px`
+                : isAndroid
+                ? `${Math.max(34, (looks.borderRadius || 28) + 8)}px`
+                : `${Math.max(28, (looks.borderRadius || 24) + 8)}px`
+              : "0px",
+          }}
+        >
+          {/* Physical Hardware Buttons on Left Edge */}
+          {isPhoneOrTablet && (
+            <div className="pointer-events-none absolute left-0 inset-y-0 w-0 select-none z-50">
+              {isIphone && (
+                <>
+                  {/* Action Button */}
+                  <div className="absolute -left-[4px] top-[18%] h-7 w-[4px] rounded-l-sm bg-gradient-to-r from-[#52525b] to-[#3f3f46] border-y border-l border-white/30 shadow-md" />
+                  {/* Volume Up */}
+                  <div className="absolute -left-[4px] top-[26%] h-12 w-[4px] rounded-l-sm bg-gradient-to-r from-[#52525b] to-[#3f3f46] border-y border-l border-white/30 shadow-md" />
+                  {/* Volume Down */}
+                  <div className="absolute -left-[4px] top-[38%] h-12 w-[4px] rounded-l-sm bg-gradient-to-r from-[#52525b] to-[#3f3f46] border-y border-l border-white/30 shadow-md" />
+                </>
+              )}
+              {isAndroid && (
+                /* Volume Rocker */
+                <div className="absolute -left-[4px] top-[24%] h-20 w-[4px] rounded-l-sm bg-gradient-to-r from-[#52525b] to-[#3f3f46] border-y border-l border-white/30 shadow-md" />
+              )}
+              {isIpad && (
+                <>
+                  <div className="absolute -left-[4px] top-[14%] h-10 w-[4px] rounded-l-sm bg-gradient-to-r from-[#52525b] to-[#3f3f46] border-y border-l border-white/30 shadow-md" />
+                  <div className="absolute -left-[4px] top-[22%] h-10 w-[4px] rounded-l-sm bg-gradient-to-r from-[#52525b] to-[#3f3f46] border-y border-l border-white/30 shadow-md" />
+                </>
+              )}
+            </div>
+          )}
+
+          {/* Physical Hardware Buttons on Right Edge */}
+          {isPhoneOrTablet && (
+            <div className="pointer-events-none absolute right-0 inset-y-0 w-0 select-none z-50">
+              {isIphone && (
+                /* Power / Siri Button */
+                <div className="absolute -right-[4px] top-[28%] h-18 w-[4px] rounded-r-sm bg-gradient-to-l from-[#52525b] to-[#3f3f46] border-y border-r border-white/30 shadow-md" />
+              )}
+              {isAndroid && (
+                /* Power Button */
+                <div className="absolute -right-[4px] top-[32%] h-14 w-[4px] rounded-r-sm bg-gradient-to-l from-[#52525b] to-[#3f3f46] border-y border-r border-white/30 shadow-md" />
+              )}
+            </div>
+          )}
+
+          {/* Top Bezel Ear-Speaker Grill (Centered on top chassis bezel) */}
+          {isPhoneOrTablet && !isIpad && (
+            <div className="pointer-events-none absolute top-1 inset-x-0 flex items-center justify-center z-40 select-none">
+              <div className="h-1 w-12 rounded-full bg-[#08080a] border border-white/15 shadow-inner" />
+            </div>
+          )}
+
+          {/* Video Viewport (The Screen) */}
+          <div
+            ref={viewportRef}
+            data-tutorial-target="canvas-player"
+            onClick={handleCanvasClick}
+            onPointerDown={handlePointerDown}
+            onPointerMove={handlePointerMove}
+            onPointerUp={handlePointerUp}
+            onPointerCancel={handlePointerCancel}
+            className={`relative flex flex-col size-full min-h-0 min-w-0 overflow-hidden bg-ink-950 ${
+              isTraceShiftingMode ? "cursor-crosshair ring-2 ring-white/60 touch-none" : "cursor-crosshair"
+            } group select-none transition-all duration-300`}
+            style={{
+              borderRadius: isPhoneOrTablet
+                ? isIphone
+                  ? `${looks.borderRadius || 36}px`
+                  : isAndroid
+                  ? `${looks.borderRadius || 28}px`
+                  : `${looks.borderRadius || 20}px`
+                : `${looks.borderRadius}px`,
+              boxShadow: isPhoneOrTablet ? "inset 0 0 0 1px rgba(0,0,0,0.8)" : looks.padding === 0 ? "none" : (shadowStyles[looks.shadow] || shadowStyles.lift),
+            }}
+            title={isTraceShiftingMode ? "Click & drag on video to draw zoom trajectory line" : "Click anywhere to shift camera focal center"}
+          >
+        {/* Dedicated Transparent Drawing Capture Surface in Trace Mode */}
+        {isTraceShiftingMode && (
+          <div
+            className="absolute inset-0 z-35 cursor-crosshair select-none touch-none"
+            onPointerDown={handlePointerDown}
+            onPointerMove={handlePointerMove}
+            onPointerUp={handlePointerUp}
+            onPointerCancel={handlePointerCancel}
+          />
+        )}
         {/* Specular Glass Glare Sheen Overlay */}
         {looks.tiltGlare && (
           <div
@@ -859,16 +1267,16 @@ export function VideoCanvas({ project, currentTimeMs: propTimeMs }: VideoCanvasP
           />
         )}
 
-        {/* Modular Window Mockup Shell Bar */}
+        {/* Modular Window & Device Mockup Shell Bar */}
         {looks.windowFrame && looks.windowFrame !== "none" && (
           <>
             {/* macOS Window */}
             {looks.windowFrame === "macos" && (
               <div className="relative w-full shrink-0 h-7 z-30 flex items-center justify-between px-3 bg-[#1e1e20]/90 backdrop-blur-md border-b border-white/10 select-none pointer-events-none">
                 <div className="flex items-center gap-1.5 shrink-0">
-                  <span className="size-2.5 rounded-full bg-[#ff5f56] border border-black/20" />
-                  <span className="size-2.5 rounded-full bg-[#ffbd2e] border border-black/20" />
-                  <span className="size-2.5 rounded-full bg-[#27c93f] border border-black/20" />
+                  <span className="size-2.5 rounded-full bg-neutral-600 border border-neutral-700" />
+                  <span className="size-2.5 rounded-full bg-neutral-500 border border-neutral-700" />
+                  <span className="size-2.5 rounded-full bg-neutral-400 border border-neutral-700" />
                 </div>
                 <div className="w-12 shrink-0" />
               </div>
@@ -878,8 +1286,8 @@ export function VideoCanvas({ project, currentTimeMs: propTimeMs }: VideoCanvasP
             {looks.windowFrame === "windows" && (
               <div className="relative w-full shrink-0 h-8 z-30 flex items-center justify-between px-2 bg-[#1f1f1f] border-b border-white/10 select-none pointer-events-none">
                 <div className="flex items-center gap-1.5 h-full pt-1">
-                  <div className="flex items-center gap-2 bg-[#2d2d2d] text-white px-2.5 py-1 rounded-t text-[11px] font-mono border-t-2 border-sky-400 shadow-sm">
-                    <span className="text-sky-400 font-bold text-xs select-none">&gt;_</span>
+                  <div className="flex items-center gap-2 bg-[#2d2d2d] text-white px-2.5 py-1 rounded-t text-[11px] font-mono border-t-2 border-white/60 shadow-sm">
+                    <span className="text-white font-bold text-xs select-none">&gt;_</span>
                     <span className="text-neutral-400 text-[10px] ml-1">✕</span>
                   </div>
                   <span className="text-neutral-400 text-xs px-1 select-none">+</span>
@@ -902,9 +1310,9 @@ export function VideoCanvas({ project, currentTimeMs: propTimeMs }: VideoCanvasP
             {looks.windowFrame === "terminal" && (
               <div className="relative w-full shrink-0 h-7 z-30 flex items-center justify-between px-3 bg-[#18181a] border-b border-white/10 select-none pointer-events-none">
                 <div className="flex items-center gap-1.5 shrink-0">
-                  <span className="size-2.5 rounded-full bg-[#ff5f56] border border-black/20" />
-                  <span className="size-2.5 rounded-full bg-[#ffbd2e] border border-black/20" />
-                  <span className="size-2.5 rounded-full bg-[#27c93f] border border-black/20" />
+                  <span className="size-2.5 rounded-full bg-neutral-600 border border-neutral-700" />
+                  <span className="size-2.5 rounded-full bg-neutral-500 border border-neutral-700" />
+                  <span className="size-2.5 rounded-full bg-neutral-400 border border-neutral-700" />
                 </div>
                 <div className="w-12 shrink-0" />
               </div>
@@ -918,7 +1326,7 @@ export function VideoCanvas({ project, currentTimeMs: propTimeMs }: VideoCanvasP
                     <svg className="size-2.5 text-neutral-400 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                       <circle cx="12" cy="12" r="10" />
                       <line x1="2" y1="12" x2="22" y2="12" />
-                      <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
+                      <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
                     </svg>
                     <span className="text-neutral-400 text-[8px] ml-auto">✕</span>
                   </div>
@@ -946,9 +1354,9 @@ export function VideoCanvas({ project, currentTimeMs: propTimeMs }: VideoCanvasP
               <div className="relative w-full shrink-0 h-7 z-30 flex items-center justify-between px-3 bg-[#242426]/95 backdrop-blur-md border-b border-white/10 select-none pointer-events-none">
                 <div className="flex items-center gap-2.5">
                   <div className="flex items-center gap-1.5 shrink-0">
-                    <span className="size-2.5 rounded-full bg-[#ff5f56] border border-black/20" />
-                    <span className="size-2.5 rounded-full bg-[#ffbd2e] border border-black/20" />
-                    <span className="size-2.5 rounded-full bg-[#27c93f] border border-black/20" />
+                    <span className="size-2.5 rounded-full bg-neutral-600 border border-neutral-700" />
+                    <span className="size-2.5 rounded-full bg-neutral-500 border border-neutral-700" />
+                    <span className="size-2.5 rounded-full bg-neutral-400 border border-neutral-700" />
                   </div>
                   <div className="flex items-center gap-1.5 text-neutral-400 text-[10px] font-semibold pl-1">
                     <span>‹</span>
@@ -977,28 +1385,113 @@ export function VideoCanvas({ project, currentTimeMs: propTimeMs }: VideoCanvasP
                 <div className="w-10 shrink-0" />
               </div>
             )}
+
+            {/* Modern Laptop: Top Webcam Bezel */}
+            {looks.windowFrame === "laptop" && (
+              <div className="relative w-full shrink-0 h-4 z-30 flex items-center justify-center bg-[#18181b] border-b border-white/10 select-none pointer-events-none">
+                <div className="flex items-center gap-2">
+                  <span className="size-0.5 rounded-full bg-neutral-500" />
+                  <div className="size-2 rounded-full bg-black border border-neutral-700 flex items-center justify-center">
+                    <span className="size-0.5 rounded-full bg-blue-900" />
+                  </div>
+                  <span className="size-0.5 rounded-full bg-neutral-500" />
+                </div>
+              </div>
+            )}
+
+            {/* iPhone Pro: Dynamic Island & Home Bar Overlays */}
+            {looks.windowFrame === "iphone" && (
+              <>
+                <div className="pointer-events-none absolute top-1 inset-x-0 z-40 flex items-center justify-center">
+                  <div className="h-0.5 w-12 rounded-full bg-neutral-800" />
+                </div>
+                <div className="pointer-events-none absolute top-2.5 inset-x-0 z-40 flex items-center justify-center">
+                  <div className="h-5 w-24 rounded-full bg-black border border-white/15 shadow-lg flex items-center justify-between px-2.5">
+                    <div className="size-2 rounded-full bg-[#111] border border-white/10" />
+                    <div className="size-2.5 rounded-full bg-[#0a0a14] border border-neutral-700 flex items-center justify-center">
+                      <div className="size-1 rounded-full bg-blue-900/80" />
+                    </div>
+                  </div>
+                </div>
+                <div className="pointer-events-none absolute bottom-2 inset-x-0 z-40 flex items-center justify-center">
+                  <div className="h-1 w-28 rounded-full bg-white/70 shadow-sm" />
+                </div>
+                <div className="pointer-events-none absolute inset-0 rounded-[inherit] ring-1 ring-inset ring-white/15 z-40" />
+              </>
+            )}
+
+            {/* Android Flagship: Center Punch-Hole & Gesture Bar */}
+            {looks.windowFrame === "android" && (
+              <>
+                <div className="pointer-events-none absolute top-2.5 inset-x-0 z-40 flex items-center justify-center">
+                  <div className="size-3.5 rounded-full bg-black border border-neutral-700 shadow-md flex items-center justify-center">
+                    <div className="size-1.5 rounded-full bg-neutral-800 border border-neutral-600/50" />
+                  </div>
+                </div>
+                <div className="pointer-events-none absolute bottom-1.5 inset-x-0 z-40 flex items-center justify-center">
+                  <div className="h-1 w-20 rounded-full bg-white/50 shadow-sm" />
+                </div>
+                <div className="pointer-events-none absolute inset-0 rounded-[inherit] ring-1 ring-inset ring-white/10 z-40" />
+              </>
+            )}
+
+            {/* MacBook Pro: Top Notch */}
+            {looks.windowFrame === "macbook" && (
+              <div className="pointer-events-none absolute top-0 inset-x-0 z-40 flex items-center justify-center">
+                <div className="h-3.5 w-32 rounded-b-lg bg-[#141416] border-b border-x border-white/15 shadow-md flex items-center justify-center gap-2">
+                  <div className="size-1.5 rounded-full bg-black border border-neutral-700 flex items-center justify-center">
+                    <span className="size-0.5 rounded-full bg-blue-900" />
+                  </div>
+                  <div className="size-1 rounded-full bg-emerald-500/80" />
+                </div>
+              </div>
+            )}
+
+            {/* iPad Tablet: Top Camera & Home Indicator */}
+            {looks.windowFrame === "ipad" && (
+              <>
+                <div className="pointer-events-none absolute top-2 inset-x-0 z-40 flex items-center justify-center">
+                  <div className="size-2.5 rounded-full bg-black border border-neutral-700 shadow-sm flex items-center justify-center">
+                    <div className="size-1 rounded-full bg-blue-950" />
+                  </div>
+                </div>
+                <div className="pointer-events-none absolute bottom-2 inset-x-0 z-40 flex items-center justify-center">
+                  <div className="h-1 w-32 rounded-full bg-white/60 shadow-sm" />
+                </div>
+                <div className="pointer-events-none absolute inset-0 rounded-[inherit] ring-1 ring-inset ring-white/15 z-40" />
+              </>
+            )}
+
+            {/* iMac: Top Bezel Camera Dot */}
+            {looks.windowFrame === "imac" && (
+              <div className="pointer-events-none absolute top-1.5 inset-x-0 z-40 flex items-center justify-center">
+                <div className="size-2 rounded-full bg-black border border-neutral-700 flex items-center justify-center">
+                  <div className="size-0.5 rounded-full bg-blue-900" />
+                </div>
+              </div>
+            )}
           </>
         )}
 
-        {/* Dynamic Zooming Video Container: zero latency with hardware accelerated 3D transform */}
+        {/* Screen Video Container: 1:1 uncropped inside device frame */}
         <div
           ref={zoomLayerRef}
-          className={`relative ${looks.windowFrame && looks.windowFrame !== "none" ? "flex-1 min-h-0 w-full" : "size-full"} origin-center will-change-transform overflow-hidden`}
-          style={{
-            // When playing, rAF is the SOLE owner of this transform (60fps via direct DOM write).
-            // Setting undefined here prevents React re-renders (throttled to ~12fps via setCurrentTime)
-            // from overwriting the rAF value with a stale frame → eliminates camera shake/flicker.
-            transform: isPlaying
-              ? undefined
-              : `scale(${camera.scale}) translate3d(${(0.5 - camView.x) * 100}%, ${(0.5 - camView.y) * 100}%, 0)`,
-            transition: isPlaying ? "none" : "transform 0.1s ease-out",
-          }}
+          className={`relative ${
+            looks.windowFrame &&
+            looks.windowFrame !== "none" &&
+            looks.windowFrame !== "iphone" &&
+            looks.windowFrame !== "android" &&
+            looks.windowFrame !== "ipad"
+              ? "flex-1 min-h-0 w-full"
+              : "size-full"
+          } overflow-hidden`}
         >
           {resolvedMediaSrc ? (
             <video
               ref={videoRef}
               src={resolvedMediaSrc}
               poster={thumbnailSrc || undefined}
+              muted={isClipMuted}
               playsInline
               preload="auto"
               style={{
@@ -1011,6 +1504,8 @@ export function VideoCanvas({ project, currentTimeMs: propTimeMs }: VideoCanvasP
               className={`size-full pointer-events-none ${looks.fit === "cover" ? "object-cover" : "object-contain"}`}
               onLoadedMetadata={(e) => {
                 const v = e.currentTarget;
+                v.muted = isClipMuted;
+                v.volume = Math.max(0, Math.min(1, clipVolume));
                 if (v.videoWidth && v.videoHeight) {
                   setNaturalAspectRatio(`${v.videoWidth} / ${v.videoHeight}`);
                 }
@@ -1143,6 +1638,26 @@ export function VideoCanvas({ project, currentTimeMs: propTimeMs }: VideoCanvasP
           })}
         </div>
 
+        {/* Bottom Hardware Chassis / Chin Elements */}
+        {looks.windowFrame === "macbook" && (
+          <div className="relative w-full shrink-0 h-3 z-30 flex items-center justify-center bg-gradient-to-b from-[#222225] to-[#141416] border-t border-white/10 select-none pointer-events-none">
+            <div className="w-12 h-1 bg-[#0d0d0f] rounded-b-sm border-b border-white/10" />
+          </div>
+        )}
+        {looks.windowFrame === "laptop" && (
+          <div className="relative w-full shrink-0 h-3 z-30 flex items-center justify-center bg-gradient-to-b from-[#252528] to-[#18181b] border-t border-neutral-700/80 select-none pointer-events-none">
+            <div className="w-20 h-0.5 bg-neutral-600/50 rounded-full" />
+          </div>
+        )}
+        {looks.windowFrame === "imac" && (
+          <div className="relative w-full shrink-0 h-7 z-30 flex flex-col items-center justify-between bg-gradient-to-b from-[#28282b] to-[#1c1c1e] border-t border-white/10 select-none pointer-events-none">
+            <div className="w-full flex-1 flex items-center justify-center">
+              <span className="size-1.5 rounded-full bg-white/20" />
+            </div>
+            <div className="w-16 h-1.5 bg-[#2c2c2f] rounded-t-sm border-t border-x border-white/10" />
+          </div>
+        )}
+
         {/* Dynamic Vignette Effect Overlay */}
         {effectsState.vignette > 0 && (
           <div
@@ -1169,8 +1684,8 @@ export function VideoCanvas({ project, currentTimeMs: propTimeMs }: VideoCanvasP
             key={clickShiftMarker.id}
             className="pointer-events-none absolute -translate-x-1/2 -translate-y-1/2 z-40 transition-opacity duration-300"
             style={{
-              left: `${clickShiftMarker.x}px`,
-              top: `${clickShiftMarker.y}px`,
+              left: `${clickShiftMarker.x}%`,
+              top: `${clickShiftMarker.y}%`,
             }}
           >
             <div className="size-6 rounded-full border border-white/80 bg-white/20 shadow-md" />
@@ -1208,6 +1723,215 @@ export function VideoCanvas({ project, currentTimeMs: propTimeMs }: VideoCanvasP
                 : "Effect Active"}
             </span>
           </div>
+        )}
+
+        {/* Editor-Only Interactive Ghost Trajectory Path (Never rendered on final export) */}
+        {(isTraceShiftingMode || traceWaypoints.length > 0 || liveStrokePoints.length > 0) && (
+          <div className="absolute inset-0 pointer-events-none z-35 overflow-hidden">
+            <svg className="size-full">
+              <defs>
+                {/* Sleek directional arrowhead marker */}
+                <marker
+                  id="trace-arrowhead"
+                  markerWidth="8"
+                  markerHeight="8"
+                  refX="6"
+                  refY="4"
+                  orient="auto"
+                >
+                  <polygon points="0 1, 8 4, 0 7, 2 4" fill="#ffffff" />
+                </marker>
+                {/* Direction indicator backdrop arrow */}
+                <marker
+                  id="trace-arrowhead-bg"
+                  markerWidth="10"
+                  markerHeight="10"
+                  refX="7"
+                  refY="5"
+                  orient="auto"
+                >
+                  <polygon points="0 1, 10 5, 0 9, 2 5" fill="#000000" />
+                </marker>
+              </defs>
+
+              {/* In-progress live freehand drawn stroke */}
+              {liveStrokePoints.length > 1 && (
+                <>
+                  <path
+                    d={pointsToSmoothSvgPath(liveStrokePoints, (x, y) => mapPt(x, y))}
+                    fill="none"
+                    stroke="#000000"
+                    strokeWidth="5"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    opacity="0.6"
+                  />
+                  <path
+                    d={pointsToSmoothSvgPath(liveStrokePoints, (x, y) => mapPt(x, y))}
+                    fill="none"
+                    stroke="#ffffff"
+                    strokeWidth="3"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    style={{ filter: "drop-shadow(0 2px 8px rgba(0,0,0,0.9))" }}
+                  />
+                </>
+              )}
+
+              {/* Committed trajectory path — sleek continuous line itself */}
+              {traceWaypoints.length > 1 && (
+                <>
+                  {/* High contrast dark backdrop outline */}
+                  <path
+                    d={pointsToSmoothSvgPath(traceWaypoints, (x, y) => mapPt(x, y))}
+                    fill="none"
+                    stroke="#000000"
+                    strokeWidth="6"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    markerEnd="url(#trace-arrowhead-bg)"
+                    opacity="0.8"
+                  />
+                  {/* Main glowing white trajectory line */}
+                  <path
+                    d={pointsToSmoothSvgPath(traceWaypoints, (x, y) => mapPt(x, y))}
+                    fill="none"
+                    stroke="#ffffff"
+                    strokeWidth="2.75"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    markerEnd="url(#trace-arrowhead)"
+                    style={{ filter: "drop-shadow(0 2px 10px rgba(255,255,255,0.4))" }}
+                  />
+                </>
+              )}
+
+              {/* Subtle trajectory origin dot (no numbered clutter) */}
+              {traceWaypoints.length > 0 && (() => {
+                const startPt = mapPt(traceWaypoints[0]!.x, traceWaypoints[0]!.y);
+                return (
+                  <circle
+                    cx={`${startPt.x * 100}%`}
+                    cy={`${startPt.y * 100}%`}
+                    r="4.5"
+                    fill="#ffffff"
+                    stroke="#000000"
+                    strokeWidth="2"
+                    style={{ filter: "drop-shadow(0 2px 6px rgba(0,0,0,0.8))" }}
+                  />
+                );
+              })()}
+            </svg>
+
+            {/* Live indicator following cursor during active stroke */}
+            {isDrawingStroke && cursorScreenPos && (
+              <div
+                className="absolute pointer-events-none -translate-x-1/2 -translate-y-9 z-50 flex items-center gap-1.5 rounded-full bg-black/90 border border-white/40 px-2.5 py-1 text-[10px] font-semibold text-white shadow-xl whitespace-nowrap"
+                style={{ left: `${cursorScreenPos.x}%`, top: `${cursorScreenPos.y}%` }}
+              >
+                <Pencil className="size-3 text-white" />
+                <span>Drawing Camera Path...</span>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Trace Shifting Mode Active Canvas Banner (Draggable) */}
+        {isTraceShiftingMode ? (
+          <div
+            ref={bannerRef}
+            onPointerDown={handleBannerPointerDown}
+            onPointerMove={handleBannerPointerMove}
+            onPointerUp={handleBannerPointerUp}
+            onPointerCancel={handleBannerPointerUp}
+            style={
+              bannerPos
+                ? { left: `${bannerPos.x}px`, top: `${bannerPos.y}px`, transform: "none" }
+                : { left: "50%", top: "12px", transform: "translateX(-50%)" }
+            }
+            className="absolute flex items-center gap-2 rounded-full bg-black/95 border border-white/40 px-3.5 py-1.5 backdrop-blur-md z-40 shadow-2xl select-none cursor-grab active:cursor-grabbing touch-none"
+          >
+            <div
+              className="flex items-center text-neutral-400 hover:text-white cursor-grab active:cursor-grabbing p-0.5 -ml-1"
+              title="Drag banner anywhere across preview screen"
+            >
+              <GripVertical className="size-3.5" />
+            </div>
+            <span className="size-2 rounded-full bg-white animate-ping shrink-0" />
+            <span className="text-xs font-semibold text-white">
+              {isDrawingStroke
+                ? "Drawing camera path..."
+                : traceWaypoints.length > 0
+                ? "Trajectory Line Ready"
+                : "Drag across video screen to draw line"}
+            </span>
+            <div className="h-3 w-px bg-white/20 mx-0.5" />
+            <button
+              type="button"
+              onPointerDown={(e) => e.stopPropagation()}
+              onClick={(e) => {
+                e.stopPropagation();
+                followDrawnLine({ totalDurationMs: 4800, peakScale: 1.85 });
+              }}
+              disabled={traceWaypoints.length === 0}
+              className="rounded-full bg-white text-black font-bold px-3 py-1 text-[10px] hover:bg-neutral-200 transition-colors disabled:opacity-40 flex items-center gap-1 shadow-sm cursor-pointer"
+              title="Play camera zooming and following this drawn line"
+            >
+              <Play className="size-2.5 fill-black" />
+              <span>Follow Line</span>
+            </button>
+            <button
+              type="button"
+              onPointerDown={(e) => e.stopPropagation()}
+              onClick={(e) => {
+                e.stopPropagation();
+                applyTraceShifting({ totalDurationMs: 4800, peakScale: 1.85 });
+              }}
+              disabled={traceWaypoints.length === 0}
+              className="rounded-full border border-white/50 text-white font-medium px-2.5 py-1 text-[10px] hover:bg-white/10 transition-colors disabled:opacity-40 cursor-pointer"
+              title="Save camera path to timeline"
+            >
+              Apply
+            </button>
+            <button
+              type="button"
+              onPointerDown={(e) => e.stopPropagation()}
+              onClick={(e) => {
+                e.stopPropagation();
+                clearTraceWaypoints();
+              }}
+              className="text-[10px] text-neutral-400 hover:text-white px-1.5 transition-colors cursor-pointer"
+              title="Clear all waypoints to draw again"
+            >
+              Clear
+            </button>
+            <button
+              type="button"
+              onPointerDown={(e) => e.stopPropagation()}
+              onClick={(e) => {
+                e.stopPropagation();
+                setTraceShiftingMode(false);
+              }}
+              className="text-[10px] text-neutral-400 hover:text-white px-1 cursor-pointer"
+              title="Exit draw mode"
+            >
+              ✕
+            </button>
+          </div>
+        ) : (
+          /* Subtle Canvas Quick-Entry Button when NOT in draw mode */
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              setTraceShiftingMode(true);
+            }}
+            className="absolute top-2.5 right-2.5 z-30 flex items-center gap-1.5 rounded-full bg-black/75 hover:bg-black border border-white/20 hover:border-white/60 px-2.5 py-1 text-[10px] font-medium text-white shadow-lg backdrop-blur-md transition-all opacity-80 hover:opacity-100"
+            title="Draw zoom and camera shift trajectory on video screen (D)"
+          >
+            <Pencil className="size-3 text-white" />
+            <span>Draw Path</span>
+          </button>
         )}
 
         {/* Dynamic Kinetic Text Cards on Video */}
@@ -1263,7 +1987,7 @@ export function VideoCanvas({ project, currentTimeMs: propTimeMs }: VideoCanvasP
                     data-testid={`text-kicker-${textOverlay.id}`}
                     className="text-[10px] font-bold tracking-wider leading-none select-none mb-1 opacity-90"
                     style={{
-                      color: looks.brandAccentColor || (isTerminal ? "#4ade80" : "#a5b4fc"),
+                      color: looks.brandAccentColor || "#ffffff",
                       letterSpacing: textOverlay.typography?.letterSpacing || "0.08em",
                       textTransform: textOverlay.typography?.kickerTransform || "uppercase",
                       fontFamily,
@@ -1291,6 +2015,9 @@ export function VideoCanvas({ project, currentTimeMs: propTimeMs }: VideoCanvasP
             </div>
           );
         })}
+          </div>
+        </div>
+      </div>
       </div>
     </div>
   );

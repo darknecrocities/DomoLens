@@ -71,8 +71,9 @@ export type ToolTab =
  * - "select": Default pointer tool for selecting, dragging, and resizing track elements.
  * - "split": Razor blade tool for splitting clips or tracks at the playhead or cursor.
  * - "pan": Hand tool for click-and-drag viewport panning across zoomed-in timelines.
+ * - "draw": Pen/Trajectory tool for drawing zoom and shift paths directly on the video screen.
  */
-export type TimelineToolMode = "select" | "split" | "pan";
+export type TimelineToolMode = "select" | "split" | "pan" | "draw";
 
 export interface LlmQuestionOption {
   label: string;
@@ -178,6 +179,27 @@ export interface EditorState {
     shiftDurationMs?: number;
   }) => void;
 
+  // Trace Shifting Animation (Interactive Ghost Trajectory Path)
+  isTraceShiftingMode: boolean;
+  traceWaypoints: Array<{ id: string; x: number; y: number; scale?: number }>;
+  setTraceShiftingMode: (enabled: boolean) => void;
+  addTraceWaypoint: (point: { x: number; y: number }, scale?: number) => void;
+  addTraceStroke: (points: Array<{ x: number; y: number }>, scale?: number) => void;
+  removeTraceWaypoint: (id: string) => void;
+  clearTraceWaypoints: () => void;
+  applyTraceShifting: (options?: {
+    totalDurationMs?: number;
+    peakScale?: number;
+    leadInMs?: number;
+    leadOutMs?: number;
+    easing?: "cubic" | "spring";
+    autoPlay?: boolean;
+  }) => void;
+  followDrawnLine: (options?: {
+    totalDurationMs?: number;
+    peakScale?: number;
+  }) => void;
+
   // Optical video activity detection & camera shifting
   shiftCameraTarget: (
     targetX: number,
@@ -240,7 +262,35 @@ export interface EditorState {
   deleteTextOverlay: (id: string) => void;
 
   // Audio & Music
-  addAudioTrack: (name: string, url: string, type?: "music" | "sfx") => void;
+  addAudioTrack: (
+    name: string,
+    url: string,
+    type?: "music" | "sfx",
+    options?: {
+      startTimeMs?: number;
+      durationMs?: number;
+      volume?: number;
+      gainDb?: number;
+      fadeInMs?: number;
+      fadeOutMs?: number;
+    },
+  ) => void;
+  addMusicTrackAtCurrentTime: (
+    presetId?: string,
+    name?: string,
+    options?: {
+      url?: string;
+      volume?: number;
+      gainDb?: number;
+      fadeInMs?: number;
+      fadeOutMs?: number;
+    },
+  ) => void;
+  applyAudioVolumeToAll: (
+    volume: number,
+    gainDb?: number,
+    targetType?: "all" | "sfx" | "music",
+  ) => void;
   updateAudioTrack: (id: string, updates: Partial<AudioTrack>) => void;
   deleteAudioTrack: (id: string) => void;
   updateAudioSettings: (updates: Partial<ProjectAudioSettings>) => void;
@@ -338,6 +388,8 @@ export const useEditor = create<EditorState>((set, get) => ({
   selectedAudioId: null,
   activeTab: "timeline",
   activeToolTab: "zoom",
+  isTraceShiftingMode: false,
+  traceWaypoints: [],
   timelineZoom: 1,
   activeTimelineTool: "select" as TimelineToolMode,
   isExportModalOpen: false,
@@ -474,8 +526,39 @@ export const useEditor = create<EditorState>((set, get) => ({
       }
 
       if (!parsed.looks) parsed.looks = { ...DEFAULT_LOOKS };
-      // Self-heal: If recording had windowFrame stripped to "none", restore MacBook terminal frame
-      if (parsed.summary.source === "recording" && (parsed.looks.windowFrame === "none" || !parsed.looks.windowFrame)) {
+      const isMobile =
+        (parsed.summary.width && parsed.summary.height && parsed.summary.width < parsed.summary.height) ||
+        parsed.looks.aspectRatio === "9:16";
+
+      if (isMobile) {
+        // Mobile recording: apply realistic smartphone frame, curved corners & portrait aspect ratio
+        const isIos = (parsed.summary.name || "").toLowerCase().includes("iphone") || (parsed.summary.name || "").toLowerCase().includes("ios");
+        const defaultMobileFrame = isIos ? "iphone" : "android";
+        if (
+          parsed.looks.windowFrame === "terminal" ||
+          parsed.looks.windowFrame === "macos" ||
+          parsed.looks.windowFrame === "windows" ||
+          parsed.looks.windowFrame === "macbook" ||
+          parsed.looks.windowFrame === "laptop" ||
+          parsed.looks.windowFrame === "imac" ||
+          parsed.looks.windowFrame === "chrome" ||
+          parsed.looks.windowFrame === "safari" ||
+          parsed.looks.windowFrame === "glass" ||
+          parsed.looks.windowFrame === "none" ||
+          !parsed.looks.windowFrame
+        ) {
+          if (parsed.looks.padding === 0 && parsed.looks.windowFrame === "none") {
+            // Keep intentional frameless 0 margin mode
+          } else {
+            parsed.looks.windowFrame = defaultMobileFrame;
+            parsed.looks.borderRadius = isIos ? 36 : 28;
+            parsed.looks.padding = 24;
+            parsed.looks.aspectRatio = "9:16";
+            parsed.looks.fit = "contain";
+          }
+        }
+      } else if (parsed.summary.source === "recording" && (parsed.looks.windowFrame === "none" || !parsed.looks.windowFrame)) {
+        // Desktop recording: restore MacBook terminal frame
         parsed.looks.windowFrame = "terminal";
         if (parsed.looks.padding === 0) parsed.looks.padding = 32;
         if (parsed.looks.borderRadius === 0) parsed.looks.borderRadius = 16;
@@ -511,6 +594,19 @@ export const useEditor = create<EditorState>((set, get) => ({
           }));
           const plotted = plotInteractionsToKeyframesAndZoomBlocks(
             pseudoInteractions,
+            duration,
+            { holdDurationMs: 1400, leadInMs: 450, scale: 1.85 },
+          );
+          parsed.zoomBlocks = plotted.zoomBlocks;
+          parsed.keyframes = plotted.keyframes;
+        } else if (isMobile && duration >= 2500) {
+          // Self-heal for past mobile recording that had 0 clicks captured
+          const focusPoints: InteractionEvent[] = [
+            { id: `heal-mob-1`, type: "click", timestampMs: Math.round(duration * 0.28), x: 0.5, y: 0.42, button: "left" },
+            { id: `heal-mob-2`, type: "click", timestampMs: Math.round(duration * 0.68), x: 0.5, y: 0.55, button: "left" },
+          ];
+          const plotted = plotInteractionsToKeyframesAndZoomBlocks(
+            focusPoints,
             duration,
             { holdDurationMs: 1400, leadInMs: 450, scale: 1.85 },
           );
@@ -655,11 +751,24 @@ export const useEditor = create<EditorState>((set, get) => ({
         summary.source === "recording"
           ? {
               ...DEFAULT_LOOKS,
-              windowFrame: "terminal" as const,
+              windowFrame:
+                summary.width && summary.height && summary.width < summary.height
+                  ? ((summary.name || "").toLowerCase().includes("iphone") || (summary.name || "").toLowerCase().includes("ios") ? ("iphone" as const) : ("android" as const))
+                  : ("terminal" as const),
               fit: "contain" as const,
-              padding: 32,
-              borderRadius: 16,
+              padding:
+                summary.width && summary.height && summary.width < summary.height
+                  ? 24
+                  : 32,
+              borderRadius:
+                summary.width && summary.height && summary.width < summary.height
+                  ? ((summary.name || "").toLowerCase().includes("iphone") || (summary.name || "").toLowerCase().includes("ios") ? 36 : 28)
+                  : 16,
               shadow: "lift" as const,
+              aspectRatio:
+                summary.width && summary.height && summary.width < summary.height
+                  ? ("9:16" as const)
+                  : ("16:9" as const),
             }
           : DEFAULT_LOOKS,
       audioSettings: { ...DEFAULT_AUDIO_SETTINGS },
@@ -731,9 +840,12 @@ export const useEditor = create<EditorState>((set, get) => ({
   },
   setTimelineZoom: (zoom) => set({ timelineZoom: Math.max(0.5, Math.min(5, zoom)) }),
   setActiveTimelineTool: (tool: TimelineToolMode) => {
-    const valid: TimelineToolMode[] = ["select", "split", "pan"];
+    const valid: TimelineToolMode[] = ["select", "split", "pan", "draw"];
     const targetTool = valid.includes(tool) ? tool : "select";
-    set({ activeTimelineTool: targetTool });
+    set({
+      activeTimelineTool: targetTool,
+      isTraceShiftingMode: targetTool === "draw",
+    });
   },
   setTimelineTool: (tool: TimelineToolMode) => {
     get().setActiveTimelineTool(tool);
@@ -1227,9 +1339,9 @@ export const useEditor = create<EditorState>((set, get) => ({
 
     // Case 3 / 4: Click outside any zoom block (e.g. at 0:14 halfway through recording)
     // Create a complete, beautifully formed zoom block and keyframe cluster centered on the clicked position!
-    const leadInMs = 350;
-    const holdMs = 2200;
-    const leadOutMs = 350;
+    const leadInMs = 1000;
+    const holdMs = 2400;
+    const leadOutMs = 800;
 
     // Determine non-overlapping startMs with previous block
     const prevBlock = [...state.project.zoomBlocks]
@@ -1320,6 +1432,215 @@ export const useEditor = create<EditorState>((set, get) => ({
       selectedBlockId: newBlock.id,
     });
     toast.success(`Camera shifted to (${Math.round(clamped.x * 100)}%, ${Math.round(clamped.y * 100)}%)`);
+  },
+
+  setTraceShiftingMode: (enabled) => {
+    set({
+      isTraceShiftingMode: enabled,
+      activeTimelineTool: enabled ? "draw" : "select",
+    });
+  },
+
+  addTraceWaypoint: (point, scale) => {
+    const id = `tw-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+    const clampedX = Math.max(0, Math.min(1, point.x));
+    const clampedY = Math.max(0, Math.min(1, point.y));
+    set((s) => ({
+      traceWaypoints: [
+        ...s.traceWaypoints,
+        { id, x: clampedX, y: clampedY, scale },
+      ],
+    }));
+  },
+
+  addTraceStroke: (points, scale) => {
+    if (!points || points.length === 0) return;
+    const now = Date.now();
+    const newWaypoints = points.map((p, idx) => ({
+      id: `tw-${now}-${idx}-${Math.random().toString(36).slice(2, 5)}`,
+      x: Math.max(0, Math.min(1, p.x)),
+      y: Math.max(0, Math.min(1, p.y)),
+      scale,
+    }));
+    set({
+      traceWaypoints: newWaypoints,
+    });
+  },
+
+  removeTraceWaypoint: (id) => {
+    set((s) => ({
+      traceWaypoints: s.traceWaypoints.filter((w) => w.id !== id),
+    }));
+  },
+
+  clearTraceWaypoints: () => {
+    set({ traceWaypoints: [] });
+  },
+
+  applyTraceShifting: (options) => {
+    const state = get();
+    if (!state.project) return;
+    const waypoints = state.traceWaypoints;
+    if (waypoints.length === 0) {
+      toast.error("Please click or draw at least 1 waypoint on the canvas first");
+      return;
+    }
+
+    const time = state.currentTimeMs;
+    const totalDurationMs = options?.totalDurationMs ?? Math.max(4500, waypoints.length * 750);
+    const peakScale = options?.peakScale ?? 1.85;
+    const leadInMs = options?.leadInMs ?? 1000;
+    const leadOutMs = options?.leadOutMs ?? 800;
+    const easing = options?.easing ?? "spring";
+    const now = Date.now();
+
+    let startMs = time;
+    if (state.durationMs > totalDurationMs && startMs + totalDurationMs > state.durationMs) {
+      // If remaining time at current playhead is too short, shift start time back so the complete trajectory fits
+      startMs = Math.max(0, state.durationMs - totalDurationMs);
+    }
+    const endMs = Math.min(state.durationMs, startMs + totalDurationMs);
+    const effectiveSpan = endMs - startMs;
+    if (effectiveSpan < 500) {
+      toast.error("Not enough duration in video for trace shift");
+      return;
+    }
+
+    const firstPt = waypoints[0]!;
+    const newKfs: KeyframeNode[] = [];
+
+    // 1. Lead-in start at 1.0x full frame
+    newKfs.push({
+      id: `kf-trace-start-${now}`,
+      timeMs: startMs,
+      scale: 1.0,
+      targetX: 0.5,
+      targetY: 0.5,
+      easing: "cubic",
+    });
+
+    // 2. Peak zoom at first waypoint
+    const firstPeakTime = Math.min(startMs + leadInMs, startMs + Math.round(effectiveSpan * 0.25));
+    newKfs.push({
+      id: `kf-trace-p0-${now}`,
+      timeMs: firstPeakTime,
+      scale: firstPt.scale ?? peakScale,
+      targetX: firstPt.x,
+      targetY: firstPt.y,
+      easing,
+      sound: "click",
+      soundPreset: "bop",
+      soundVolume: 0.65,
+    });
+
+    // 3. Intermediate waypoints along the drawn path with arc-length parameterization for uniform velocity
+    if (waypoints.length > 1) {
+      const intermediateStart = firstPeakTime + 60;
+      const intermediateEnd = Math.max(intermediateStart + 200, endMs - leadOutMs);
+      const intermediateSpan = intermediateEnd - intermediateStart;
+
+      // Calculate cumulative distances along the drawn path
+      const cumDists: number[] = [0];
+      for (let i = 1; i < waypoints.length; i++) {
+        const p0 = waypoints[i - 1]!;
+        const p1 = waypoints[i]!;
+        cumDists.push(cumDists[i - 1]! + Math.hypot(p1.x - p0.x, p1.y - p0.y));
+      }
+      const totalDist = cumDists[cumDists.length - 1]!;
+      const lastPt = waypoints[waypoints.length - 1]!;
+
+      // Keep timeline clean and motion buttery-smooth: sample into 2 to 5 smooth segments max
+      const numSegments = Math.max(2, Math.min(5, Math.round(intermediateSpan / 450)));
+
+      for (let s = 1; s <= numSegments; s++) {
+        const targetProgress = s / numSegments;
+        const targetDist = targetProgress * totalDist;
+
+        // Sample exact interpolated coordinate along the drawn path curve
+        let ptX = lastPt.x;
+        let ptY = lastPt.y;
+        for (let j = 1; j < cumDists.length; j++) {
+          if (cumDists[j]! >= targetDist || j === cumDists.length - 1) {
+            const segStart = cumDists[j - 1]!;
+            const segEnd = cumDists[j]!;
+            const segSpan = segEnd - segStart;
+            const segRatio = segSpan > 0.0001 ? (targetDist - segStart) / segSpan : 1;
+            const wp0 = waypoints[j - 1]!;
+            const wp1 = waypoints[j]!;
+            ptX = wp0.x + (wp1.x - wp0.x) * segRatio;
+            ptY = wp0.y + (wp1.y - wp0.y) * segRatio;
+            break;
+          }
+        }
+
+        const ptTime = Math.round(intermediateStart + targetProgress * intermediateSpan);
+        newKfs.push({
+          id: `kf-trace-p${s}-${now}`,
+          timeMs: ptTime,
+          scale: peakScale,
+          targetX: ptX,
+          targetY: ptY,
+          easing: "linear", // LINEAR progress along uniform arc-length = constant speed glide with zero throttling or stutter!
+        });
+      }
+    }
+
+    // 4. Lead-out return to full frame 1.0x
+    newKfs.push({
+      id: `kf-trace-out-${now}`,
+      timeMs: endMs,
+      scale: 1.0,
+      targetX: 0.5,
+      targetY: 0.5,
+      easing: "cubic",
+    });
+
+    // 5. Corresponding ZoomBlock
+    const newBlock: ZoomBlock = {
+      id: `zoom-trace-${now}`,
+      startTimeMs: startMs,
+      endTimeMs: endMs,
+      targetX: firstPt.x,
+      targetY: firstPt.y,
+      scale: peakScale,
+      enabled: true,
+      shiftDurationMs: leadInMs,
+      shiftAnimation: "smooth",
+    };
+
+    // Filter out conflicting keyframes inside [startMs, endMs]
+    const filteredExistingKfs = (state.project.keyframes || []).filter(
+      (k) => k.timeMs < startMs || k.timeMs > endMs,
+    );
+
+    const mergedKfs = [...filteredExistingKfs, ...newKfs].sort((a, b) => a.timeMs - b.timeMs);
+    const mergedBlocks = [...state.project.zoomBlocks, newBlock].sort((a, b) => a.startTimeMs - b.startTimeMs);
+
+    set({
+      ...pushHistory(state),
+      project: {
+        ...state.project,
+        keyframes: mergedKfs,
+        zoomBlocks: mergedBlocks,
+      },
+      selectedBlockId: newBlock.id,
+      selectedKeyframeId: newKfs[1]!.id,
+      currentTimeMs: options?.autoPlay === true ? startMs : state.currentTimeMs,
+      isPlaying: options?.autoPlay === true ? true : state.isPlaying,
+    });
+    toast.success(`Camera follow created! Following drawn line (${waypoints.length} path nodes)`);
+  },
+
+  followDrawnLine: (options) => {
+    const state = get();
+    if (state.traceWaypoints.length === 0) {
+      toast.error("Please draw a line on the video screen first to follow");
+      return;
+    }
+    state.applyTraceShifting({
+      ...options,
+      autoPlay: true,
+    });
   },
 
   detectActivityFromFrames: (frames, options) => {
@@ -1711,17 +2032,20 @@ export const useEditor = create<EditorState>((set, get) => ({
     toast.info("Text overlay removed.");
   },
 
-  addAudioTrack: (name, url, type = "music") => {
+  addAudioTrack: (name, url, type = "music", options) => {
     const state = get();
     if (!state.project) return;
     const newAudio: AudioTrack = {
-      id: `audio-${Date.now()}`,
+      id: `audio-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
       name,
       type,
       url,
-      startTimeMs: 0,
-      durationMs: state.durationMs,
-      volume: 0.5,
+      startTimeMs: options?.startTimeMs ?? 0,
+      durationMs: options?.durationMs ?? state.durationMs,
+      volume: options?.volume ?? 0.5,
+      gainDb: options?.gainDb,
+      fadeInMs: options?.fadeInMs ?? 1500,
+      fadeOutMs: options?.fadeOutMs ?? 2000,
       muted: false,
     };
     const updated = [...(state.project.audioTracks || []), newAudio];
@@ -1734,6 +2058,92 @@ export const useEditor = create<EditorState>((set, get) => ({
       selectedAudioId: newAudio.id,
     });
     toast.success(`Added ${name} to timeline.`);
+  },
+
+  addMusicTrackAtCurrentTime: (presetId = "lofi-focus", name, options) => {
+    const state = get();
+    if (!state.project) return;
+    const resolvedName =
+      name ||
+      (presetId === "lofi-focus"
+        ? "Lo-Fi Warmth"
+        : presetId === "ambient-tech"
+        ? "Ambient Tech Glow"
+        : presetId === "cinematic-pulse"
+        ? "Cinematic Pulse"
+        : "Background Music");
+    const resolvedUrl = options?.url || `music://${presetId}`;
+    const startTimeMs = Math.max(0, state.currentTimeMs);
+    const durationMs = Math.max(1000, state.durationMs - startTimeMs);
+
+    const newMusicTrack: AudioTrack = {
+      id: `music-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+      name: resolvedName,
+      type: "music",
+      url: resolvedUrl,
+      startTimeMs,
+      durationMs,
+      volume: options?.volume ?? 0.5,
+      gainDb: options?.gainDb ?? 0,
+      fadeInMs: options?.fadeInMs ?? 1500,
+      fadeOutMs: options?.fadeOutMs ?? 2000,
+      muted: false,
+    };
+
+    const currentTracks = state.project.audioTracks || [];
+    const updatedTracks = [...currentTracks, newMusicTrack];
+
+    set({
+      ...pushHistory(state),
+      project: {
+        ...state.project,
+        audioTracks: updatedTracks,
+      },
+      selectedAudioId: newMusicTrack.id,
+    });
+
+    toast.success(`Added music track "${newMusicTrack.name}".`);
+  },
+
+  applyAudioVolumeToAll: (volume, gainDb, targetType = "all") => {
+    const state = get();
+    if (!state.project) return;
+    const currentTracks = state.project.audioTracks || [];
+    const resolvedDb =
+      gainDb !== undefined
+        ? gainDb
+        : volume <= 0.0001
+        ? -48
+        : Math.round(20 * Math.log10(volume) * 10) / 10;
+
+    const updatedTracks = currentTracks.map((track) => {
+      if (targetType === "all" || track.type === targetType) {
+        return {
+          ...track,
+          volume,
+          gainDb: resolvedDb,
+        };
+      }
+      return track;
+    });
+
+    const updatedSettings = { ...(state.project.audioSettings || DEFAULT_AUDIO_SETTINGS) };
+    if (targetType === "all" || targetType === "sfx") {
+      updatedSettings.clickSoundVolume = volume;
+      updatedSettings.typingSoundVolume = volume;
+    }
+
+    set({
+      ...pushHistory(state),
+      project: {
+        ...state.project,
+        audioTracks: updatedTracks,
+        audioSettings: updatedSettings,
+      },
+    });
+
+    const label = targetType === "all" ? "all audio tracks" : targetType === "sfx" ? "all SFX" : "all music";
+    toast.success(`Applied ${resolvedDb >= 0 ? "+" : ""}${resolvedDb.toFixed(1)} dB to ${label}.`);
   },
 
   updateAudioTrack: (id, updates) => {

@@ -1,5 +1,7 @@
 use serde::{Deserialize, Serialize};
 use std::fs;
+use std::io::{Read, Write};
+use std::net::TcpListener;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
@@ -86,6 +88,22 @@ static RECORDING_ACTIVE: AtomicBool = AtomicBool::new(false);
 static LAST_MOUSE_POS: Mutex<(f64, f64)> = Mutex::new((0.5, 0.5));
 static LAST_MOVE_EMIT_MS: Mutex<i64> = Mutex::new(0);
 static EVENT_TAP_PORT: Mutex<Option<usize>> = Mutex::new(None);
+static CAPTURE_IN_PROGRESS: AtomicBool = AtomicBool::new(false);
+static LAST_FRAME_CACHE: Mutex<Option<String>> = Mutex::new(None);
+static CONSECUTIVE_CAPTURE_ERRORS: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
+static STREAM_SERVER_ACTIVE: AtomicBool = AtomicBool::new(false);
+static ACTIVE_STREAM_URL: Mutex<Option<String>> = Mutex::new(None);
+static STREAM_CHILD_PIDS: Mutex<Vec<u32>> = Mutex::new(Vec::new());
+static TOUCH_MONITOR_ACTIVE: AtomicBool = AtomicBool::new(false);
+static TOUCH_CHILD_PID: Mutex<Option<u32>> = Mutex::new(None);
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct MobileTouchPayload {
+    pub x: f64,
+    pub y: f64,
+    pub event_type: String,
+    pub timestamp_ms: i64,
+}
 
 fn get_data_dir() -> PathBuf {
     if let Some(dirs) = directories::ProjectDirs::from("com", "domolens", "desktop") {
@@ -816,6 +834,693 @@ fn read_media_file(path: String) -> Result<Vec<u8>, String> {
     fs::read(&path).map_err(|e| e.to_string())
 }
 
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct AdbDeviceInfo {
+    pub serial: String,
+    pub state: String,
+    pub model: String,
+    pub product: String,
+    pub width: u32,
+    pub height: u32,
+    pub is_wireless: bool,
+}
+
+fn find_adb_binary() -> Option<PathBuf> {
+    if let Ok(output) = std::process::Command::new("adb").arg("version").output() {
+        if output.status.success() {
+            return Some(PathBuf::from("adb"));
+        }
+    }
+
+    let home = std::env::var("HOME").or_else(|_| std::env::var("USERPROFILE")).unwrap_or_default();
+    let candidates = vec![
+        PathBuf::from(&home).join("Library/Android/sdk/platform-tools/adb"),
+        PathBuf::from("/opt/homebrew/bin/adb"),
+        PathBuf::from("/usr/local/bin/adb"),
+        PathBuf::from("/usr/bin/adb"),
+        PathBuf::from(&home).join("AppData/Local/Android/Sdk/platform-tools/adb.exe"),
+    ];
+
+    for c in candidates {
+        if c.exists() {
+            return Some(c);
+        }
+    }
+    None
+}
+
+#[tauri::command]
+fn get_adb_devices() -> Result<Vec<AdbDeviceInfo>, String> {
+    let adb_path = match find_adb_binary() {
+        Some(p) => p,
+        None => return Ok(Vec::new()),
+    };
+
+    let output = std::process::Command::new(&adb_path)
+        .arg("devices")
+        .arg("-l")
+        .output()
+        .map_err(|e| format!("Failed to run adb: {}", e))?;
+
+    if !output.status.success() {
+        return Ok(Vec::new());
+    }
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let mut raw_devices = Vec::new();
+
+    for line in stdout.lines() {
+        let trimmed = line.trim();
+        if trimmed.is_empty() || trimmed.starts_with("List of devices") || trimmed.starts_with("* daemon") {
+            continue;
+        }
+
+        let parts: Vec<&str> = trimmed.split_whitespace().collect();
+        if parts.len() < 2 {
+            continue;
+        }
+
+        let serial = parts[0].to_string();
+        let state = parts[1].to_string();
+
+        // Strictly ignore dead or offline devices
+        if state == "offline" {
+            continue;
+        }
+
+        let is_wireless = serial.contains(':')
+            || serial.contains("._tcp")
+            || serial.contains("._adb")
+            || serial.starts_with("adb-")
+            || serial.contains("tls");
+
+        let mut model = if is_wireless { "Wireless Android Device".to_string() } else { "Android Phone".to_string() };
+        let mut product = "Android".to_string();
+
+        for part in &parts[2..] {
+            if let Some(m) = part.strip_prefix("model:") {
+                model = m.replace('_', " ");
+            } else if let Some(p) = part.strip_prefix("product:") {
+                product = p.to_string();
+            }
+        }
+
+        let mut width = 1080;
+        let mut height = 2400;
+
+        if state == "device" {
+            if let Ok(wm_out) = std::process::Command::new(&adb_path)
+                .args(["-s", &serial, "shell", "wm", "size"])
+                .output()
+            {
+                let wm_str = String::from_utf8_lossy(&wm_out.stdout);
+                for wline in wm_str.lines() {
+                    if let Some(pos) = wline.find(':') {
+                        let size_part = wline[pos + 1..].trim();
+                        let dims: Vec<&str> = size_part.split('x').collect();
+                        if dims.len() == 2 {
+                            if let (Ok(w), Ok(h)) = (dims[0].trim().parse::<u32>(), dims[1].trim().parse::<u32>()) {
+                                width = w;
+                                height = h;
+                            }
+                        }
+                    }
+                }
+            }
+
+            if let Ok(brand_out) = std::process::Command::new(&adb_path)
+                .args(["-s", &serial, "shell", "getprop", "ro.product.brand"])
+                .output()
+            {
+                let brand = String::from_utf8_lossy(&brand_out.stdout).trim().to_string();
+                if !brand.is_empty() && !model.to_lowercase().contains(&brand.to_lowercase()) {
+                    model = format!("{} {}", brand, model);
+                }
+            }
+        }
+
+        raw_devices.push(AdbDeviceInfo {
+            serial,
+            state,
+            model,
+            product,
+            width,
+            height,
+            is_wireless,
+        });
+    }
+
+    // Prioritize: authorized online devices first, and direct USB cable before wireless
+    raw_devices.sort_by(|a, b| {
+        let a_score = (if a.state == "device" { 10 } else { 0 }) + (if !a.is_wireless { 5 } else { 0 });
+        let b_score = (if b.state == "device" { 10 } else { 0 }) + (if !b.is_wireless { 5 } else { 0 });
+        b_score.cmp(&a_score)
+    });
+
+    // Deduplicate: if multiple connections exist for the same physical phone, keep the highest priority
+    let mut devices: Vec<AdbDeviceInfo> = Vec::new();
+    for dev in raw_devices {
+        let is_dup = devices.iter().any(|existing| {
+            existing.model == dev.model && existing.width == dev.width && existing.height == dev.height
+        });
+        if !is_dup {
+            devices.push(dev);
+        }
+    }
+
+    Ok(devices)
+}
+
+#[tauri::command]
+fn connect_wireless_adb(address: String) -> Result<String, String> {
+    let adb_path = find_adb_binary().ok_or_else(|| "ADB not found. Please install Android Platform Tools.".to_string())?;
+
+    let output = std::process::Command::new(&adb_path)
+        .arg("connect")
+        .arg(&address)
+        .output()
+        .map_err(|e| e.to_string())?;
+
+    let stdout = String::from_utf8_lossy(&output.stdout).to_string();
+    let stderr = String::from_utf8_lossy(&output.stderr).to_string();
+    let combined = format!("{}\n{}", stdout, stderr);
+
+    if combined.to_lowercase().contains("connected") || combined.to_lowercase().contains("already") {
+        Ok(combined.trim().to_string())
+    } else {
+        Err(combined.trim().to_string())
+    }
+}
+
+#[tauri::command]
+fn pair_wireless_adb(address: String, code: String) -> Result<String, String> {
+    let adb_path = find_adb_binary().ok_or_else(|| "ADB not found. Please install Android Platform Tools.".to_string())?;
+
+    let output = std::process::Command::new(&adb_path)
+        .arg("pair")
+        .arg(&address)
+        .arg(&code)
+        .output()
+        .map_err(|e| e.to_string())?;
+
+    let combined = format!(
+        "{}\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let lower = combined.to_lowercase();
+    if lower.contains("successfully") || lower.contains("already") {
+        Ok(combined.trim().to_string())
+    } else {
+        Err(combined.trim().to_string())
+    }
+}
+
+#[tauri::command]
+fn restart_adb_server() -> Result<String, String> {
+    let adb_path = find_adb_binary().ok_or_else(|| "ADB not found".to_string())?;
+    let _ = std::process::Command::new(&adb_path).arg("kill-server").output();
+    let _ = std::process::Command::new(&adb_path).arg("start-server").output();
+    let _ = std::process::Command::new(&adb_path).arg("devices").output();
+    Ok("ADB server restarted".to_string())
+}
+
+#[tauri::command]
+fn capture_device_frame(serial: String) -> Result<String, String> {
+    // If a capture is already executing, return the cached previous frame immediately!
+    // This strictly prevents subprocess stacking and keeps CPU low.
+    if CAPTURE_IN_PROGRESS.compare_exchange(false, true, std::sync::atomic::Ordering::SeqCst, std::sync::atomic::Ordering::SeqCst).is_err() {
+        if let Ok(guard) = LAST_FRAME_CACHE.lock() {
+            if let Some(ref cached) = *guard {
+                return Ok(cached.clone());
+            }
+        }
+        return Err("Busy".to_string());
+    }
+
+    struct CaptureGuard;
+    impl Drop for CaptureGuard {
+        fn drop(&mut self) {
+            CAPTURE_IN_PROGRESS.store(false, std::sync::atomic::Ordering::SeqCst);
+        }
+    }
+    let _guard = CaptureGuard;
+
+    let adb_path = find_adb_binary().ok_or_else(|| "ADB not found".to_string())?;
+
+    let output = std::process::Command::new(&adb_path)
+        .args(["-s", &serial, "exec-out", "screencap", "-p"])
+        .output()
+        .map_err(|e| e.to_string())?;
+
+    if !output.status.success() || output.stdout.is_empty() {
+        let err_count = CONSECUTIVE_CAPTURE_ERRORS.fetch_add(1, std::sync::atomic::Ordering::SeqCst) + 1;
+        if err_count <= 2 {
+            if let Ok(guard) = LAST_FRAME_CACHE.lock() {
+                if let Some(ref cached) = *guard {
+                    return Ok(cached.clone());
+                }
+            }
+        }
+        if let Ok(mut guard) = LAST_FRAME_CACHE.lock() {
+            *guard = None;
+        }
+        return Err("Device connection lost or offline".to_string());
+    }
+
+    CONSECUTIVE_CAPTURE_ERRORS.store(0, std::sync::atomic::Ordering::SeqCst);
+
+    use base64::Engine;
+    let b64 = base64::engine::general_purpose::STANDARD.encode(&output.stdout);
+    let data_url = format!("data:image/png;base64,{}", b64);
+
+    if let Ok(mut guard) = LAST_FRAME_CACHE.lock() {
+        *guard = Some(data_url.clone());
+    }
+
+    Ok(data_url)
+}
+
+#[tauri::command]
+fn send_device_tap(serial: String, x: u32, y: u32) -> Result<(), String> {
+    let adb_path = find_adb_binary().ok_or_else(|| "ADB not found".to_string())?;
+
+    let _ = std::process::Command::new(&adb_path)
+        .args(["-s", &serial, "shell", "input", "tap", &x.to_string(), &y.to_string()])
+        .spawn();
+
+    Ok(())
+}
+
+#[tauri::command]
+fn keep_device_alive(serial: String) -> Result<(), String> {
+    if let Some(adb_path) = find_adb_binary() {
+        let _ = std::process::Command::new(&adb_path)
+            .args(["-s", &serial, "shell", "input", "keyevent", "224"])
+            .spawn();
+    }
+    Ok(())
+}
+
+fn find_ffmpeg_binary() -> Option<PathBuf> {
+    if let Ok(p) = std::env::var("FFMPEG_PATH") {
+        let pb = PathBuf::from(p);
+        if pb.exists() {
+            return Some(pb);
+        }
+    }
+    let candidates = [
+        "/opt/homebrew/bin/ffmpeg",
+        "/usr/local/bin/ffmpeg",
+        "/usr/bin/ffmpeg",
+    ];
+    for c in &candidates {
+        let pb = PathBuf::from(c);
+        if pb.exists() {
+            return Some(pb);
+        }
+    }
+    if let Ok(out) = std::process::Command::new("which").arg("ffmpeg").output() {
+        if out.status.success() {
+            let s = String::from_utf8_lossy(&out.stdout).trim().to_string();
+            if !s.is_empty() {
+                return Some(PathBuf::from(s));
+            }
+        }
+    }
+    None
+}
+
+#[tauri::command]
+fn stop_device_touch_monitor() -> Result<(), String> {
+    TOUCH_MONITOR_ACTIVE.store(false, Ordering::SeqCst);
+    if let Ok(mut pid_guard) = TOUCH_CHILD_PID.lock() {
+        if let Some(pid) = pid_guard.take() {
+            #[cfg(unix)]
+            unsafe {
+                libc::kill(pid as i32, libc::SIGKILL);
+            }
+        }
+    }
+    Ok(())
+}
+
+#[tauri::command]
+fn start_device_touch_monitor(
+    app_handle: tauri::AppHandle,
+    serial: String,
+    width: Option<u32>,
+    height: Option<u32>,
+) -> Result<(), String> {
+    let _ = stop_device_touch_monitor();
+
+    let adb_path = find_adb_binary().ok_or_else(|| "ADB binary not found".to_string())?;
+
+    TOUCH_MONITOR_ACTIVE.store(true, Ordering::SeqCst);
+
+    let dev_w = width.unwrap_or(1080) as f64;
+    let dev_h = height.unwrap_or(2400) as f64;
+
+    std::thread::spawn(move || {
+        use std::io::BufRead;
+
+        let mut child = match std::process::Command::new(&adb_path)
+            .args(["-s", &serial, "exec-out", "getevent", "-l"])
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::null())
+            .spawn()
+        {
+            Ok(c) => c,
+            Err(e) => {
+                eprintln!("[mobile_touch] Failed to spawn adb getevent: {}", e);
+                TOUCH_MONITOR_ACTIVE.store(false, Ordering::SeqCst);
+                return;
+            }
+        };
+
+        let child_pid = child.id();
+        if let Ok(mut guard) = TOUCH_CHILD_PID.lock() {
+            *guard = Some(child_pid);
+        }
+
+        let stdout = match child.stdout.take() {
+            Some(s) => s,
+            None => return,
+        };
+
+        let reader = std::io::BufReader::new(stdout);
+        let mut cur_x: Option<f64> = None;
+        let mut cur_y: Option<f64> = None;
+        let mut is_touching = false;
+        let mut was_touching = false;
+        let mut pending_down = false;
+        let mut pending_up = false;
+        let mut max_w = (dev_w - 1.0).max(1079.0);
+        let mut max_h = (dev_h - 1.0).max(2339.0);
+        let mut last_emit_ms = 0i64;
+
+        for line_res in reader.lines() {
+            if !TOUCH_MONITOR_ACTIVE.load(Ordering::SeqCst) {
+                break;
+            }
+
+            let line = match line_res {
+                Ok(l) => l,
+                Err(_) => break,
+            };
+
+            // Parse ABS_MT_POSITION_X
+            if line.contains("ABS_MT_POSITION_X") {
+                if let Some(token) = line.split_whitespace().last() {
+                    if let Ok(val) = u32::from_str_radix(token.trim(), 16) {
+                        if (val as f64) > max_w {
+                            max_w = (val as f64) + 1.0;
+                        }
+                        cur_x = Some(((val as f64) / max_w).clamp(0.0, 1.0));
+                    }
+                }
+            } else if line.contains("ABS_MT_POSITION_Y") {
+                if let Some(token) = line.split_whitespace().last() {
+                    if let Ok(val) = u32::from_str_radix(token.trim(), 16) {
+                        if (val as f64) > max_h {
+                            max_h = (val as f64) + 1.0;
+                        }
+                        cur_y = Some(((val as f64) / max_h).clamp(0.0, 1.0));
+                    }
+                }
+            } else if line.contains("ABS_MT_TRACKING_ID") {
+                if line.contains("ffffffff") {
+                    is_touching = false;
+                    pending_up = true;
+                } else {
+                    is_touching = true;
+                    pending_down = true;
+                }
+            } else if line.contains("BTN_TOUCH") {
+                if line.contains("DOWN") {
+                    is_touching = true;
+                    pending_down = true;
+                } else if line.contains("UP") {
+                    is_touching = false;
+                    pending_up = true;
+                }
+            } else if line.contains("SYN_REPORT") {
+                let now_ms = std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .map(|d| d.as_millis() as i64)
+                    .unwrap_or(0);
+
+                let x = cur_x.unwrap_or(0.5);
+                let y = cur_y.unwrap_or(0.5);
+
+                if pending_down || (is_touching && !was_touching) {
+                    was_touching = true;
+                    pending_down = false;
+                    pending_up = false;
+                    last_emit_ms = now_ms;
+                    let _ = app_handle.emit(
+                        "mobile-touch",
+                        MobileTouchPayload {
+                            x,
+                            y,
+                            event_type: "down".to_string(),
+                            timestamp_ms: now_ms,
+                        },
+                    );
+                } else if pending_up || (!is_touching && was_touching) {
+                    was_touching = false;
+                    pending_up = false;
+                    pending_down = false;
+                    let _ = app_handle.emit(
+                        "mobile-touch",
+                        MobileTouchPayload {
+                            x,
+                            y,
+                            event_type: "up".to_string(),
+                            timestamp_ms: now_ms,
+                        },
+                    );
+                } else if is_touching {
+                    if now_ms - last_emit_ms >= 20 {
+                        last_emit_ms = now_ms;
+                        let _ = app_handle.emit(
+                            "mobile-touch",
+                            MobileTouchPayload {
+                                x,
+                                y,
+                                event_type: "move".to_string(),
+                                timestamp_ms: now_ms,
+                            },
+                        );
+                    }
+                }
+            }
+        }
+
+        #[cfg(unix)]
+        unsafe {
+            libc::kill(child_pid as i32, libc::SIGKILL);
+        }
+        let _ = child.wait();
+    });
+
+    Ok(())
+}
+
+#[tauri::command]
+fn stop_mobile_stream() -> Result<(), String> {
+    STREAM_SERVER_ACTIVE.store(false, Ordering::SeqCst);
+    let _ = stop_device_touch_monitor();
+    if let Ok(mut url_guard) = ACTIVE_STREAM_URL.lock() {
+        *url_guard = None;
+    }
+    if let Ok(mut pids) = STREAM_CHILD_PIDS.lock() {
+        for pid in pids.drain(..) {
+            #[cfg(unix)]
+            unsafe {
+                libc::kill(pid as i32, libc::SIGKILL);
+            }
+        }
+    }
+    Ok(())
+}
+
+#[tauri::command]
+fn start_mobile_stream(app_handle: tauri::AppHandle, serial: String, width: Option<u32>, height: Option<u32>) -> Result<String, String> {
+    let _ = stop_mobile_stream();
+    let _ = start_device_touch_monitor(app_handle, serial.clone(), width, height);
+
+    let adb_path = find_adb_binary().ok_or_else(|| "ADB binary not found".to_string())?;
+    let ffmpeg_path = find_ffmpeg_binary().ok_or_else(|| "FFmpeg not found. Please install FFmpeg (brew install ffmpeg)".to_string())?;
+
+    let listener = TcpListener::bind("127.0.0.1:0")
+        .map_err(|e| format!("Failed to bind stream listener: {}", e))?;
+    let port = listener.local_addr().map_err(|e| e.to_string())?.port();
+    let stream_url = format!("http://127.0.0.1:{}/live.mjpg", port);
+
+    if let Ok(mut url_guard) = ACTIVE_STREAM_URL.lock() {
+        *url_guard = Some(stream_url.clone());
+    }
+    STREAM_SERVER_ACTIVE.store(true, Ordering::SeqCst);
+
+    let _ = listener.set_nonblocking(true);
+
+    let (target_w, target_h) = match (width, height) {
+        (Some(w), Some(h)) if w > 0 && h > 0 => {
+            if w > 720 {
+                let scaled_h = ((h as f64 / w as f64) * 720.0).round() as u32;
+                (720, (scaled_h / 2) * 2)
+            } else {
+                ((w / 2) * 2, (h / 2) * 2)
+            }
+        }
+        _ => (720, 1560),
+    };
+    let size_arg = format!("{}x{}", target_w, target_h);
+
+    // Automatically enable native touch visualization on the mobile screen
+    let _ = std::process::Command::new(&adb_path)
+        .args(["-s", &serial, "shell", "settings", "put", "system", "show_touches", "1"])
+        .status();
+
+    let serial_clone = serial.clone();
+    let adb_clone = adb_path.clone();
+    let ffmpeg_clone = ffmpeg_path.clone();
+
+    std::thread::spawn(move || {
+        while STREAM_SERVER_ACTIVE.load(Ordering::SeqCst) {
+            match listener.accept() {
+                Ok((mut socket, _)) => {
+                    let serial_sub = serial_clone.clone();
+                    let adb_sub = adb_clone.clone();
+                    let ffmpeg_sub = ffmpeg_clone.clone();
+                    let size_sub = size_arg.clone();
+
+                    std::thread::spawn(move || {
+                        let mut req_buf = [0u8; 1024];
+                        let _ = socket.read(&mut req_buf);
+
+                        let header = "HTTP/1.1 200 OK\r\nContent-Type: multipart/x-mixed-replace; boundary=ffmpeg\r\nCache-Control: no-cache, no-store, must-revalidate\r\nPragma: no-cache\r\nAccess-Control-Allow-Origin: *\r\nConnection: close\r\n\r\n";
+                        if socket.write_all(header.as_bytes()).is_err() {
+                            return;
+                        }
+
+                        while STREAM_SERVER_ACTIVE.load(Ordering::SeqCst) {
+                            let adb_child = match std::process::Command::new(&adb_sub)
+                                .args([
+                                    "-s", &serial_sub,
+                                    "exec-out",
+                                    "screenrecord",
+                                    "--output-format=h264",
+                                    "--size", &size_sub,
+                                    "--bit-rate", "4000000",
+                                    "--time-limit", "180",
+                                    "-"
+                                ])
+                                .stdout(std::process::Stdio::piped())
+                                .stderr(std::process::Stdio::null())
+                                .spawn()
+                            {
+                                Ok(c) => c,
+                                Err(e) => {
+                                    eprintln!("[mobile_stream] Failed to spawn adb screenrecord: {}", e);
+                                    break;
+                                }
+                            };
+
+                            let adb_pid = adb_child.id();
+                            let adb_stdout = match adb_child.stdout {
+                                Some(s) => s,
+                                None => break,
+                            };
+
+                            if let Ok(mut pids) = STREAM_CHILD_PIDS.lock() {
+                                pids.push(adb_pid);
+                            }
+
+                            let mut ffmpeg_child = match std::process::Command::new(&ffmpeg_sub)
+                                .args([
+                                    "-f", "h264",
+                                    "-i", "pipe:0",
+                                    "-vf", "format=yuvj420p",
+                                    "-c:v", "mjpeg",
+                                    "-q:v", "4",
+                                    "-f", "mpjpeg",
+                                    "-"
+                                ])
+                                .stdin(adb_stdout)
+                                .stdout(std::process::Stdio::piped())
+                                .stderr(std::process::Stdio::null())
+                                .spawn()
+                            {
+                                Ok(c) => c,
+                                Err(e) => {
+                                    eprintln!("[mobile_stream] Failed to spawn ffmpeg: {}", e);
+                                    #[cfg(unix)]
+                                    unsafe {
+                                        libc::kill(adb_pid as i32, libc::SIGKILL);
+                                    }
+                                    break;
+                                }
+                            };
+
+                            let ffmpeg_pid = ffmpeg_child.id();
+                            if let Ok(mut pids) = STREAM_CHILD_PIDS.lock() {
+                                pids.push(ffmpeg_pid);
+                            }
+
+                            let mut socket_disconnected = false;
+                            if let Some(mut ffmpeg_out) = ffmpeg_child.stdout.take() {
+                                let mut buf = [0u8; 8192];
+                                while STREAM_SERVER_ACTIVE.load(Ordering::SeqCst) {
+                                    match ffmpeg_out.read(&mut buf) {
+                                        Ok(0) => break,
+                                        Ok(n) => {
+                                            if socket.write_all(&buf[..n]).is_err() {
+                                                socket_disconnected = true;
+                                                break;
+                                            }
+                                        }
+                                        Err(_) => break,
+                                    }
+                                }
+                            }
+
+                            #[cfg(unix)]
+                            unsafe {
+                                libc::kill(adb_pid as i32, libc::SIGKILL);
+                                libc::kill(ffmpeg_pid as i32, libc::SIGKILL);
+                            }
+
+                            if socket_disconnected || !STREAM_SERVER_ACTIVE.load(Ordering::SeqCst) {
+                                break;
+                            }
+                        }
+                    });
+                }
+                Err(ref e) if e.kind() == std::io::ErrorKind::WouldBlock => {
+                    std::thread::sleep(std::time::Duration::from_millis(50));
+                }
+                Err(_) => {
+                    std::thread::sleep(std::time::Duration::from_millis(50));
+                }
+            }
+        }
+    });
+
+    Ok(stream_url)
+}
+
+#[tauri::command]
+fn get_mobile_stream_url() -> Result<Option<String>, String> {
+    if let Ok(guard) = ACTIVE_STREAM_URL.lock() {
+        Ok(guard.clone())
+    } else {
+        Ok(None)
+    }
+}
+
+
 #[tauri::command]
 fn show_recording_hud(app_handle: tauri::AppHandle) -> Result<(), String> {
     if let Some(main_win) = app_handle.get_webview_window("main") {
@@ -1351,7 +2056,19 @@ pub fn run() {
             export_source_video_file,
             show_item_in_folder,
             sync_tray_recording_state,
-            sync_tray_recent_projects
+            sync_tray_recent_projects,
+            get_adb_devices,
+            connect_wireless_adb,
+            pair_wireless_adb,
+            restart_adb_server,
+            capture_device_frame,
+            send_device_tap,
+            keep_device_alive,
+            start_mobile_stream,
+            stop_mobile_stream,
+            get_mobile_stream_url,
+            start_device_touch_monitor,
+            stop_device_touch_monitor
         ])
         .on_window_event(|window, event| {
             if let tauri::WindowEvent::CloseRequested { api, .. } = event {

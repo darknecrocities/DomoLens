@@ -11,8 +11,8 @@ export default defineConfig({
   server: {
     port: 1420,
     strictPort: true,
-    // Only listen on localhost unless Tauri asks for a LAN host (phones on Wi-Fi).
-    host: host || "127.0.0.1",
+    // Listen on all network interfaces so mobile phones can connect via Wi-Fi or Hotspot
+    host: host || "0.0.0.0",
     hmr: host ? { protocol: "ws", host, port: 1421 } : undefined,
     watch: { ignored: ["**/src-tauri/**"] },
   },

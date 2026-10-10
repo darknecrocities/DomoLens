@@ -51,7 +51,7 @@ export function HeroSection() {
     mac: "Download for macOS (Universal)",
     windows: "Download for Windows (64-bit .exe)",
     linux: "Download for Linux (.AppImage)",
-    android: "Android (Companion)",
+    android: "Android (USB & Wi-Fi Companion)",
   };
 
   const downloadLinks: Record<string, string> = {
@@ -228,15 +228,15 @@ export function HeroSection() {
           {/* Practical, Need-Driven Subtitle */}
           <p className="mx-auto mt-6 max-w-2xl text-base text-neutral-300 sm:text-lg leading-relaxed drop-shadow-md">
             You built an awesome product. Showing it off shouldn't take 3 hours in a video editor.
-            DomoLens records your screen, automatically zooms into your clicks and typing,
-            adds tactile sound effects, and frames your app in studio quality — ready to export in seconds.
+            DomoLens records your desktop or mobile screen (via USB or Wi-Fi), automatically zooms into your clicks and typing,
+            adds tactile sound effects, and frames your app on a whole studio canvas — ready to export in seconds.
           </p>
 
           {/* Quick Proof Points */}
           <div className="mt-4 flex flex-wrap items-center justify-center gap-x-4 gap-y-1 text-xs font-mono text-neutral-400">
-            <span className="flex items-center gap-1.5"><Check className="size-3 text-white" /> Zero editing skills needed</span>
+            <span className="flex items-center gap-1.5"><Check className="size-3 text-white" /> Desktop & Mobile (USB / Wi-Fi)</span>
             <span className="hidden sm:inline text-neutral-700">•</span>
-            <span className="flex items-center gap-1.5"><Check className="size-3 text-white" /> No subscriptions or cloud queues</span>
+            <span className="flex items-center gap-1.5"><Check className="size-3 text-white" /> Whole Canvas Studio Export</span>
             <span className="hidden sm:inline text-neutral-700">•</span>
             <span className="flex items-center gap-1.5"><Check className="size-3 text-white" /> 100% private on your device</span>
           </div>
@@ -256,7 +256,7 @@ export function HeroSection() {
                 href="#download"
                 className="inline-flex min-h-[46px] items-center gap-2 rounded-lg border border-neutral-700 bg-black/60 backdrop-blur-md px-6 py-3 font-mono text-xs font-semibold uppercase text-white hover:border-neutral-500 hover:bg-neutral-900 transition-colors shadow-xl"
               >
-                <span>All 3 Platforms (macOS • Win • Linux)</span>
+                <span>All Platforms (macOS • Win • Linux • Android)</span>
                 <ArrowDown className="size-4 text-neutral-400" />
               </a>
             </div>

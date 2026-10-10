@@ -782,6 +782,7 @@ dependencies = [
 name = "domolens"
 version = "0.1.9"
 dependencies = [
+ "base64 0.22.1",
  "chrono",
  "directories",
  "libc",

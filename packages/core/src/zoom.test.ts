@@ -18,6 +18,10 @@ import {
   zoomBlocksToKeyframes,
   generateTourShiftSequence,
   getSteadicamBreathing,
+  processDrawnTracePath,
+  pointsToSmoothSvgPath,
+  mapVideoPointToViewport,
+  viewportToVideoPoint,
 } from "./zoom";
 import type { CameraPhysicsPreset, ClickEvent, InteractionEvent, TimelineClip, ZoomBlock } from "./project";
 import { removeClipAndRipple, splitClip, splitZoomBlock } from "./timeline";
@@ -1375,5 +1379,47 @@ describe("camera physics easing and interpolation", () => {
     const midShiftCam = calculateCameraAtTime(2600, customBlocks);
     expect(midShiftCam.isZoomed).toBe(true);
     expect(midShiftCam.scale).toBeCloseTo(1.5, 2);
+  });
+
+  it("processDrawnTracePath filters jitters, smooths, and resamples freehand drawn stroke", () => {
+    const rawDrawnPoints = [
+      { x: 0.1, y: 0.2 },
+      { x: 0.101, y: 0.201 }, // micro jitter
+      { x: 0.2, y: 0.25 },
+      { x: 0.35, y: 0.4 },
+      { x: 0.5, y: 0.5 },
+      { x: 0.7, y: 0.6 },
+      { x: 0.9, y: 0.8 },
+    ];
+
+    const smoothed = processDrawnTracePath(rawDrawnPoints, { maxPoints: 8 });
+    expect(smoothed.length).toBeGreaterThanOrEqual(4);
+    expect(smoothed.length).toBeLessThanOrEqual(8);
+    // Preserves start and end endpoints accurately
+    expect(smoothed[0]!.x).toBeCloseTo(0.1, 2);
+    expect(smoothed[0]!.y).toBeCloseTo(0.2, 2);
+    expect(smoothed[smoothed.length - 1]!.x).toBeCloseTo(0.9, 2);
+    expect(smoothed[smoothed.length - 1]!.y).toBeCloseTo(0.8, 2);
+
+    // Converts to valid SVG path
+    const svgPath = pointsToSmoothSvgPath(smoothed);
+    expect(svgPath).toContain("M ");
+    expect(svgPath).toContain(" Q ");
+  });
+
+  it("viewportToVideoPoint accurately inverts mapVideoPointToViewport across aspect ratios", () => {
+    const testCases = [
+      { x: 0.3, y: 0.7, videoAspect: 9 / 16, viewAspect: 16 / 9 },
+      { x: 0.75, y: 0.25, videoAspect: 16 / 9, viewAspect: 9 / 16 },
+      { x: 0.5, y: 0.5, videoAspect: 1, viewAspect: 16 / 9 },
+      { x: 0.2, y: 0.8, videoAspect: 4 / 3, viewAspect: 4 / 3 },
+    ];
+
+    for (const tc of testCases) {
+      const vp = mapVideoPointToViewport(tc.x, tc.y, tc.videoAspect, tc.viewAspect);
+      const inverted = viewportToVideoPoint(vp.x, vp.y, tc.videoAspect, tc.viewAspect);
+      expect(inverted.x).toBeCloseTo(tc.x, 3);
+      expect(inverted.y).toBeCloseTo(tc.y, 3);
+    }
   });
 });

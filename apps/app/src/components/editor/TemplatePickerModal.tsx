@@ -166,7 +166,7 @@ export function TemplatePickerModal({ open, onClose }: TemplatePickerModalProps)
         {/* 2-Column Main Selector */}
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
           {/* Left: Template Cards List (7 Cols) */}
-          <div className="lg:col-span-7 h-[550px] overflow-y-auto pr-1 space-y-2.5">
+          <div className="lg:col-span-7 h-[min(550px,55vh)] min-h-[320px] overflow-y-auto pr-1 space-y-2.5">
             {filteredTemplates.map((tpl) => {
               const isSelected = selectedTemplate.id === tpl.id;
               const isCurrentActive = activeTemplateId === tpl.id;
@@ -256,7 +256,7 @@ export function TemplatePickerModal({ open, onClose }: TemplatePickerModalProps)
           </div>
 
           {/* Right: Selected Template Live Preview & Customizer (5 Cols) */}
-          <div className="lg:col-span-5 h-[550px] flex flex-col rounded-xl border border-white/10 bg-neutral-950/70 p-3.5 gap-3 overflow-hidden">
+          <div className="lg:col-span-5 h-[min(550px,55vh)] min-h-[320px] flex flex-col rounded-xl border border-white/10 bg-neutral-950/70 p-3.5 gap-3 overflow-hidden">
             {/* Live Dynamic Video Canvas Preview Engine (Pinned at Top - Guaranteed Full Height) */}
             <div className="w-full shrink-0">
               <div className="relative">

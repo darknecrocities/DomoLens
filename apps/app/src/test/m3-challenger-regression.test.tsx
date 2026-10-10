@@ -139,7 +139,7 @@ describe("Milestone 3 Challenger: Regression & Backward Compatibility Suite", ()
       expect(markup).toBeDefined();
       expect(markup).toContain("SFX Track");
       expect(markup).toContain("Double-click or click + SFX to add sound effect");
-      expect(markup).not.toContain("Music"); // No music lane since no audio tracks exist
+      expect(markup).toContain("Music"); // Dedicated music track is safely rendered above SFX track
     });
 
     it("1.2 renders Timeline without error for projects where audioTracks is an empty array", () => {

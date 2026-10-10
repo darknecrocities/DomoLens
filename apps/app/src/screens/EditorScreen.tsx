@@ -4,6 +4,7 @@ import {
   Download,
   Film,
   HelpCircle,
+  MoreHorizontal,
   Settings,
   Sliders,
   Sparkles,
@@ -96,6 +97,7 @@ export function EditorScreen({ id }: EditorScreenProps) {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [titleDraft, setTitleDraft] = useState("");
+  const [isMoreMenuOpen, setIsMoreMenuOpen] = useState(false);
   // Mobile responsive view selector (<md)
   const [mobileTab, setMobileTab] = useState<"canvas" | "ai" | "tools">("canvas");
 
@@ -296,31 +298,63 @@ export function EditorScreen({ id }: EditorScreenProps) {
 
           <div className="h-4 w-px bg-ink-800 hidden sm:block" />
 
-          <IconButton
-            label="Delete Project"
-            icon={<Trash2 className="size-4" />}
-            variant="ghost"
-            size="sm"
-            onClick={() => setShowDeleteModal(true)}
-            className="text-neutral-400 hover:text-white hover:bg-white/10"
-          />
+          {/* Compact More Actions Dropdown (Decluttered Topbar) */}
+          <div className="relative">
+            <IconButton
+              label="More Project Actions"
+              icon={<MoreHorizontal className="size-4" />}
+              variant="ghost"
+              size="sm"
+              onClick={() => setIsMoreMenuOpen((v) => !v)}
+              className={`text-neutral-400 hover:text-white hover:bg-white/10 ${isMoreMenuOpen ? "bg-white/15 text-white" : ""}`}
+            />
 
-          <IconButton
-            label="Studio Walkthrough Tutorial"
-            icon={<HelpCircle className="size-4" />}
-            variant="ghost"
-            size="sm"
-            onClick={startTutorial}
-            className="text-neutral-400 hover:text-white hover:bg-white/10"
-          />
+            {isMoreMenuOpen && (
+              <>
+                <div
+                  className="fixed inset-0 z-40"
+                  onClick={() => setIsMoreMenuOpen(false)}
+                />
+                <div className="absolute right-0 top-full mt-1.5 w-52 rounded-xl border border-neutral-800 bg-neutral-950/95 p-1.5 shadow-2xl backdrop-blur-xl z-50 flex flex-col gap-0.5 animate-in fade-in zoom-in-95 duration-100">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsMoreMenuOpen(false);
+                      setSettingsOpen(true);
+                    }}
+                    className="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-xs font-medium text-neutral-300 hover:bg-white/10 hover:text-white transition-colors"
+                  >
+                    <Settings className="size-3.5 text-neutral-400" />
+                    <span>{copy.editor.settingsBtn}</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsMoreMenuOpen(false);
+                      startTutorial();
+                    }}
+                    className="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-xs font-medium text-neutral-300 hover:bg-white/10 hover:text-white transition-colors"
+                  >
+                    <HelpCircle className="size-3.5 text-neutral-400" />
+                    <span>Studio Walkthrough Tutorial</span>
+                  </button>
+                  <div className="my-1 h-px bg-neutral-800" />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsMoreMenuOpen(false);
+                      setShowDeleteModal(true);
+                    }}
+                    className="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-xs font-medium text-neutral-400 hover:bg-white/10 hover:text-white transition-colors"
+                  >
+                    <Trash2 className="size-3.5 text-neutral-500 hover:text-neutral-300" />
+                    <span>Delete Project</span>
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
 
-          <IconButton
-            label={copy.editor.settingsBtn}
-            icon={<Settings className="size-4" />}
-            variant="ghost"
-            size="sm"
-            onClick={() => setSettingsOpen(true)}
-          />
 
           <Button
             variant="primary"

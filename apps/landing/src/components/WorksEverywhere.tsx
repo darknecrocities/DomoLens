@@ -64,7 +64,7 @@ export function WorksEverywhere() {
     },
     {
       name: "Android",
-      desc: "Record your phone screen with a handy floating shortcut and touch tracking.",
+      desc: "Connect via USB cable or wireless Wi-Fi. Features realistic Android chassis with punch-hole camera and touch ripples.",
       icon: AndroidLogo,
       platformId: "04",
     },
@@ -188,8 +188,13 @@ export function WorksEverywhere() {
                     <td className="p-4 text-neutral-400">Requires Cloud Account & Remote Servers</td>
                   </tr>
                   <tr className="hover:bg-white/[0.02] transition-colors">
+                    <td className="p-4 font-bold text-white">Mobile Phone Screen Mirroring</td>
+                    <td className="p-4 text-white">Zero-Lag USB & Wi-Fi Mirroring with Touch Tracking</td>
+                    <td className="p-4 text-neutral-400">Not Supported (Desktop Tab Only)</td>
+                  </tr>
+                  <tr className="hover:bg-white/[0.02] transition-colors">
                     <td className="p-4 font-bold text-white">Export Quality</td>
-                    <td className="p-4 text-white">Lossless 4K / 1080p 60 FPS Local FFmpeg</td>
+                    <td className="p-4 text-white">Lossless 4K / 1080p Whole Canvas Studio Export</td>
                     <td className="p-4 text-neutral-400">Compressed WebM with Queue Limits</td>
                   </tr>
                 </tbody>
