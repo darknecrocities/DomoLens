@@ -71,6 +71,10 @@ class MobileStreamBridgeImpl {
   private framePollingTimer: any = null;
   private frameCanvas: HTMLCanvasElement | null = null;
   private frameCtx: CanvasRenderingContext2D | null = null;
+  private liveStreamUrl: string | null = null;
+  private streamUrlListeners = new Set<(url: string | null) => void>();
+  private canvasMirrorAnimId: number | null = null;
+  private canvasMirrorImg: HTMLImageElement | null = null;
 
   public async scanAdbDevices(): Promise<AdbDeviceItem[]> {
     if (typeof window !== "undefined" && "__TAURI_INTERNALS__" in window) {
@@ -167,7 +171,7 @@ class MobileStreamBridgeImpl {
 
     this.activeDevice = info;
     this.setupHardwareCaptureStream(info);
-    this.startFramePolling(device.serial);
+    void this.initHardwareStream(device);
 
     this.deviceListeners.forEach((cb) => cb(info));
     if (this.activeStream) {
@@ -293,6 +297,92 @@ class MobileStreamBridgeImpl {
       clearInterval(this.framePollingTimer);
       this.framePollingTimer = null;
     }
+  }
+
+  private async initHardwareStream(device: AdbDeviceItem): Promise<void> {
+    if (typeof window === "undefined" || !("__TAURI_INTERNALS__" in window)) {
+      return;
+    }
+    try {
+      const { invoke } = await import("@tauri-apps/api/core");
+      const url = await invoke<string>("start_mobile_stream", {
+        serial: device.serial,
+        width: device.width,
+        height: device.height,
+      });
+      if (url && this.activeDevice?.id === device.serial) {
+        this.liveStreamUrl = url;
+        this.streamUrlListeners.forEach((cb) => cb(url));
+        if (this.activeDevice) {
+          this.startCanvasMirrorFromStreamUrl(url, this.activeDevice);
+        }
+        return;
+      }
+    } catch (err) {
+      console.warn("[mobile-stream-bridge] Hardware streaming unavailable, using frame polling fallback:", err);
+    }
+
+    if (this.activeDevice?.id === device.serial) {
+      this.liveStreamUrl = null;
+      this.streamUrlListeners.forEach((cb) => cb(null));
+      this.startFramePolling(device.serial);
+    }
+  }
+
+  private startCanvasMirrorFromStreamUrl(url: string, device: MobileDeviceInfo): void {
+    this.stopCanvasMirror();
+    if (typeof Image === "undefined") return;
+
+    const img = new Image();
+    img.crossOrigin = "anonymous";
+    this.canvasMirrorImg = img;
+
+    const render = () => {
+      if (!this.liveStreamUrl || !this.activeDevice) {
+        this.stopCanvasMirror();
+        return;
+      }
+      if (this.frameCtx && img.complete && img.naturalWidth > 0) {
+        this.frameCtx.drawImage(img, 0, 0, device.width, device.height);
+      }
+      this.canvasMirrorAnimId = requestAnimationFrame(render);
+    };
+
+    img.onload = () => {
+      if (!this.canvasMirrorAnimId) {
+        this.canvasMirrorAnimId = requestAnimationFrame(render);
+      }
+    };
+    img.onerror = () => {
+      setTimeout(() => {
+        if (this.liveStreamUrl && this.canvasMirrorImg === img) {
+          img.src = `${url}?t=${Date.now()}`;
+        }
+      }, 1000);
+    };
+
+    img.src = url;
+  }
+
+  private stopCanvasMirror(): void {
+    if (this.canvasMirrorAnimId) {
+      cancelAnimationFrame(this.canvasMirrorAnimId);
+      this.canvasMirrorAnimId = null;
+    }
+    if (this.canvasMirrorImg) {
+      this.canvasMirrorImg.src = "";
+      this.canvasMirrorImg = null;
+    }
+  }
+
+  public getLiveStreamUrl(): string | null {
+    return this.liveStreamUrl;
+  }
+
+  public onLiveStreamUrl(cb: (url: string | null) => void): () => void {
+    this.streamUrlListeners.add(cb);
+    if (this.liveStreamUrl) cb(this.liveStreamUrl);
+    return () => this.streamUrlListeners.delete(cb);
   }
 
   public async sendDeviceTap(normX: number, normY: number): Promise<void> {
@@ -731,6 +821,15 @@ class MobileStreamBridgeImpl {
    */
   public disconnect(): void {
     this.stopFramePolling();
+    this.stopCanvasMirror();
+    if (typeof window !== "undefined" && "__TAURI_INTERNALS__" in window) {
+      import("@tauri-apps/api/core").then(({ invoke }) => {
+        invoke("stop_mobile_stream").catch(() => {});
+      }).catch(() => {});
+    }
+    this.liveStreamUrl = null;
+    this.streamUrlListeners.forEach((cb) => cb(null));
+
     if (this.activeStream) {
       this.activeStream.getTracks().forEach((t) => t.stop());
       this.activeStream = null;

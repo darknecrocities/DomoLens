@@ -27,6 +27,7 @@ export function MobileLiveMonitor({
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
   const [ripples, setRipples] = useState<TapRipple[]>([]);
+  const [liveStreamUrl, setLiveStreamUrl] = useState<string | null>(() => mobileStreamBridge.getLiveStreamUrl());
   const [hasActiveStream, setHasActiveStream] = useState<boolean>(() => {
     const s = mobileStreamBridge.getStream();
     return Boolean(s && s.getVideoTracks().length > 0);
@@ -59,12 +60,18 @@ export function MobileLiveMonitor({
 
     const unsubDisc = mobileStreamBridge.onDeviceDisconnected(() => {
       setHasActiveStream(false);
+      setLiveStreamUrl(null);
+    });
+
+    const unsubUrl = mobileStreamBridge.onLiveStreamUrl((url) => {
+      setLiveStreamUrl(url);
     });
 
     return () => {
       unsubStream();
       unsubDev();
       unsubDisc();
+      unsubUrl();
     };
   }, []);
 
@@ -98,23 +105,25 @@ export function MobileLiveMonitor({
   const aspectRatio = deviceInfo?.aspectRatio || (width < height ? "20:9" : "16:9");
   const latencyMs = deviceInfo?.latencyMs || 18;
 
+  const isStreamActive = Boolean(liveStreamUrl || hasActiveStream);
+
   return (
     <div className={`flex flex-col items-center select-none ${className}`}>
       {/* Top Device Telemetry Bar */}
       <div className="flex w-full max-w-xs items-center justify-between pb-2 text-[11px] font-mono text-fg-muted">
         <div className="flex items-center gap-1.5 truncate">
-          <span className={`size-2 rounded-full ${hasActiveStream ? "bg-white animate-pulse" : "bg-neutral-500 animate-ping"}`} />
+          <span className={`size-2 rounded-full ${isStreamActive ? "bg-white animate-pulse" : "bg-neutral-500 animate-ping"}`} />
           <span className="font-semibold text-white truncate max-w-[130px]">
             {deviceInfo ? name : "Standby"}
           </span>
         </div>
         <div className="flex items-center gap-1.5 shrink-0">
-          <span className="flex items-center gap-1 rounded bg-ink-800 px-1.5 py-0.5 border border-ink-700 text-fg-faint text-[10px]">
+          <span className="flex items-center gap-1 rounded bg-neutral-900 px-1.5 py-0.5 border border-neutral-800 text-neutral-400 text-[10px]">
             {connectionType === "wifi" ? <Wifi className="size-3" /> : <Cable className="size-3" />}
             {connectionType.toUpperCase()}
           </span>
           <span className="text-white text-[10px]">{latencyMs}ms</span>
-          <span className="text-neutral-400 text-[10px]">60 FPS</span>
+          <span className="text-neutral-400 text-[10px]">60 FPS{liveStreamUrl ? " (H.264)" : ""}</span>
         </div>
       </div>
 
@@ -145,14 +154,14 @@ export function MobileLiveMonitor({
         <div
           ref={containerRef}
           onClick={handleMonitorClick}
-          className="relative w-full overflow-hidden rounded-[28px] bg-ink-950 cursor-pointer border border-neutral-800"
+          className="relative w-full overflow-hidden rounded-[28px] bg-neutral-950 cursor-pointer border border-neutral-800"
           style={{
             aspectRatio: `${width} / ${height}`,
           }}
           title="Live Phone Screen — Click anywhere to simulate touch interaction"
         >
           {/* Radar Standby Screen when awaiting active stream */}
-          {!hasActiveStream && (
+          {!isStreamActive && (
             <div className="absolute inset-0 z-10 flex flex-col items-center justify-center p-4 text-center bg-black/95">
               <div className="relative flex size-16 items-center justify-center mb-2.5">
                 <div className="absolute inset-0 rounded-full border border-white/20 animate-ping" />
@@ -166,14 +175,23 @@ export function MobileLiveMonitor({
             </div>
           )}
 
-          {/* Hardware Stream Video Element */}
-          <video
-            ref={videoRef}
-            autoPlay
-            playsInline
-            muted
-            className="size-full object-cover pointer-events-none"
-          />
+          {/* Hardware Stream View: Native MJPEG image stream for zero-lag hardware mirroring, or video element for WebRTC/Canvas stream */}
+          {liveStreamUrl ? (
+            <img
+              src={liveStreamUrl}
+              alt="Live Device Mirror"
+              crossOrigin="anonymous"
+              className="size-full object-cover pointer-events-none select-none"
+            />
+          ) : (
+            <video
+              ref={videoRef}
+              autoPlay
+              playsInline
+              muted
+              className="size-full object-cover pointer-events-none"
+            />
+          )}
 
           {/* Live Tap Pulse Ripples */}
           <AnimatePresence>

@@ -1,5 +1,7 @@
 use serde::{Deserialize, Serialize};
 use std::fs;
+use std::io::{Read, Write};
+use std::net::TcpListener;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
@@ -89,6 +91,9 @@ static EVENT_TAP_PORT: Mutex<Option<usize>> = Mutex::new(None);
 static CAPTURE_IN_PROGRESS: AtomicBool = AtomicBool::new(false);
 static LAST_FRAME_CACHE: Mutex<Option<String>> = Mutex::new(None);
 static CONSECUTIVE_CAPTURE_ERRORS: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
+static STREAM_SERVER_ACTIVE: AtomicBool = AtomicBool::new(false);
+static ACTIVE_STREAM_URL: Mutex<Option<String>> = Mutex::new(None);
+static STREAM_CHILD_PIDS: Mutex<Vec<u32>> = Mutex::new(Vec::new());
 
 fn get_data_dir() -> PathBuf {
     if let Some(dirs) = directories::ProjectDirs::from("com", "domolens", "desktop") {
@@ -1107,6 +1112,217 @@ fn keep_device_alive(serial: String) -> Result<(), String> {
     Ok(())
 }
 
+fn find_ffmpeg_binary() -> Option<PathBuf> {
+    if let Ok(p) = std::env::var("FFMPEG_PATH") {
+        let pb = PathBuf::from(p);
+        if pb.exists() {
+            return Some(pb);
+        }
+    }
+    let candidates = [
+        "/opt/homebrew/bin/ffmpeg",
+        "/usr/local/bin/ffmpeg",
+        "/usr/bin/ffmpeg",
+    ];
+    for c in &candidates {
+        let pb = PathBuf::from(c);
+        if pb.exists() {
+            return Some(pb);
+        }
+    }
+    if let Ok(out) = std::process::Command::new("which").arg("ffmpeg").output() {
+        if out.status.success() {
+            let s = String::from_utf8_lossy(&out.stdout).trim().to_string();
+            if !s.is_empty() {
+                return Some(PathBuf::from(s));
+            }
+        }
+    }
+    None
+}
+
+#[tauri::command]
+fn stop_mobile_stream() -> Result<(), String> {
+    STREAM_SERVER_ACTIVE.store(false, Ordering::SeqCst);
+    if let Ok(mut url_guard) = ACTIVE_STREAM_URL.lock() {
+        *url_guard = None;
+    }
+    if let Ok(mut pids) = STREAM_CHILD_PIDS.lock() {
+        for pid in pids.drain(..) {
+            #[cfg(unix)]
+            unsafe {
+                libc::kill(pid as i32, libc::SIGKILL);
+            }
+        }
+    }
+    Ok(())
+}
+
+#[tauri::command]
+fn start_mobile_stream(serial: String, width: Option<u32>, height: Option<u32>) -> Result<String, String> {
+    let _ = stop_mobile_stream();
+
+    let adb_path = find_adb_binary().ok_or_else(|| "ADB binary not found".to_string())?;
+    let ffmpeg_path = find_ffmpeg_binary().ok_or_else(|| "FFmpeg not found. Please install FFmpeg (brew install ffmpeg)".to_string())?;
+
+    let listener = TcpListener::bind("127.0.0.1:0")
+        .map_err(|e| format!("Failed to bind stream listener: {}", e))?;
+    let port = listener.local_addr().map_err(|e| e.to_string())?.port();
+    let stream_url = format!("http://127.0.0.1:{}/live.mjpg", port);
+
+    if let Ok(mut url_guard) = ACTIVE_STREAM_URL.lock() {
+        *url_guard = Some(stream_url.clone());
+    }
+    STREAM_SERVER_ACTIVE.store(true, Ordering::SeqCst);
+
+    let _ = listener.set_nonblocking(true);
+
+    let (target_w, target_h) = match (width, height) {
+        (Some(w), Some(h)) if w > 0 && h > 0 => {
+            if w > 720 {
+                let scaled_h = ((h as f64 / w as f64) * 720.0).round() as u32;
+                (720, (scaled_h / 2) * 2)
+            } else {
+                ((w / 2) * 2, (h / 2) * 2)
+            }
+        }
+        _ => (720, 1560),
+    };
+    let size_arg = format!("{}x{}", target_w, target_h);
+
+    let serial_clone = serial.clone();
+    let adb_clone = adb_path.clone();
+    let ffmpeg_clone = ffmpeg_path.clone();
+
+    std::thread::spawn(move || {
+        while STREAM_SERVER_ACTIVE.load(Ordering::SeqCst) {
+            match listener.accept() {
+                Ok((mut socket, _)) => {
+                    let mut req_buf = [0u8; 1024];
+                    let _ = socket.read(&mut req_buf);
+
+                    let header = "HTTP/1.1 200 OK\r\nContent-Type: multipart/x-mixed-replace; boundary=ffmpeg\r\nCache-Control: no-cache, no-store, must-revalidate\r\nPragma: no-cache\r\nAccess-Control-Allow-Origin: *\r\nConnection: close\r\n\r\n";
+                    if socket.write_all(header.as_bytes()).is_err() {
+                        continue;
+                    }
+
+                    while STREAM_SERVER_ACTIVE.load(Ordering::SeqCst) {
+                        let adb_child = match std::process::Command::new(&adb_clone)
+                            .args([
+                                "-s", &serial_clone,
+                                "exec-out",
+                                "screenrecord",
+                                "--output-format=h264",
+                                "--size", &size_arg,
+                                "--bit-rate", "4000000",
+                                "--time-limit", "180",
+                                "-"
+                            ])
+                            .stdout(std::process::Stdio::piped())
+                            .stderr(std::process::Stdio::null())
+                            .spawn()
+                        {
+                            Ok(c) => c,
+                            Err(e) => {
+                                eprintln!("[mobile_stream] Failed to spawn adb screenrecord: {}", e);
+                                break;
+                            }
+                        };
+
+                        let adb_pid = adb_child.id();
+                        let adb_stdout = match adb_child.stdout {
+                            Some(s) => s,
+                            None => break,
+                        };
+
+                        if let Ok(mut pids) = STREAM_CHILD_PIDS.lock() {
+                            pids.push(adb_pid);
+                        }
+
+                        let mut ffmpeg_child = match std::process::Command::new(&ffmpeg_clone)
+                            .args([
+                                "-fflags", "nobuffer",
+                                "-flags", "low_delay",
+                                "-probesize", "32",
+                                "-analyzeduration", "0",
+                                "-f", "h264",
+                                "-i", "pipe:0",
+                                "-c:v", "mjpeg",
+                                "-q:v", "3",
+                                "-f", "mpjpeg",
+                                "-"
+                            ])
+                            .stdin(adb_stdout)
+                            .stdout(std::process::Stdio::piped())
+                            .stderr(std::process::Stdio::null())
+                            .spawn()
+                        {
+                            Ok(c) => c,
+                            Err(e) => {
+                                eprintln!("[mobile_stream] Failed to spawn ffmpeg: {}", e);
+                                #[cfg(unix)]
+                                unsafe {
+                                    libc::kill(adb_pid as i32, libc::SIGKILL);
+                                }
+                                break;
+                            }
+                        };
+
+                        let ffmpeg_pid = ffmpeg_child.id();
+                        if let Ok(mut pids) = STREAM_CHILD_PIDS.lock() {
+                            pids.push(ffmpeg_pid);
+                        }
+
+                        let mut socket_disconnected = false;
+                        if let Some(mut ffmpeg_out) = ffmpeg_child.stdout.take() {
+                            let mut buf = [0u8; 8192];
+                            while STREAM_SERVER_ACTIVE.load(Ordering::SeqCst) {
+                                match ffmpeg_out.read(&mut buf) {
+                                    Ok(0) => break,
+                                    Ok(n) => {
+                                        if socket.write_all(&buf[..n]).is_err() {
+                                            socket_disconnected = true;
+                                            break;
+                                        }
+                                    }
+                                    Err(_) => break,
+                                }
+                            }
+                        }
+
+                        #[cfg(unix)]
+                        unsafe {
+                            libc::kill(adb_pid as i32, libc::SIGKILL);
+                            libc::kill(ffmpeg_pid as i32, libc::SIGKILL);
+                        }
+
+                        if socket_disconnected || !STREAM_SERVER_ACTIVE.load(Ordering::SeqCst) {
+                            break;
+                        }
+                    }
+                }
+                Err(ref e) if e.kind() == std::io::ErrorKind::WouldBlock => {
+                    std::thread::sleep(std::time::Duration::from_millis(50));
+                }
+                Err(_) => {
+                    std::thread::sleep(std::time::Duration::from_millis(50));
+                }
+            }
+        }
+    });
+
+    Ok(stream_url)
+}
+
+#[tauri::command]
+fn get_mobile_stream_url() -> Result<Option<String>, String> {
+    if let Ok(guard) = ACTIVE_STREAM_URL.lock() {
+        Ok(guard.clone())
+    } else {
+        Ok(None)
+    }
+}
+
 
 #[tauri::command]
 fn show_recording_hud(app_handle: tauri::AppHandle) -> Result<(), String> {
@@ -1650,7 +1866,10 @@ pub fn run() {
             restart_adb_server,
             capture_device_frame,
             send_device_tap,
-            keep_device_alive
+            keep_device_alive,
+            start_mobile_stream,
+            stop_mobile_stream,
+            get_mobile_stream_url
         ])
         .on_window_event(|window, event| {
             if let tauri::WindowEvent::CloseRequested { api, .. } = event {
