@@ -674,17 +674,6 @@ export function VideoCanvas({ project, currentTimeMs: propTimeMs }: VideoCanvasP
     }
   }, [effectsState.playbackRate]);
 
-  // Synchronize video voice/audio with clip settings (unmute video so recorded voice actually plays!)
-  const primaryClip = project.clips?.[0];
-  const isClipMuted = primaryClip?.muted ?? false;
-  const clipVolume = primaryClip?.volume ?? 1;
-  useEffect(() => {
-    const video = videoRef.current;
-    if (!video) return;
-    video.muted = isClipMuted;
-    video.volume = Math.max(0, Math.min(1, clipVolume));
-  }, [isClipMuted, clipVolume]);
-
   // When playback starts, immediately seed the whole canvas camera stage transform via DOM so
   // there is no single-frame blank between React removing the inline style and
   // the first rAF frame writing the correct value.
@@ -792,7 +781,20 @@ export function VideoCanvas({ project, currentTimeMs: propTimeMs }: VideoCanvasP
       } else {
         rafId = requestAnimationFrame(onFrame);
       }
-    }).catch(() => {});
+    }).catch(() => {
+      // If browser autoplay policy blocked unmuted playback, try playing muted so preview does not stall
+      if (!isClipMuted && video && active) {
+        video.muted = true;
+        video.play().then(() => {
+          if (!active) return;
+          if ("requestVideoFrameCallback" in video) {
+            rVfcId = (video as unknown as { requestVideoFrameCallback: (cb: () => void) => number }).requestVideoFrameCallback(onFrame);
+          } else {
+            rafId = requestAnimationFrame(onFrame);
+          }
+        }).catch(() => {});
+      }
+    });
 
     return () => {
       active = false;
@@ -954,6 +956,17 @@ export function VideoCanvas({ project, currentTimeMs: propTimeMs }: VideoCanvasP
     const primaryUrl = platform.mediaUrl(rawMedia);
     setResolvedMediaSrc(primaryUrl);
   }, [rawMedia, isExplicitSample]);
+
+  // Synchronize video voice/audio with clip settings (unmute video so recorded voice actually plays!)
+  const primaryClip = project.clips?.[0];
+  const isClipMuted = primaryClip?.muted ?? false;
+  const clipVolume = primaryClip?.volume ?? 1;
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video) return;
+    video.muted = isClipMuted;
+    video.volume = Math.max(0, Math.min(1, clipVolume));
+  }, [isClipMuted, clipVolume, resolvedMediaSrc]);
 
   const thumbnailSrc = summary.thumbnail ? platform.mediaUrl(summary.thumbnail) : null;
   const [naturalAspectRatio, setNaturalAspectRatio] = useState<string | null>(() => {
@@ -1478,6 +1491,7 @@ export function VideoCanvas({ project, currentTimeMs: propTimeMs }: VideoCanvasP
               ref={videoRef}
               src={resolvedMediaSrc}
               poster={thumbnailSrc || undefined}
+              muted={isClipMuted}
               playsInline
               preload="auto"
               style={{
@@ -1490,6 +1504,8 @@ export function VideoCanvas({ project, currentTimeMs: propTimeMs }: VideoCanvasP
               className={`size-full pointer-events-none ${looks.fit === "cover" ? "object-cover" : "object-contain"}`}
               onLoadedMetadata={(e) => {
                 const v = e.currentTarget;
+                v.muted = isClipMuted;
+                v.volume = Math.max(0, Math.min(1, clipVolume));
                 if (v.videoWidth && v.videoHeight) {
                   setNaturalAspectRatio(`${v.videoWidth} / ${v.videoHeight}`);
                 }

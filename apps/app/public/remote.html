@@ -619,17 +619,50 @@
           localStream.getTracks().forEach(t => t.stop());
         }
 
-        const constraints = {
-          video: {
-            facingMode: facing,
-            width: { ideal: 1920, min: 1280 },
-            height: { ideal: 1080, min: 720 },
-            frameRate: { ideal: 60, min: 30 }
-          },
-          audio: false
-        };
+        let stream;
+        try {
+          // Attempt high-fidelity video + mobile microphone audio capture
+          stream = await navigator.mediaDevices.getUserMedia({
+            video: {
+              facingMode: facing,
+              width: { ideal: 1920, min: 1280 },
+              height: { ideal: 1080, min: 720 },
+              frameRate: { ideal: 60, min: 30 }
+            },
+            audio: {
+              echoCancellation: true,
+              noiseSuppression: true,
+              autoGainControl: true,
+            }
+          });
+        } catch (mediaErr) {
+          // Fallback if audio permission is denied or unsupported: capture video only
+          try {
+            stream = await navigator.mediaDevices.getUserMedia({
+              video: {
+                facingMode: facing,
+                width: { ideal: 1920, min: 1280 },
+                height: { ideal: 1080, min: 720 },
+                frameRate: { ideal: 60, min: 30 }
+              },
+              audio: false
+            });
+          } catch (fallbackErr) {
+            // General relaxed fallback
+            try {
+              stream = await navigator.mediaDevices.getUserMedia({
+                video: true,
+                audio: true
+              });
+            } catch {
+              stream = await navigator.mediaDevices.getUserMedia({
+                video: true,
+                audio: false
+              });
+            }
+          }
+        }
 
-        const stream = await navigator.mediaDevices.getUserMedia(constraints);
         currentFacingMode = facing;
         localStream = stream;
 
@@ -639,19 +672,7 @@
         handleStreamStarted(stream);
       } catch (err) {
         console.warn('Camera stream error:', err);
-        // Fallback without strict width/height
-        try {
-          const fallbackStream = await navigator.mediaDevices.getUserMedia({
-            video: true,
-            audio: false
-          });
-          localStream = fallbackStream;
-          cameraPreview.srcObject = fallbackStream;
-          cameraPreviewBox.classList.add('active');
-          handleStreamStarted(fallbackStream);
-        } catch (fallbackErr) {
-          showGuideModal();
-        }
+        showGuideModal();
       }
     }
 
@@ -680,7 +701,7 @@
     function handleStreamStarted(stream) {
       if (!pc) initPeerConnection();
 
-      // Replace or add track to peer connection
+      // Replace or add video track to peer connection
       const videoTrack = stream.getVideoTracks()[0];
       if (videoTrack) {
         const senders = pc.getSenders();
@@ -703,6 +724,18 @@
           height: streamH,
           fps: settings.frameRate || 60
         });
+      }
+
+      // Replace or add audio track to peer connection so mobile sound streams to laptop
+      const audioTrack = stream.getAudioTracks()[0];
+      if (audioTrack) {
+        const senders = pc.getSenders();
+        const audioSender = senders.find(s => s.track && s.track.kind === 'audio');
+        if (audioSender) {
+          audioSender.replaceTrack(audioTrack);
+        } else {
+          pc.addTrack(audioTrack, stream);
+        }
       }
 
       document.getElementById('cameraBtnText').textContent = '● Camera Streaming Live';

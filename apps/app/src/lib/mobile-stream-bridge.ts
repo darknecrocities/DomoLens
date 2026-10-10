@@ -535,6 +535,7 @@ class MobileStreamBridgeImpl {
     this.activeDevice = device;
 
     const createSafeMockStream = (): MediaStream => {
+      let stream: MediaStream | null = null;
       if (typeof document !== "undefined") {
         try {
           const canvas = document.createElement("canvas");
@@ -546,15 +547,46 @@ class MobileStreamBridgeImpl {
             ctx.fillRect(0, 0, device.width, device.height);
           }
           if (typeof canvas.captureStream === "function") {
-            return canvas.captureStream(30);
+            stream = canvas.captureStream(30);
           }
         } catch {}
       }
-      if (typeof MediaStream !== "undefined") {
+      if (!stream && typeof MediaStream !== "undefined") {
         try {
-          return new MediaStream();
+          stream = new MediaStream();
         } catch {}
       }
+
+      if (stream) {
+        if (stream.getVideoTracks().length === 0 && typeof stream.addTrack === "function") {
+          stream.addTrack({
+            id: `sim-vid-${device.id}`,
+            kind: "video",
+            getSettings: () => ({ width: device.width, height: device.height }),
+            stop: () => {},
+            enabled: true,
+          } as any);
+        }
+
+        try {
+          const AudioCtx =
+            (typeof window !== "undefined" &&
+              (window.AudioContext ||
+                (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)) ||
+            (typeof globalThis !== "undefined" &&
+              (globalThis as unknown as { AudioContext: typeof AudioContext }).AudioContext);
+          if (AudioCtx) {
+            const ctx = new AudioCtx();
+            const dest = ctx.createMediaStreamDestination();
+            const carrierTrack = dest.stream.getAudioTracks()[0];
+            if (carrierTrack && typeof stream.addTrack === "function") {
+              stream.addTrack(carrierTrack);
+            }
+          }
+        } catch {}
+        return stream;
+      }
+
       return {
         getTracks: () => [],
         getVideoTracks: () => [{
@@ -716,8 +748,17 @@ class MobileStreamBridgeImpl {
     };
 
     pc.ontrack = (event) => {
-      const stream = event.streams[0] || new MediaStream([event.track]);
-      this.activeStream = stream;
+      const incomingStream = event.streams[0];
+      if (incomingStream) {
+        this.activeStream = incomingStream;
+      } else {
+        if (!this.activeStream) {
+          this.activeStream = new MediaStream([event.track]);
+        } else if (!this.activeStream.getTracks().some((t) => t.id === event.track.id)) {
+          this.activeStream.addTrack(event.track);
+        }
+      }
+      const stream = this.activeStream;
       this.streamListeners.forEach((cb) => cb(stream));
 
       const vTrack = stream.getVideoTracks()[0];
@@ -834,7 +875,11 @@ class MobileStreamBridgeImpl {
     this.streamUrlListeners.forEach((cb) => cb(null));
 
     if (this.activeStream) {
-      this.activeStream.getTracks().forEach((t) => t.stop());
+      this.activeStream.getTracks().forEach((t) => {
+        if (typeof t.stop === "function") {
+          try { t.stop(); } catch {}
+        }
+      });
       this.activeStream = null;
     }
 

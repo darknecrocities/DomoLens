@@ -105,20 +105,17 @@ let activeRecordingMime = "";
 function getBestSupportedMimeType(): string {
   if (typeof MediaRecorder === "undefined") return "";
   const candidateTypes = [
-    // 1. Hardware-accelerated High Profile H.264 (Native VideoToolbox on macOS Apple Silicon & Intel)
-    "video/mp4;codecs=avc1.640028,mp4a.40.2",
-    "video/mp4;codecs=avc1.4d4028,mp4a.40.2",
-    "video/mp4;codecs=avc1,mp4a.40.2",
-    "video/mp4",
-    // 2. Hardware H.264 in WebM container (Chrome on macOS)
-    "video/webm;codecs=h264,opus",
-    "video/webm;codecs=h264",
-    // 3. VP9 WebM
+    // 1. VP9 WebM with Opus audio - crystal clear 48kHz audio and hardware acceleration
     "video/webm;codecs=vp9,opus",
-    "video/webm;codecs=vp9",
-    // 4. Fallback WebM
+    // 2. High Profile H.264 WebM with Opus
+    "video/webm;codecs=h264,opus",
+    // 3. Native MP4 with AAC audio (macOS WebKit / Safari)
+    "video/mp4;codecs=avc1.640028,mp4a.40.2",
+    "video/mp4;codecs=avc1,mp4a.40.2",
+    // 4. VP8 WebM with Opus
     "video/webm;codecs=vp8,opus",
     "video/webm",
+    "video/mp4",
   ];
   for (const c of candidateTypes) {
     if (MediaRecorder.isTypeSupported(c)) return c;
@@ -657,7 +654,15 @@ export const useRecorder = create<RecorderStore>((set, get) => ({
         if (prevCleanup) prevCleanup();
       };
 
+      // Handle mobile audio according to systemAudioEnabled ("Mobile Sound")
+      let mobileAudioTracks = activeStream ? activeStream.getAudioTracks() : [];
+      if (!get().systemAudioEnabled && activeStream) {
+        mobileAudioTracks.forEach((t) => activeStream!.removeTrack(t));
+        mobileAudioTracks = [];
+      }
+
       // Voiceover audio capture if micEnabled
+      let micAudioTracks: MediaStreamTrack[] = [];
       if (get().micEnabled && typeof navigator !== "undefined" && navigator.mediaDevices?.getUserMedia) {
         try {
           const micStream = await navigator.mediaDevices.getUserMedia({
@@ -670,12 +675,57 @@ export const useRecorder = create<RecorderStore>((set, get) => ({
             },
           });
           micStreamInstance = micStream;
-          const micAudioTracks = micStream.getAudioTracks();
-          if (activeStream && micAudioTracks.length > 0) {
-            activeStream.addTrack(micAudioTracks[0]!);
-          }
+          micAudioTracks = micStream.getAudioTracks();
         } catch {
           // ignore mic denials
+        }
+      }
+
+      // Mix or attach audio tracks to activeStream
+      if (activeStream) {
+        if (mobileAudioTracks.length > 0 && micAudioTracks.length > 0) {
+          try {
+            const AudioCtx =
+              (typeof window !== "undefined" &&
+                (window.AudioContext ||
+                  (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)) ||
+              (typeof globalThis !== "undefined" &&
+                (globalThis as unknown as { AudioContext: typeof AudioContext }).AudioContext);
+            if (AudioCtx) {
+              audioContextInstance = new AudioCtx();
+              if (audioContextInstance.state === "suspended") {
+                await audioContextInstance.resume().catch(() => {});
+              }
+              const dest = audioContextInstance.createMediaStreamDestination();
+
+              const StreamClass =
+                (typeof window !== "undefined" && window.MediaStream) ||
+                (typeof MediaStream !== "undefined" ? MediaStream : (globalThis as unknown as { MediaStream: any }).MediaStream);
+              const micSrc = audioContextInstance.createMediaStreamSource(StreamClass ? new StreamClass([micAudioTracks[0]!]) : ({ getAudioTracks: () => [micAudioTracks[0]!] } as any));
+              const micGain = audioContextInstance.createGain();
+              micGain.gain.value = 1.0;
+              micSrc.connect(micGain);
+              micGain.connect(dest);
+
+              const mobSrc = audioContextInstance.createMediaStreamSource(StreamClass ? new StreamClass([mobileAudioTracks[0]!]) : ({ getAudioTracks: () => [mobileAudioTracks[0]!] } as any));
+              const mobGain = audioContextInstance.createGain();
+              mobGain.gain.value = 0.9;
+              mobSrc.connect(mobGain);
+              mobGain.connect(dest);
+
+              const mixedTrack = dest.stream.getAudioTracks()[0];
+              if (mixedTrack) {
+                mobileAudioTracks.forEach((t) => activeStream!.removeTrack(t));
+                activeStream.addTrack(mixedTrack);
+              }
+            }
+          } catch (audioErr) {
+            console.warn("Mobile audio mixing fallback:", audioErr);
+            if (micAudioTracks[0]) activeStream.addTrack(micAudioTracks[0]);
+          }
+        } else if (micAudioTracks.length > 0) {
+          mobileAudioTracks.forEach((t) => activeStream!.removeTrack(t));
+          activeStream.addTrack(micAudioTracks[0]!);
         }
       }
     } else if (typeof navigator !== "undefined" && navigator.mediaDevices?.getDisplayMedia) {
@@ -695,8 +745,8 @@ export const useRecorder = create<RecorderStore>((set, get) => ({
             } as MediaTrackConstraints,
             audio: get().systemAudioEnabled
               ? {
-                  echoCancellation: true,
-                  noiseSuppression: true,
+                  echoCancellation: false,
+                  noiseSuppression: false,
                   autoGainControl: false,
                 }
               : false,
@@ -714,8 +764,9 @@ export const useRecorder = create<RecorderStore>((set, get) => ({
               height: { ideal: 2160 },
               frameRate: { ideal: 60 },
             },
-            audio: get().systemAudioEnabled,
-          });
+            audio: get().systemAudioEnabled ? true : false,
+            systemAudio: get().systemAudioEnabled ? "include" : "exclude",
+          } as DisplayMediaStreamOptions);
         }
 
         activeStream = stream;
@@ -738,6 +789,16 @@ export const useRecorder = create<RecorderStore>((set, get) => ({
           }
         }
 
+        let systemAudioTracks = stream.getAudioTracks();
+        if (!get().systemAudioEnabled) {
+          systemAudioTracks.forEach((t) => stream.removeTrack(t));
+          systemAudioTracks = [];
+        } else if (systemAudioTracks.length === 0 && !get().micEnabled) {
+          toast.info(
+            "Note: System audio was not captured by the browser. To record sound, check 'Share audio' in the browser prompt or turn on Microphone."
+          );
+        }
+
         // If mic requested, capture clean studio voice via Web Audio API with echo cancellation
         if (get().micEnabled && navigator.mediaDevices?.getUserMedia) {
           try {
@@ -752,29 +813,37 @@ export const useRecorder = create<RecorderStore>((set, get) => ({
             });
             micStreamInstance = micStream;
 
-            const systemAudioTracks = stream.getAudioTracks();
             const micAudioTracks = micStream.getAudioTracks();
 
             if (systemAudioTracks.length > 0 && micAudioTracks.length > 0) {
               try {
                 const AudioCtx =
-                  window.AudioContext ||
-                  (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+                  (typeof window !== "undefined" &&
+                    (window.AudioContext ||
+                      (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)) ||
+                  (typeof globalThis !== "undefined" &&
+                    (globalThis as unknown as { AudioContext: typeof AudioContext }).AudioContext);
                 if (AudioCtx) {
                   audioContextInstance = new AudioCtx();
+                  if (audioContextInstance.state === "suspended") {
+                    await audioContextInstance.resume().catch(() => {});
+                  }
                   const dest = audioContextInstance.createMediaStreamDestination();
 
+                  const StreamClass =
+                    (typeof window !== "undefined" && window.MediaStream) ||
+                    (typeof MediaStream !== "undefined" ? MediaStream : (globalThis as unknown as { MediaStream: any }).MediaStream);
                   // Voice mic gets clean 100% gain
-                  const micSrc = audioContextInstance.createMediaStreamSource(new MediaStream([micAudioTracks[0]!]));
+                  const micSrc = audioContextInstance.createMediaStreamSource(StreamClass ? new StreamClass([micAudioTracks[0]!]) : ({ getAudioTracks: () => [micAudioTracks[0]!] } as any));
                   const micGain = audioContextInstance.createGain();
                   micGain.gain.value = 1.0;
                   micSrc.connect(micGain);
                   micGain.connect(dest);
 
-                  // System audio gets 60% gain so desktop alerts don't drown out or echo the voice
-                  const sysSrc = audioContextInstance.createMediaStreamSource(new MediaStream([systemAudioTracks[0]!]));
+                  // System audio gets natural balance 85% gain so desktop alerts & media are clear
+                  const sysSrc = audioContextInstance.createMediaStreamSource(StreamClass ? new StreamClass([systemAudioTracks[0]!]) : ({ getAudioTracks: () => [systemAudioTracks[0]!] } as any));
                   const sysGain = audioContextInstance.createGain();
-                  sysGain.gain.value = 0.6;
+                  sysGain.gain.value = 0.85;
                   sysSrc.connect(sysGain);
                   sysGain.connect(dest);
 

@@ -1196,6 +1196,20 @@ export async function renderProjectVideo(options: RenderOptions): Promise<Render
     audioCtx = null;
   }
 
+  // Decode original recorded audio from source video if available
+  let sourceAudioBuffer: AudioBuffer | null = null;
+  if (audioCtx && mediaSrc) {
+    try {
+      const resp = await fetch(mediaSrc);
+      if (resp.ok) {
+        const arrayBuffer = await resp.arrayBuffer();
+        sourceAudioBuffer = await audioCtx.decodeAudioData(arrayBuffer.slice(0));
+      }
+    } catch (audioDecodeErr) {
+      console.debug("Source video has no decodable audio track or audio unavailable:", audioDecodeErr);
+    }
+  }
+
   // Setup MediaStream & MediaRecorder
   const captureStreamFn =
     canvas.captureStream ||
@@ -2216,10 +2230,19 @@ export async function renderProjectVideo(options: RenderOptions): Promise<Render
       }
     };
 
+    let sourceAudioNode: AudioBufferSourceNode | null = null;
+    const primaryClip = project.clips?.[0];
+    const isClipMuted = primaryClip?.muted ?? false;
+    const clipVolume = primaryClip?.volume ?? 1;
+
     const finishRender = () => {
       onProgress?.(99, "Packaging download...");
       try {
         video.pause();
+        if (sourceAudioNode) {
+          try { sourceAudioNode.stop(); } catch {}
+          sourceAudioNode = null;
+        }
 
         recorder.onstop = async () => {
           if (audioCtx) void audioCtx.close();
@@ -2255,12 +2278,32 @@ export async function renderProjectVideo(options: RenderOptions): Promise<Render
           recorder.onstop?.(new Event("stop"));
         }
       } catch (err) {
+        if (sourceAudioNode) {
+          try { sourceAudioNode.stop(); } catch {}
+          sourceAudioNode = null;
+        }
         reject(err);
       }
     };
 
     // Begin render loop at time 0 with audio processing window
     let lastProcessedAudioMs = -1;
+
+    // Start playback of original recorded video audio into render mix if available and not muted
+    if (audioCtx && audioDest && sourceAudioBuffer && !isClipMuted && clipVolume > 0) {
+      try {
+        sourceAudioNode = audioCtx.createBufferSource();
+        sourceAudioNode.buffer = sourceAudioBuffer;
+        const gainNode = audioCtx.createGain();
+        gainNode.gain.value = Math.max(0, Math.min(1, clipVolume));
+        sourceAudioNode.connect(gainNode);
+        gainNode.connect(audioDest);
+        sourceAudioNode.start(0);
+      } catch (audioStartErr) {
+        console.warn("Failed starting source audio playback node:", audioStartErr);
+      }
+    }
+
     renderFrame(0);
   });
 }
