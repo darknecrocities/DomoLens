@@ -1703,6 +1703,9 @@ pub fn run() {
     ensure_single_instance_and_replace_previous();
 
     tauri::Builder::default()
+        .on_permission_request(|_webview, _kind| {
+            tauri::webview::PermissionResponse::Allow
+        })
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_process::init())

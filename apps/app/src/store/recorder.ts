@@ -730,43 +730,90 @@ export const useRecorder = create<RecorderStore>((set, get) => ({
       }
     } else if (typeof navigator !== "undefined" && navigator.mediaDevices?.getDisplayMedia) {
       set({ state: "requesting_share" });
+      const isLinuxPlatform = platform.isLinux || (typeof navigator !== "undefined" && /Linux/i.test(navigator.userAgent));
       try {
         const targetSurface = displaySurfaceMap[get().source] || "monitor";
         let stream: MediaStream;
 
-        try {
-          stream = await navigator.mediaDevices.getDisplayMedia({
-            video: {
-              displaySurface: targetSurface,
-              frameRate: { ideal: 60 },
-              width: { ideal: 3840 },
-              height: { ideal: 2160 },
-              resizeMode: "none",
-            } as MediaTrackConstraints,
-            audio: get().systemAudioEnabled
-              ? {
-                  echoCancellation: false,
-                  noiseSuppression: false,
-                  autoGainControl: false,
-                }
-              : false,
-            preferCurrentTab: false,
-            selfBrowserSurface: "exclude",
-            systemAudio: get().systemAudioEnabled ? "include" : "exclude",
-            surfaceSwitching: "include",
-            monitorTypeSurfaces: "include",
-          } as DisplayMediaStreamOptions);
-        } catch {
-          // Fallback to relaxed constraints for environments without advanced displaySurface options
-          stream = await navigator.mediaDevices.getDisplayMedia({
-            video: {
-              width: { ideal: 3840 },
-              height: { ideal: 2160 },
-              frameRate: { ideal: 60 },
-            },
-            audio: get().systemAudioEnabled ? true : false,
-            systemAudio: get().systemAudioEnabled ? "include" : "exclude",
-          } as DisplayMediaStreamOptions);
+        if (isLinuxPlatform) {
+          // Linux (Arch Linux / Wayland / Hyprland / KDE / GNOME / WebKitGTK / Chromium)
+          // Note: On Linux, PipeWire portal does not support system audio capture via display media.
+          // Requesting audio: true or systemAudio: "include" causes NotSupportedError or AbortError on Linux portals.
+          if (get().systemAudioEnabled && !get().micEnabled) {
+            toast.info("Note: Linux display portals record video. Turn on Microphone to capture audio.");
+          }
+
+          // Tier 1 (Linux High Clarity 60fps): Standard video constraint without audio or proprietary flags
+          try {
+            stream = await navigator.mediaDevices.getDisplayMedia({
+              video: {
+                frameRate: { ideal: 60, max: 60 },
+              },
+              audio: false,
+            });
+          } catch {
+            // Tier 2 (Linux Universal Portal Safe): Minimal standard constraint that triggers native PipeWire portal prompt
+            stream = await navigator.mediaDevices.getDisplayMedia({
+              video: true,
+              audio: false,
+            });
+          }
+        } else {
+          // macOS & Windows: full advanced constraints with Retina resolution & system audio
+          try {
+            stream = await navigator.mediaDevices.getDisplayMedia({
+              video: {
+                displaySurface: targetSurface,
+                frameRate: { ideal: 60 },
+                width: { ideal: 3840 },
+                height: { ideal: 2160 },
+                resizeMode: "none",
+              } as MediaTrackConstraints,
+              audio: get().systemAudioEnabled
+                ? {
+                    echoCancellation: false,
+                    noiseSuppression: false,
+                    autoGainControl: false,
+                  }
+                : false,
+              preferCurrentTab: false,
+              selfBrowserSurface: "exclude",
+              systemAudio: get().systemAudioEnabled ? "include" : "exclude",
+              surfaceSwitching: "include",
+              monitorTypeSurfaces: "include",
+            } as DisplayMediaStreamOptions);
+          } catch {
+            // Tier 2: Fallback to relaxed constraints with audio
+            try {
+              stream = await navigator.mediaDevices.getDisplayMedia({
+                video: {
+                  width: { ideal: 3840 },
+                  height: { ideal: 2160 },
+                  frameRate: { ideal: 60 },
+                },
+                audio: get().systemAudioEnabled ? true : false,
+                systemAudio: get().systemAudioEnabled ? "include" : "exclude",
+              } as DisplayMediaStreamOptions);
+            } catch {
+              // Tier 3: Relaxed video without audio (if audio caused rejection)
+              try {
+                stream = await navigator.mediaDevices.getDisplayMedia({
+                  video: {
+                    width: { ideal: 3840 },
+                    height: { ideal: 2160 },
+                    frameRate: { ideal: 60 },
+                  },
+                  audio: false,
+                } as DisplayMediaStreamOptions);
+              } catch {
+                // Tier 4: Minimal universal video
+                stream = await navigator.mediaDevices.getDisplayMedia({
+                  video: true,
+                  audio: false,
+                });
+              }
+            }
+          }
         }
 
         activeStream = stream;
@@ -875,10 +922,32 @@ export const useRecorder = create<RecorderStore>((set, get) => ({
             get().cancelRecording();
           }
         });
-      } catch {
-        // User cancelled screen picker or rejected permission
+      } catch (err: unknown) {
+        // Handle cancellation or diagnostic failures
         set({ state: "idle" });
-        toast.info("Screen sharing cancelled. Please select a screen or window to start.");
+        const error = err as Error;
+        const errName = error?.name || "";
+        const errMsg = error?.message || "";
+
+        if (errName === "NotAllowedError" || errName === "PermissionDeniedError") {
+          if (isLinuxPlatform) {
+            toast.info(
+              "Screen sharing was cancelled or portal permission not granted. If on Wayland/Hyprland, ensure xdg-desktop-portal is running."
+            );
+          } else {
+            toast.info("Screen sharing cancelled. Please select a screen or window to start.");
+          }
+        } else if (errName === "NotSupportedError" || errName === "NotFoundError") {
+          if (isLinuxPlatform) {
+            toast.error(
+              "Screen capture portal unavailable. Please verify PipeWire and xdg-desktop-portal (e.g. xdg-desktop-portal-gtk/hyprland/kde) are running."
+            );
+          } else {
+            toast.error("Screen capture is not supported in this environment.");
+          }
+        } else {
+          toast.error(`Screen capture could not start: ${errMsg || errName || "Unknown error"}`);
+        }
         return;
       }
     }
@@ -1130,7 +1199,7 @@ export const useRecorder = create<RecorderStore>((set, get) => ({
 
     // Attach native OS-level global mouse & typing listeners for full screen capture outside the app
     void platform.startGlobalInputCapture?.();
-    if (platform.isApp && platform.checkAccessibilityPermission) {
+    if (platform.isApp && platform.isMac && platform.checkAccessibilityPermission) {
       void platform.checkAccessibilityPermission().then((trusted) => {
         if (!trusted) {
           void platform.requestAccessibilityPermission?.();

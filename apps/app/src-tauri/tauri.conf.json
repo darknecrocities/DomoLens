@@ -92,7 +92,7 @@
         "section": "video"
       },
       "appimage": {
-        "bundleMediaFramework": false
+        "bundleMediaFramework": true
       }
     }
   }

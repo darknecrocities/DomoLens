@@ -1396,7 +1396,7 @@ export async function renderProjectVideo(options: RenderOptions): Promise<Render
       const rawCamera = calculateCameraAtTime(
         tMs,
         project.zoomBlocks,
-        500,
+        1000,
         400,
         smoothedTrajectory,
         project.keyframes,
