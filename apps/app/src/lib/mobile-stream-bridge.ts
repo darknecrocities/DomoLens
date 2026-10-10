@@ -226,6 +226,8 @@ class MobileStreamBridgeImpl {
 
     this.isPollingActive = true;
     const img = new Image();
+    let consecutiveErrors = 0;
+    let lastKeepAliveTime = 0;
 
     const loop = async () => {
       const { invoke } = await import("@tauri-apps/api/core");
@@ -235,9 +237,17 @@ class MobileStreamBridgeImpl {
           break;
         }
 
+        // Periodic keep-alive ping to prevent Android from entering deep sleep
+        const now = Date.now();
+        if (now - lastKeepAliveTime > 6000) {
+          lastKeepAliveTime = now;
+          void invoke("keep_device_alive", { serial }).catch(() => {});
+        }
+
         try {
           const frameDataUrl = await invoke<string>("capture_device_frame", { serial });
           if (frameDataUrl && this.frameCtx && this.activeDevice && this.isPollingActive) {
+            consecutiveErrors = 0;
             await new Promise<void>((resolve) => {
               img.onload = () => {
                 if (this.frameCtx && this.activeDevice) {
@@ -250,15 +260,27 @@ class MobileStreamBridgeImpl {
             });
           }
         } catch {
-          // If device is offline or error, wait 1s before retrying
-          await new Promise((r) => setTimeout(r, 1000));
+          consecutiveErrors++;
+          if (consecutiveErrors >= 3) {
+            console.warn("[mobile-stream-bridge] Consecutive capture failures. Checking devices...");
+            const devices = await this.scanAdbDevices();
+            const active = devices.find((d) => d.state === "device");
+            if (active && active.serial !== serial) {
+              console.log("[mobile-stream-bridge] Auto-switching to connected device:", active.serial);
+              this.bindAdbDevice(active);
+              return;
+            } else if (!active) {
+              this.disconnect();
+              return;
+            }
+          }
+          await new Promise((r) => setTimeout(r, 400));
         }
 
         if (!this.isPollingActive) break;
 
-        // Adaptive breathing room: pause 300ms after drawing before requesting next frame!
-        // This guarantees the UI thread has 300ms of completely idle, 60 FPS silky smooth response time!
-        await new Promise((r) => setTimeout(r, 300));
+        // Ultra-low latency breathing pause: 30ms gives the browser event loop time for smooth UI interactions without delay
+        await new Promise((r) => setTimeout(r, 30));
       }
     };
 

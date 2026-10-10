@@ -88,6 +88,7 @@ static LAST_MOVE_EMIT_MS: Mutex<i64> = Mutex::new(0);
 static EVENT_TAP_PORT: Mutex<Option<usize>> = Mutex::new(None);
 static CAPTURE_IN_PROGRESS: AtomicBool = AtomicBool::new(false);
 static LAST_FRAME_CACHE: Mutex<Option<String>> = Mutex::new(None);
+static CONSECUTIVE_CAPTURE_ERRORS: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
 
 fn get_data_dir() -> PathBuf {
     if let Some(dirs) = directories::ProjectDirs::from("com", "domolens", "desktop") {
@@ -886,6 +887,12 @@ fn get_adb_devices() -> Result<Vec<AdbDeviceInfo>, String> {
 
         let serial = parts[0].to_string();
         let state = parts[1].to_string();
+
+        // Strictly ignore dead or offline devices
+        if state == "offline" {
+            continue;
+        }
+
         let is_wireless = serial.contains(':')
             || serial.contains("._tcp")
             || serial.contains("._adb")
@@ -948,8 +955,14 @@ fn get_adb_devices() -> Result<Vec<AdbDeviceInfo>, String> {
         });
     }
 
-    // Deduplicate: if multiple connections exist for the same device (e.g. IP endpoint and mDNS TLS service),
-    // keep the one with clean IP or authorized state
+    // Prioritize: authorized online devices first, and direct USB cable before wireless
+    raw_devices.sort_by(|a, b| {
+        let a_score = (if a.state == "device" { 10 } else { 0 }) + (if !a.is_wireless { 5 } else { 0 });
+        let b_score = (if b.state == "device" { 10 } else { 0 }) + (if !b.is_wireless { 5 } else { 0 });
+        b_score.cmp(&a_score)
+    });
+
+    // Deduplicate: if multiple connections exist for the same physical phone, keep the highest priority
     let mut devices: Vec<AdbDeviceInfo> = Vec::new();
     for dev in raw_devices {
         let is_dup = devices.iter().any(|existing| {
@@ -1046,13 +1059,21 @@ fn capture_device_frame(serial: String) -> Result<String, String> {
         .map_err(|e| e.to_string())?;
 
     if !output.status.success() || output.stdout.is_empty() {
-        if let Ok(guard) = LAST_FRAME_CACHE.lock() {
-            if let Some(ref cached) = *guard {
-                return Ok(cached.clone());
+        let err_count = CONSECUTIVE_CAPTURE_ERRORS.fetch_add(1, std::sync::atomic::Ordering::SeqCst) + 1;
+        if err_count <= 2 {
+            if let Ok(guard) = LAST_FRAME_CACHE.lock() {
+                if let Some(ref cached) = *guard {
+                    return Ok(cached.clone());
+                }
             }
         }
-        return Err("Failed to capture frame from device".to_string());
+        if let Ok(mut guard) = LAST_FRAME_CACHE.lock() {
+            *guard = None;
+        }
+        return Err("Device connection lost or offline".to_string());
     }
+
+    CONSECUTIVE_CAPTURE_ERRORS.store(0, std::sync::atomic::Ordering::SeqCst);
 
     use base64::Engine;
     let b64 = base64::engine::general_purpose::STANDARD.encode(&output.stdout);
@@ -1071,8 +1092,18 @@ fn send_device_tap(serial: String, x: u32, y: u32) -> Result<(), String> {
 
     let _ = std::process::Command::new(&adb_path)
         .args(["-s", &serial, "shell", "input", "tap", &x.to_string(), &y.to_string()])
-        .output();
+        .spawn();
 
+    Ok(())
+}
+
+#[tauri::command]
+fn keep_device_alive(serial: String) -> Result<(), String> {
+    if let Some(adb_path) = find_adb_binary() {
+        let _ = std::process::Command::new(&adb_path)
+            .args(["-s", &serial, "shell", "input", "keyevent", "224"])
+            .spawn();
+    }
     Ok(())
 }
 
@@ -1618,7 +1649,8 @@ pub fn run() {
             pair_wireless_adb,
             restart_adb_server,
             capture_device_frame,
-            send_device_tap
+            send_device_tap,
+            keep_device_alive
         ])
         .on_window_event(|window, event| {
             if let tauri::WindowEvent::CloseRequested { api, .. } = event {

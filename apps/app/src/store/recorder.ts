@@ -333,6 +333,14 @@ export const useRecorder = create<RecorderStore>((set, get) => ({
           mobileConnectionStatus: "connected",
         });
       });
+      mobileStreamBridge.onDeviceDisconnected(() => {
+        set({
+          mobileDeviceInfo: null,
+          mobileConnectionStatus: "disconnected",
+          adbScanStatus: "not_found",
+        });
+        toast.info("Phone connection lost. Reconnect via USB or Wireless ADB.");
+      });
       // Automatically scan for connected USB / Wireless phones
       void get().scanAdbDevices();
     }

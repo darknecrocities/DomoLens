@@ -873,10 +873,16 @@ export function RecordScreen() {
                               <span>Restart ADB Server &amp; Rescan</span>
                             </button>
 
-                            <div className="rounded-xl border border-neutral-800 bg-neutral-900/60 p-3 space-y-1.5 text-[11px] text-neutral-300">
-                              <span className="font-semibold text-white block">How to find Wireless ADB details:</span>
+                            <div className="rounded-xl border border-neutral-800 bg-neutral-900/60 p-3 space-y-2 text-[11px] text-neutral-300">
+                              <span className="font-semibold text-white block">Wireless ADB Connection Tips:</span>
                               <p className="text-neutral-400 leading-relaxed">
-                                Go to Phone <strong>Settings → Developer Options → Wireless Debugging</strong>. Toggle it ON. Tap <strong>"Pair device with pairing code"</strong> to see your Wi-Fi IP, port, and code.
+                                1. In Phone <strong>Settings → Developer Options → Wireless Debugging</strong>, tap <em>"Pair device with pairing code"</em> to see your port &amp; 6-digit code.
+                              </p>
+                              <p className="text-neutral-400 leading-relaxed">
+                                2. Keep your phone screen <strong>unlocked</strong> to prevent Android from putting Wi-Fi ADB to sleep.
+                              </p>
+                              <p className="text-neutral-300 leading-relaxed pt-1 border-t border-neutral-800 font-medium">
+                                ⚡ For <strong>zero latency, instant response, and a connection that never drops</strong>, plug in your USB cable and switch to <strong>USB Debugging</strong>.
                               </p>
                             </div>
                           </div>
