@@ -167,7 +167,7 @@ describe("Mobile Recording Engine & Transport", () => {
     await useEditor.getState().loadProject("proj-mobile-test");
     const proj = useEditor.getState().project;
     expect(proj).not.toBeNull();
-    expect(proj?.looks.windowFrame).toBe("none");
+    expect(proj?.looks.windowFrame).toBe("android");
     expect(proj?.looks.borderRadius).toBe(28);
     expect(proj?.looks.padding).toBe(24);
     expect(proj?.looks.aspectRatio).toBe("9:16");
@@ -221,8 +221,8 @@ describe("Mobile Recording Engine & Transport", () => {
 
     const healed = useEditor.getState().project;
     expect(healed).not.toBeNull();
-    // macOS terminal frame replaced with clean mobile phone frame
-    expect(healed?.looks.windowFrame).toBe("none");
+    // macOS terminal frame replaced with authentic mobile phone chassis frame
+    expect(healed?.looks.windowFrame).toBe("android");
     expect(healed?.looks.borderRadius).toBe(28);
     expect(healed?.looks.padding).toBe(24);
     expect(healed?.looks.aspectRatio).toBe("9:16");

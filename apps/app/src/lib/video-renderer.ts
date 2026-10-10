@@ -1247,31 +1247,54 @@ export async function renderProjectVideo(options: RenderOptions): Promise<Render
   const paddingPx = (looks.padding || 0) * baseScale;
   const radiusPx = (looks.borderRadius || 0) * baseScale;
 
-  // Window rect inside canvas: adapt to video's native aspect ratio when available
+  const isPhoneOrTablet =
+    (looks.padding || 0) > 0 &&
+    (looks.windowFrame === "android" ||
+     looks.windowFrame === "iphone" ||
+     looks.windowFrame === "ipad");
+  const bezelPx = isPhoneOrTablet ? 13 * baseScale : 0;
+
+  // Window rect inside canvas: adapt to video's native or preset aspect ratio
   const availW = Math.max(100, width - 2 * paddingPx);
   const availH = Math.max(100, height - 2 * paddingPx);
-  let winW = availW;
-  let winH = availH;
-  let winX = paddingPx;
-  let winY = paddingPx;
+  const innerAvailW = Math.max(80, availW - 2 * bezelPx);
+  const innerAvailH = Math.max(80, availH - 2 * bezelPx);
+
+  let winW = innerAvailW;
+  let winH = innerAvailH;
+  let winX = paddingPx + bezelPx;
+  let winY = paddingPx + bezelPx;
 
   const rawWidth = video.videoWidth || project.summary.width || 0;
   const rawHeight = video.videoHeight || project.summary.height || 0;
-  if (rawWidth > 0 && rawHeight > 0 && (!looks.aspectRatio || looks.aspectRatio === "16:9")) {
-    const videoAspect = rawWidth / rawHeight;
-    const availAspect = availW / availH;
-    if (availAspect > videoAspect) {
-      winH = availH;
-      winW = Math.round(availH * videoAspect);
+
+  let targetAspect: number | null = null;
+  if (looks.aspectRatio === "9:16") targetAspect = 9 / 16;
+  else if (looks.aspectRatio === "16:9") targetAspect = 16 / 9;
+  else if (looks.aspectRatio === "1:1") targetAspect = 1;
+  else if (looks.aspectRatio === "4:3") targetAspect = 4 / 3;
+  else if (rawWidth > 0 && rawHeight > 0) targetAspect = rawWidth / rawHeight;
+
+  if (targetAspect) {
+    const availAspect = innerAvailW / innerAvailH;
+    if (availAspect > targetAspect) {
+      winH = innerAvailH;
+      winW = Math.round(innerAvailH * targetAspect);
       winX = Math.round((width - winW) / 2);
-      winY = paddingPx;
+      winY = paddingPx + bezelPx + Math.round((innerAvailH - winH) / 2);
     } else {
-      winW = availW;
-      winH = Math.round(availW / videoAspect);
-      winX = paddingPx;
+      winW = innerAvailW;
+      winH = Math.round(innerAvailW / targetAspect);
+      winX = paddingPx + bezelPx + Math.round((innerAvailW - winW) / 2);
       winY = Math.round((height - winH) / 2);
     }
   }
+
+  const chassisX = winX - bezelPx;
+  const chassisY = winY - bezelPx;
+  const chassisW = winW + 2 * bezelPx;
+  const chassisH = winH + 2 * bezelPx;
+  const chassisRadius = radiusPx + bezelPx;
 
   recorder.start(250);
 
@@ -1313,28 +1336,75 @@ export async function renderProjectVideo(options: RenderOptions): Promise<Render
       if (cancelled) return;
 
       // 1. Draw Background
-      // Ensure frosted glass has an opaque obsidian substrate first to eliminate transparency leakage
       ctx.fillStyle = "#08090c";
       ctx.fillRect(0, 0, width, height);
       ctx.fillStyle = createUniversalBackgroundFill(ctx, width, height, looks.backgroundValue);
       ctx.fillRect(0, 0, width, height);
 
-      // 2. Draw Outer Window Drop Shadow
+      // 2. Draw Outer Window / Chassis Drop Shadow
       if (looks.shadow && looks.shadow !== "none") {
         ctx.save();
         ctx.shadowColor =
           looks.shadow === "glow"
             ? "rgba(255, 255, 255, 0.35)"
-            : "rgba(0, 0, 0, 0.75)";
+            : "rgba(0, 0, 0, 0.85)";
         ctx.shadowBlur = looks.shadow === "lift" ? 40 * baseScale : 24 * baseScale;
         ctx.shadowOffsetY = looks.shadow === "lift" ? 20 * baseScale : 10 * baseScale;
         ctx.fillStyle = "#000000";
+        const shX = isPhoneOrTablet ? chassisX : winX;
+        const shY = isPhoneOrTablet ? chassisY : winY;
+        const shW = isPhoneOrTablet ? chassisW : winW;
+        const shH = isPhoneOrTablet ? chassisH : winH;
+        const shR = isPhoneOrTablet ? chassisRadius : radiusPx;
         if (typeof ctx.roundRect === "function") {
           ctx.beginPath();
-          ctx.roundRect(winX, winY, winW, winH, radiusPx);
+          ctx.roundRect(shX, shY, shW, shH, shR);
           ctx.fill();
         } else {
-          ctx.fillRect(winX, winY, winW, winH);
+          ctx.fillRect(shX, shY, shW, shH);
+        }
+        ctx.restore();
+      }
+
+      // 2b. Draw Physical Phone Chassis Body with Real Hardware Edges
+      if (isPhoneOrTablet) {
+        ctx.save();
+        // Hardware Buttons on Outer Edges
+        ctx.fillStyle = "#4a4a52";
+        // Right side Power button
+        ctx.fillRect(chassisX + chassisW, chassisY + chassisH * 0.28, 3.5 * baseScale, 36 * baseScale);
+        // Left side Volume buttons
+        ctx.fillRect(chassisX - 3.5 * baseScale, chassisY + chassisH * 0.22, 3.5 * baseScale, 48 * baseScale);
+
+        // Chassis body
+        const chassisGrad = ctx.createLinearGradient(chassisX, chassisY, chassisX, chassisY + chassisH);
+        if (looks.windowFrame === "iphone") {
+          chassisGrad.addColorStop(0, "#2e2e34");
+          chassisGrad.addColorStop(0.5, "#1e1e22");
+          chassisGrad.addColorStop(1, "#121215");
+        } else {
+          chassisGrad.addColorStop(0, "#2a2a2e");
+          chassisGrad.addColorStop(0.5, "#1b1b1e");
+          chassisGrad.addColorStop(1, "#111113");
+        }
+        ctx.fillStyle = chassisGrad;
+        if (typeof ctx.roundRect === "function") {
+          ctx.beginPath();
+          ctx.roundRect(chassisX, chassisY, chassisW, chassisH, chassisRadius);
+          ctx.fill();
+          // Metallic outer rim edge
+          ctx.strokeStyle = "rgba(255, 255, 255, 0.32)";
+          ctx.lineWidth = 2 * baseScale;
+          ctx.stroke();
+        } else {
+          ctx.fillRect(chassisX, chassisY, chassisW, chassisH);
+        }
+
+        // Top Ear-Speaker Slit on chassis bezel
+        if (looks.windowFrame !== "ipad") {
+          const spW = 40 * baseScale;
+          ctx.fillStyle = "#08080a";
+          ctx.fillRect(chassisX + (chassisW - spW) / 2, chassisY + (bezelPx - 2 * baseScale) / 2, spW, 2.5 * baseScale);
         }
         ctx.restore();
       }

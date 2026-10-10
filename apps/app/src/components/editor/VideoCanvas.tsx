@@ -370,6 +370,7 @@ export function VideoCanvas({ project, currentTimeMs: propTimeMs }: VideoCanvasP
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const viewportRef = useRef<HTMLDivElement>(null);
+  const tiltWrapperRef = useRef<HTMLDivElement>(null);
   const prevTimeRef = useRef(currentTimeMs);
   const triggeredEventsRef = useRef<Set<string>>(new Set());
   const lastClickSfxPlaybackTimeRef = useRef<number>(-999999);
@@ -752,11 +753,11 @@ export function VideoCanvas({ project, currentTimeMs: propTimeMs }: VideoCanvasP
         }
 
         // Drive 3D frame tilt & kinetic motion at 60fps via direct DOM
-        const vp = viewportRef.current;
+        const targetTiltEl = tiltWrapperRef.current || viewportRef.current;
         const lk = looksRef.current;
-        if (vp && (lk.tiltAnimation !== "none" || lk.tiltX || lk.tiltY || lk.tiltZ || lk.tiltAngle)) {
+        if (targetTiltEl && (lk.tiltAnimation !== "none" || lk.tiltX || lk.tiltY || lk.tiltZ || lk.tiltAngle)) {
           const t3D = evaluate3DTiltAtTime(frameMs, lk, interactionsRef.current, keyframesRef.current);
-          vp.style.transform = `perspective(${t3D.perspective}px) rotateX(${t3D.rotateX}deg) rotateY(${t3D.rotateY}deg) rotateZ(${t3D.rotateZ}deg)`;
+          targetTiltEl.style.transform = `perspective(${t3D.perspective}px) rotateX(${t3D.rotateX}deg) rotateY(${t3D.rotateY}deg) rotateZ(${t3D.rotateZ}deg)`;
           if (glareOverlayRef.current && lk.tiltGlare) {
             glareOverlayRef.current.style.background = `radial-gradient(circle at ${t3D.glareX}% ${t3D.glareY}%, rgba(255, 255, 255, 0.16) 0%, transparent 65%)`;
           }
@@ -993,6 +994,16 @@ export function VideoCanvas({ project, currentTimeMs: propTimeMs }: VideoCanvasP
     glow: "0 10px 36px -10px rgb(255 255 255 / 0.35)",
   };
 
+  const isPhoneOrTablet =
+    (looks.padding ?? 32) > 0 &&
+    (looks.windowFrame === "android" ||
+     looks.windowFrame === "iphone" ||
+     looks.windowFrame === "ipad");
+
+  const isAndroid = isPhoneOrTablet && looks.windowFrame === "android";
+  const isIphone = isPhoneOrTablet && looks.windowFrame === "iphone";
+  const isIpad = isPhoneOrTablet && looks.windowFrame === "ipad";
+
   return (
     <div
       className="relative flex size-full items-center justify-center overflow-hidden"
@@ -1025,27 +1036,121 @@ export function VideoCanvas({ project, currentTimeMs: propTimeMs }: VideoCanvasP
         </div>
       )}
 
-      {/* Video Viewport with Framing, 3D Tilt, and Click-to-Shift */}
+      {/* 3D Tilt Wrapper: maintains 3D perspective physics for entire chassis & screen */}
       <div
-        ref={viewportRef}
-        data-tutorial-target="canvas-player"
-        onClick={handleCanvasClick}
-        onPointerDown={handlePointerDown}
-        onPointerMove={handlePointerMove}
-        onPointerUp={handlePointerUp}
-        onPointerCancel={handlePointerCancel}
-        className={`relative flex flex-col max-h-full max-w-full overflow-hidden bg-ink-950 ${
-          isTraceShiftingMode ? "cursor-crosshair ring-2 ring-white/60 touch-none" : "cursor-crosshair"
-        } group select-none transition-transform duration-300`}
+        ref={tiltWrapperRef}
+        className="relative flex size-full items-center justify-center pointer-events-none transition-transform duration-300"
         style={{
-          aspectRatio: viewportAspectRatio,
-          borderRadius: `${looks.borderRadius}px`,
-          boxShadow: looks.padding === 0 ? "none" : (shadowStyles[looks.shadow] || shadowStyles.lift),
           transform: `perspective(${tilt3D.perspective}px) rotateX(${tilt3D.rotateX}deg) rotateY(${tilt3D.rotateY}deg) rotateZ(${tilt3D.rotateZ}deg)`,
           transformStyle: "preserve-3d",
         }}
-        title={isTraceShiftingMode ? "Click & drag on video to draw zoom trajectory line" : "Click anywhere to shift camera focal center"}
       >
+        {/* Physical Smartphone / Tablet Chassis Body with Real Hardware Edges */}
+        <div
+          className={`relative flex items-center justify-center max-h-full max-w-full pointer-events-auto transition-all duration-300 ${
+            isPhoneOrTablet
+              ? isIphone
+                ? "bg-gradient-to-b from-[#2e2e34] via-[#1e1e22] to-[#121215] border-[3px] border-[#4b4b52]"
+                : isAndroid
+                ? "bg-gradient-to-b from-[#2a2a2e] via-[#1c1c1f] to-[#111113] border-[3px] border-[#3f3f46]"
+                : "bg-gradient-to-b from-[#28282c] via-[#1a1a1d] to-[#111113] border-[3px] border-[#44444c]"
+              : ""
+          }`}
+          style={{
+            aspectRatio: viewportAspectRatio,
+            paddingTop: isPhoneOrTablet ? (isIpad ? "14px" : "12px") : "0px",
+            paddingBottom: isPhoneOrTablet ? (isIpad ? "14px" : "12px") : "0px",
+            paddingLeft: isPhoneOrTablet ? (isIpad ? "14px" : "8px") : "0px",
+            paddingRight: isPhoneOrTablet ? (isIpad ? "14px" : "8px") : "0px",
+            boxShadow:
+              looks.padding === 0
+                ? "none"
+                : isPhoneOrTablet
+                ? "0 0 0 1px rgba(255,255,255,0.25), 0 0 0 2px rgba(0,0,0,0.9), 0 25px 65px -12px rgba(0,0,0,0.95), 0 0 25px rgba(0,0,0,0.5)"
+                : shadowStyles[looks.shadow] || shadowStyles.lift,
+            borderRadius: isPhoneOrTablet
+              ? isIphone
+                ? `${Math.max(42, (looks.borderRadius || 36) + 10)}px`
+                : isAndroid
+                ? `${Math.max(34, (looks.borderRadius || 28) + 8)}px`
+                : `${Math.max(28, (looks.borderRadius || 24) + 8)}px`
+              : `${looks.borderRadius}px`,
+          }}
+        >
+          {/* Physical Hardware Buttons on Left Edge */}
+          {isPhoneOrTablet && (
+            <div className="pointer-events-none absolute left-0 inset-y-0 w-0 select-none z-50">
+              {isIphone && (
+                <>
+                  {/* Action Button */}
+                  <div className="absolute -left-[4px] top-[18%] h-7 w-[4px] rounded-l-sm bg-gradient-to-r from-[#52525b] to-[#3f3f46] border-y border-l border-white/30 shadow-md" />
+                  {/* Volume Up */}
+                  <div className="absolute -left-[4px] top-[26%] h-12 w-[4px] rounded-l-sm bg-gradient-to-r from-[#52525b] to-[#3f3f46] border-y border-l border-white/30 shadow-md" />
+                  {/* Volume Down */}
+                  <div className="absolute -left-[4px] top-[38%] h-12 w-[4px] rounded-l-sm bg-gradient-to-r from-[#52525b] to-[#3f3f46] border-y border-l border-white/30 shadow-md" />
+                </>
+              )}
+              {isAndroid && (
+                /* Volume Rocker */
+                <div className="absolute -left-[4px] top-[24%] h-20 w-[4px] rounded-l-sm bg-gradient-to-r from-[#52525b] to-[#3f3f46] border-y border-l border-white/30 shadow-md" />
+              )}
+              {isIpad && (
+                <>
+                  <div className="absolute -left-[4px] top-[14%] h-10 w-[4px] rounded-l-sm bg-gradient-to-r from-[#52525b] to-[#3f3f46] border-y border-l border-white/30 shadow-md" />
+                  <div className="absolute -left-[4px] top-[22%] h-10 w-[4px] rounded-l-sm bg-gradient-to-r from-[#52525b] to-[#3f3f46] border-y border-l border-white/30 shadow-md" />
+                </>
+              )}
+            </div>
+          )}
+
+          {/* Physical Hardware Buttons on Right Edge */}
+          {isPhoneOrTablet && (
+            <div className="pointer-events-none absolute right-0 inset-y-0 w-0 select-none z-50">
+              {isIphone && (
+                /* Power / Siri Button */
+                <div className="absolute -right-[4px] top-[28%] h-18 w-[4px] rounded-r-sm bg-gradient-to-l from-[#52525b] to-[#3f3f46] border-y border-r border-white/30 shadow-md" />
+              )}
+              {isAndroid && (
+                /* Power Button */
+                <div className="absolute -right-[4px] top-[32%] h-14 w-[4px] rounded-r-sm bg-gradient-to-l from-[#52525b] to-[#3f3f46] border-y border-r border-white/30 shadow-md" />
+              )}
+            </div>
+          )}
+
+          {/* Top Bezel Ear-Speaker Grill (Centered on top chassis bezel) */}
+          {isPhoneOrTablet && !isIpad && (
+            <div className="pointer-events-none absolute top-1 inset-x-0 flex items-center justify-center z-40 select-none">
+              <div className="h-1 w-12 rounded-full bg-[#08080a] border border-white/15 shadow-inner" />
+            </div>
+          )}
+
+          {/* Video Viewport (The Screen) */}
+          <div
+            ref={viewportRef}
+            data-tutorial-target="canvas-player"
+            onClick={handleCanvasClick}
+            onPointerDown={handlePointerDown}
+            onPointerMove={handlePointerMove}
+            onPointerUp={handlePointerUp}
+            onPointerCancel={handlePointerCancel}
+            className={`relative flex flex-col ${
+              isPhoneOrTablet ? "size-full min-h-0 min-w-0" : "max-h-full max-w-full"
+            } overflow-hidden bg-ink-950 ${
+              isTraceShiftingMode ? "cursor-crosshair ring-2 ring-white/60 touch-none" : "cursor-crosshair"
+            } group select-none transition-all duration-300`}
+            style={{
+              aspectRatio: isPhoneOrTablet ? undefined : viewportAspectRatio,
+              borderRadius: isPhoneOrTablet
+                ? isIphone
+                  ? `${looks.borderRadius || 36}px`
+                  : isAndroid
+                  ? `${looks.borderRadius || 28}px`
+                  : `${looks.borderRadius || 20}px`
+                : `${looks.borderRadius}px`,
+              boxShadow: isPhoneOrTablet ? "inset 0 0 0 1px rgba(0,0,0,0.8)" : looks.padding === 0 ? "none" : (shadowStyles[looks.shadow] || shadowStyles.lift),
+            }}
+            title={isTraceShiftingMode ? "Click & drag on video to draw zoom trajectory line" : "Click anywhere to shift camera focal center"}
+          >
         {/* Dedicated Transparent Drawing Capture Surface in Trace Mode */}
         {isTraceShiftingMode && (
           <div
@@ -1839,6 +1944,8 @@ export function VideoCanvas({ project, currentTimeMs: propTimeMs }: VideoCanvasP
             </div>
           );
         })}
+          </div>
+        </div>
       </div>
     </div>
   );

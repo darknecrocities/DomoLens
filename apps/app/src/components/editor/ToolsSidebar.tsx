@@ -2686,7 +2686,35 @@ export function ToolsSidebar() {
                       <button
                         key={asp.id}
                         type="button"
-                        onClick={() => updateLooks({ aspectRatio: asp.id })}
+                        onClick={() => {
+                          if (asp.id === "9:16") {
+                            const curFrame = project?.looks.windowFrame;
+                            const isDesktopFrame = !curFrame || curFrame === "terminal" || curFrame === "macos" || curFrame === "windows" || curFrame === "macbook" || curFrame === "none";
+                            if (isDesktopFrame) {
+                              updateLooks({
+                                aspectRatio: "9:16",
+                                windowFrame: "android",
+                                borderRadius: 28,
+                                padding: 24,
+                                fit: "contain",
+                              });
+                              return;
+                            }
+                          } else if (asp.id === "16:9") {
+                            const curFrame = project?.looks.windowFrame;
+                            if (curFrame === "android" || curFrame === "iphone") {
+                              updateLooks({
+                                aspectRatio: "16:9",
+                                windowFrame: "macbook",
+                                borderRadius: 14,
+                                padding: 32,
+                                fit: "contain",
+                              });
+                              return;
+                            }
+                          }
+                          updateLooks({ aspectRatio: asp.id });
+                        }}
                         className={`rounded-md py-1 text-[10px] font-semibold text-center transition-all ${
                           isSelected
                             ? "bg-white text-black shadow-sm font-bold"

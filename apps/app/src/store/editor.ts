@@ -531,12 +531,23 @@ export const useEditor = create<EditorState>((set, get) => ({
         parsed.looks.aspectRatio === "9:16";
 
       if (isMobile) {
-        // Mobile recording: strictly clean phone frame (no desktop terminal or macos traffic lights), curved corners & portrait aspect ratio
-        if (parsed.looks.windowFrame === "terminal" || parsed.looks.windowFrame === "macos" || !parsed.looks.windowFrame) {
-          parsed.looks.windowFrame = "none";
-          parsed.looks.borderRadius = 28;
+        // Mobile recording: apply realistic smartphone frame, curved corners & portrait aspect ratio
+        const isIos = (parsed.summary.name || "").toLowerCase().includes("iphone") || (parsed.summary.name || "").toLowerCase().includes("ios");
+        const defaultMobileFrame = isIos ? "iphone" : "android";
+        if (
+          parsed.looks.windowFrame === "terminal" ||
+          parsed.looks.windowFrame === "macos" ||
+          parsed.looks.windowFrame === "windows" ||
+          parsed.looks.windowFrame === "macbook" ||
+          parsed.looks.windowFrame === "laptop" ||
+          parsed.looks.windowFrame === "none" ||
+          !parsed.looks.windowFrame
+        ) {
+          parsed.looks.windowFrame = defaultMobileFrame;
+          parsed.looks.borderRadius = isIos ? 36 : 28;
           parsed.looks.padding = 24;
           parsed.looks.aspectRatio = "9:16";
+          parsed.looks.fit = "contain";
         }
       } else if (parsed.summary.source === "recording" && (parsed.looks.windowFrame === "none" || !parsed.looks.windowFrame)) {
         // Desktop recording: restore MacBook terminal frame
@@ -734,7 +745,7 @@ export const useEditor = create<EditorState>((set, get) => ({
               ...DEFAULT_LOOKS,
               windowFrame:
                 summary.width && summary.height && summary.width < summary.height
-                  ? ("none" as const)
+                  ? ((summary.name || "").toLowerCase().includes("iphone") || (summary.name || "").toLowerCase().includes("ios") ? ("iphone" as const) : ("android" as const))
                   : ("terminal" as const),
               fit: "contain" as const,
               padding:
@@ -743,7 +754,7 @@ export const useEditor = create<EditorState>((set, get) => ({
                   : 32,
               borderRadius:
                 summary.width && summary.height && summary.width < summary.height
-                  ? 28
+                  ? ((summary.name || "").toLowerCase().includes("iphone") || (summary.name || "").toLowerCase().includes("ios") ? 36 : 28)
                   : 16,
               shadow: "lift" as const,
               aspectRatio:
