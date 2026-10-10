@@ -1,4 +1,7 @@
+import { useEffect } from "react";
 import { Download } from "lucide-react";
+import { LiveCounterSection } from "./components/LiveCounterSection";
+import { recordVisitOnce, trackDownloadClicks } from "./lib/counter";
 import { HeroSection } from "./components/HeroSection";
 import { PainVsGainSection } from "./components/PainVsGainSection";
 import { ShowcaseSimulatorSection } from "./components/ShowcaseSimulatorSection";
@@ -11,6 +14,11 @@ import { WorksEverywhere } from "./components/WorksEverywhere";
 import { FinalCtaFooter } from "./components/FinalCtaFooter";
 
 export function App() {
+  useEffect(() => {
+    recordVisitOnce();
+    return trackDownloadClicks();
+  }, []);
+
   const navLinks = [
     { label: "Overview", targetId: "hero" },
     { label: "Features", targetId: "features" },
@@ -98,6 +106,8 @@ export function App() {
 
         {/* Section 8: Brand Belt (Logo + Text only) & Architectural Matrix */}
         <WorksEverywhere />
+
+        <LiveCounterSection />
 
         {/* Section 9: Direct Multi-Platform Downloads & Deployment */}
         <FinalCtaFooter />
