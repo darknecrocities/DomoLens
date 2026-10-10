@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import {
   Sparkles,
   Type,
@@ -13,6 +13,7 @@ import {
   Volume2,
   Diamond,
   Play,
+  Pause,
   Wand2,
   Zap,
   Circle,
@@ -200,11 +201,51 @@ export function ToolsSidebar() {
   const followDrawnLine = useEditor((s) => s.followDrawnLine);
 
   const [holdDurationSec, setHoldDurationSec] = useState(1.0);
-  const [shiftDurationSec, setShiftDurationSec] = useState(0.75);
+  const [shiftDurationSec, setShiftDurationSec] = useState(1.2);
   const [zoomScale, setZoomScale] = useState(1.85);
-  const [traceDurationSec, setTraceDurationSec] = useState(2.8);
+  const [traceDurationSec, setTraceDurationSec] = useState(4.8);
   const [traceScale, setTraceScale] = useState(1.85);
   const [selectedBgCategory, setSelectedBgCategory] = useState<string>("all");
+
+  // Custom music audition preview state
+  const [previewingAudioId, setPreviewingAudioId] = useState<string | null>(null);
+  const audioPreviewRef = useRef<HTMLAudioElement | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (audioPreviewRef.current) {
+        audioPreviewRef.current.pause();
+        audioPreviewRef.current = null;
+      }
+    };
+  }, []);
+
+  const toggleAudioPreview = (track: { id: string; url: string; volume?: number; muted?: boolean }) => {
+    if (previewingAudioId === track.id) {
+      if (audioPreviewRef.current) {
+        audioPreviewRef.current.pause();
+        audioPreviewRef.current = null;
+      }
+      setPreviewingAudioId(null);
+    } else {
+      if (audioPreviewRef.current) {
+        audioPreviewRef.current.pause();
+      }
+      try {
+        const audio = new Audio(track.url);
+        audio.volume = track.muted ? 0 : Math.max(0, Math.min(1, track.volume ?? 0.5));
+        audio.play().catch(() => {});
+        audio.onended = () => {
+          setPreviewingAudioId(null);
+          audioPreviewRef.current = null;
+        };
+        audioPreviewRef.current = audio;
+        setPreviewingAudioId(track.id);
+      } catch {
+        setPreviewingAudioId(null);
+      }
+    }
+  };
 
   const [bottomPanelHeight, setBottomPanelHeight] = useState<number>(() => {
     if (typeof window === "undefined" || !window.localStorage) return 180;
@@ -377,18 +418,55 @@ export function ToolsSidebar() {
                 />
 
                 <div className="flex justify-between text-[11px] pt-1">
-                  <span className="text-fg-muted">Camera Shifting Speed:</span>
-                  <span className="font-mono text-white font-semibold">{shiftDurationSec.toFixed(2)}s ({Math.round(shiftDurationSec * 1000)}ms)</span>
+                  <span className="text-fg-muted">Camera Shifting & Zoom Speed:</span>
+                  <span className="font-mono text-white font-semibold">{shiftDurationSec.toFixed(1)}s ({Math.round(shiftDurationSec * 1000)}ms)</span>
                 </div>
                 <input
                   type="range"
-                  min="0.3"
-                  max="1.5"
-                  step="0.05"
+                  min="0.4"
+                  max="3.0"
+                  step="0.1"
                   value={shiftDurationSec}
                   onChange={(e) => setShiftDurationSec(parseFloat(e.target.value))}
                   className="w-full accent-white cursor-pointer h-1.5 bg-ink-800 rounded-lg"
                 />
+
+                {/* Shifting speed presets */}
+                <div className="grid grid-cols-3 gap-1 pt-0.5">
+                  {[
+                    { label: "Slow & Cinematic", sec: 1.5 },
+                    { label: "Smooth", sec: 1.1 },
+                    { label: "Snappy", sec: 0.6 },
+                  ].map((p) => (
+                    <button
+                      key={p.label}
+                      type="button"
+                      onClick={() => setShiftDurationSec(p.sec)}
+                      className={`rounded py-1 text-[9px] font-semibold border transition-colors ${
+                        Math.abs(shiftDurationSec - p.sec) < 0.05
+                          ? "bg-white text-black border-white font-bold"
+                          : "bg-neutral-800 text-neutral-400 border-neutral-700 hover:text-white"
+                      }`}
+                    >
+                      {p.label} ({p.sec}s)
+                    </button>
+                  ))}
+                </div>
+
+                {(project?.zoomBlocks?.length ?? 0) > 0 && (
+                  <button
+                    type="button"
+                    onClick={() =>
+                      applyZoomBlockSettingsToAll({
+                        shiftDurationMs: Math.round(shiftDurationSec * 1000),
+                      })
+                    }
+                    className="w-full rounded border border-neutral-700 bg-neutral-800/80 hover:bg-neutral-700 py-1 text-[10px] font-medium text-neutral-200 hover:text-white transition-colors text-center mt-0.5"
+                    title="Apply this camera shifting speed to all existing zoom blocks on the timeline"
+                  >
+                    Apply {shiftDurationSec.toFixed(1)}s Speed to All Zooms
+                  </button>
+                )}
 
                 <div className="flex items-center justify-between rounded-lg border border-ink-800 bg-ink-950/80 p-2.5 mt-2">
                   <div>
@@ -542,18 +620,40 @@ export function ToolsSidebar() {
                 {/* Duration & Scale Sliders */}
                 <div className="space-y-2 pt-1 border-t border-ink-800">
                   <div className="flex justify-between text-[11px]">
-                    <span className="text-fg-muted">Trajectory Duration:</span>
+                    <span className="text-fg-muted">Trajectory Glide Duration:</span>
                     <span className="font-mono text-white font-semibold">{traceDurationSec.toFixed(1)}s</span>
                   </div>
                   <input
                     type="range"
-                    min="1.2"
-                    max="6.0"
-                    step="0.1"
+                    min="1.5"
+                    max="10.0"
+                    step="0.2"
                     value={traceDurationSec}
                     onChange={(e) => setTraceDurationSec(parseFloat(e.target.value))}
                     className="w-full accent-white cursor-pointer h-1.5 bg-ink-800 rounded-lg"
                   />
+
+                  {/* Trajectory speed presets */}
+                  <div className="grid grid-cols-3 gap-1 pt-0.5">
+                    {[
+                      { label: "Slow Glide", sec: 5.5 },
+                      { label: "Smooth", sec: 4.0 },
+                      { label: "Snappy", sec: 2.5 },
+                    ].map((p) => (
+                      <button
+                        key={p.label}
+                        type="button"
+                        onClick={() => setTraceDurationSec(p.sec)}
+                        className={`rounded py-1 text-[9px] font-semibold border transition-colors ${
+                          Math.abs(traceDurationSec - p.sec) < 0.1
+                            ? "bg-white text-black border-white font-bold"
+                            : "bg-neutral-800 text-neutral-400 border-neutral-700 hover:text-white"
+                        }`}
+                      >
+                        {p.label} ({p.sec}s)
+                      </button>
+                    ))}
+                  </div>
 
                   <div className="flex justify-between text-[11px] pt-1">
                     <span className="text-fg-muted">Peak Zoom Scale:</span>
@@ -1823,12 +1923,82 @@ export function ToolsSidebar() {
           const musicTracks = (project?.audioTracks || []).filter((t) => t.type === "music" || !t.type);
           const activeMusicTrack = musicTracks.find((t) => t.id === selectedAudioId) || musicTracks[0];
 
+          const handleMusicUpload = (file: File) => {
+            const url = URL.createObjectURL(file);
+            const trackName = file.name.replace(/\.[^/.]+$/, "");
+            const tempAudio = new Audio(url);
+            const onReady = () => {
+              const dur =
+                tempAudio.duration && isFinite(tempAudio.duration) && tempAudio.duration > 0
+                  ? Math.round(tempAudio.duration * 1000)
+                  : project?.summary.durationMs || 60000;
+              addAudioTrack(trackName, url, "music", {
+                startTimeMs: 0,
+                durationMs: dur,
+                gainDb: -6,
+                volume: dbToVolume(-6),
+                fadeInMs: 1500,
+                fadeOutMs: 2000,
+              });
+            };
+            tempAudio.onloadedmetadata = onReady;
+            tempAudio.onerror = onReady;
+          };
+
           return (
           <div className="space-y-4">
-            {/* 1. Background Music & Soundtracks */}
+            {/* 1. Upload Custom Music */}
+            <CollapsibleCard
+              id="audio-upload"
+              title="Upload Custom Music"
+              icon={<Upload className="size-3.5 text-white" />}
+              badge={
+                <span className="rounded bg-neutral-800 border border-neutral-700 px-1.5 py-0.5 text-[9px] font-mono text-neutral-300">
+                  MP3 / WAV / M4A
+                </span>
+              }
+            >
+              <p className="text-[11px] text-fg-muted leading-relaxed">
+                Import your own music, background soundtrack, or voiceover file. Full configuration is available immediately below.
+              </p>
+
+              {/* Drag & Drop Upload Dropzone */}
+              <label
+                onDragOver={(e) => {
+                  e.preventDefault();
+                }}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  const file = e.dataTransfer.files?.[0];
+                  if (file) handleMusicUpload(file);
+                }}
+                className="group relative flex flex-col items-center justify-center rounded-xl border border-dashed border-neutral-700 hover:border-white bg-neutral-950/80 hover:bg-neutral-900/90 p-4 transition-all cursor-pointer text-center"
+              >
+                <div className="flex size-9 items-center justify-center rounded-full bg-neutral-900 border border-neutral-700 group-hover:border-white text-white mb-2 transition-colors">
+                  <Upload className="size-4" />
+                </div>
+                <span className="text-xs font-semibold text-white">
+                  Drop audio file here or click to browse
+                </span>
+                <span className="text-[10px] text-neutral-400 mt-0.5">
+                  Supports MP3, WAV, M4A, AAC, OGG, FLAC
+                </span>
+                <input
+                  type="file"
+                  accept="audio/*,.mp3,.wav,.m4a,.aac,.ogg,.flac"
+                  className="hidden"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file) handleMusicUpload(file);
+                  }}
+                />
+              </label>
+            </CollapsibleCard>
+
+            {/* 2. Background Music & Soundtracks Library */}
             <CollapsibleCard
               id="audio-music"
-              title="Background Music & Soundtracks"
+              title="Music Tracks & Soundtrack Library"
               icon={<Music className="size-3.5 text-white" />}
               badge={
                 <span className="rounded bg-neutral-800 border border-neutral-700 px-1.5 py-0.5 text-[9px] font-mono text-neutral-300">
@@ -1836,13 +2006,90 @@ export function ToolsSidebar() {
                 </span>
               }
             >
-              <p className="text-[11px] text-fg-muted leading-relaxed">
-                Add cinematic background music tracks, adjust decibel gain (dB), and set smooth fade-in and fade-out curves.
-              </p>
+              {/* Active Music Tracks List */}
+              {musicTracks.length > 0 && (
+                <div className="space-y-1.5">
+                  <span className="text-[10px] text-fg-faint block">Active Timeline Tracks:</span>
+                  <div className="space-y-1.5">
+                    {musicTracks.map((track) => {
+                      const isSelected = activeMusicTrack?.id === track.id;
+                      const isPreviewing = previewingAudioId === track.id;
+                      const isCustom = !track.url.startsWith("music://");
+
+                      return (
+                        <div
+                          key={track.id}
+                          onClick={() => selectAudio(track.id)}
+                          className={`flex items-center justify-between rounded-lg border p-2 cursor-pointer transition-colors ${
+                            isSelected
+                              ? "border-white bg-white/10 text-white font-medium"
+                              : "border-neutral-800 bg-neutral-950/60 text-neutral-300 hover:border-neutral-700"
+                          }`}
+                        >
+                          <div className="flex items-center gap-2 min-w-0">
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                toggleAudioPreview(track);
+                              }}
+                              className={`flex size-6 shrink-0 items-center justify-center rounded-full border transition-colors ${
+                                isPreviewing
+                                  ? "bg-white text-black border-white"
+                                  : "border-neutral-700 bg-neutral-800 hover:border-white text-white"
+                              }`}
+                              title={isPreviewing ? "Pause Preview" : "Preview Track"}
+                            >
+                              {isPreviewing ? <Pause className="size-2.5 fill-current" /> : <Play className="size-2.5 fill-current ml-0.5" />}
+                            </button>
+
+                            <div className="min-w-0">
+                              <div className="flex items-center gap-1.5">
+                                <span className="text-[11px] font-semibold text-white truncate">
+                                  {track.name}
+                                </span>
+                                <span className="rounded bg-neutral-800 px-1 py-0.2 text-[8px] font-mono text-neutral-400 uppercase">
+                                  {isCustom ? "Custom" : "Preset"}
+                                </span>
+                              </div>
+                              <span className="text-[9px] text-neutral-400 block font-mono">
+                                {formatDuration(track.durationMs)} • {(track.gainDb ?? 0) >= 0 ? "+" : ""}{(track.gainDb ?? 0).toFixed(1)} dB
+                              </span>
+                            </div>
+                          </div>
+
+                          <div className="flex items-center gap-1 shrink-0" onClick={(e) => e.stopPropagation()}>
+                            <button
+                              type="button"
+                              onClick={() => updateAudioTrack(track.id, { muted: !track.muted })}
+                              className={`rounded p-1 text-[9px] border transition-colors ${
+                                track.muted
+                                  ? "bg-white text-black border-white"
+                                  : "bg-neutral-800 text-neutral-300 border-neutral-700 hover:text-white"
+                              }`}
+                              title={track.muted ? "Unmute Track" : "Mute Track"}
+                            >
+                              {track.muted ? <VolumeX className="size-3" /> : <Volume2 className="size-3" />}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => deleteAudioTrack(track.id)}
+                              className="rounded p-1 text-danger hover:bg-danger/20 border border-neutral-800 transition-colors"
+                              title="Delete Track"
+                            >
+                              <Trash2 className="size-3" />
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
 
               {/* Music Presets Grid */}
-              <div className="space-y-1.5">
-                <span className="text-[10px] text-fg-faint block">Soundtrack Library:</span>
+              <div className="space-y-1.5 pt-1 border-t border-ink-800">
+                <span className="text-[10px] text-fg-faint block">Soundtrack Library Presets:</span>
                 <div className="grid grid-cols-2 gap-1.5">
                   {BACKGROUND_MUSIC_PRESETS.map((preset) => (
                     <button
@@ -1865,161 +2112,225 @@ export function ToolsSidebar() {
                   ))}
                 </div>
               </div>
+            </CollapsibleCard>
 
-              {/* Upload Custom Audio File */}
-              <div className="pt-1 border-t border-ink-800">
-                <label className="w-full flex items-center justify-center gap-1.5 rounded-lg border border-neutral-700 bg-neutral-800 hover:bg-neutral-700 py-1.5 px-3 text-xs font-semibold text-white cursor-pointer transition-colors">
-                  <Upload className="size-3.5" />
-                  <span>Upload Audio File (.mp3, .wav)</span>
+            {/* 3. Music Track Inspector & Settings */}
+            {activeMusicTrack && (
+              <CollapsibleCard
+                id="audio-inspector"
+                title={`Track Settings: ${activeMusicTrack.name}`}
+                icon={<Sliders className="size-3.5 text-white" />}
+                badge={
+                  <span className="rounded bg-neutral-800 border border-neutral-700 px-1.5 py-0.5 text-[9px] font-mono text-neutral-300">
+                    {(activeMusicTrack.gainDb ?? 0) >= 0 ? "+" : ""}{(activeMusicTrack.gainDb ?? 0).toFixed(1)} dB
+                  </span>
+                }
+              >
+                {/* Track Name Renaming */}
+                <div>
+                  <label className="text-[10px] font-medium text-fg-muted block mb-1">
+                    Track Title / Name
+                  </label>
                   <input
-                    type="file"
-                    accept="audio/*"
-                    className="hidden"
-                    onChange={(e) => {
-                      const file = e.target.files?.[0];
-                      if (file) {
-                        const url = URL.createObjectURL(file);
-                        addAudioTrack(file.name.replace(/\.[^/.]+$/, ""), url, "music", {
-                          durationMs: 60000,
-                          gainDb: -6,
-                          fadeInMs: 1000,
-                          fadeOutMs: 1500,
-                        });
-                      }
-                    }}
+                    type="text"
+                    value={activeMusicTrack.name}
+                    onChange={(e) => updateAudioTrack(activeMusicTrack.id, { name: e.target.value })}
+                    className="w-full rounded-md border border-neutral-700 bg-neutral-900 px-2 py-1 text-xs text-white"
+                    placeholder="Soundtrack name..."
                   />
-                </label>
-              </div>
+                </div>
 
-              {/* Active Music Track Controls */}
-              {activeMusicTrack && (
-                <div className="space-y-2.5 bg-ink-950/80 rounded-lg p-2.5 border border-ink-800 pt-2">
-                  <div className="flex items-center justify-between">
-                    <span className="text-[11px] font-semibold text-white truncate max-w-[150px]">
-                      {activeMusicTrack.name}
-                    </span>
-                    <div className="flex items-center gap-1">
-                      <button
-                        type="button"
-                        onClick={() => updateAudioTrack(activeMusicTrack.id, { muted: !activeMusicTrack.muted })}
-                        className={`rounded p-1 text-[9px] border transition-colors ${
-                          activeMusicTrack.muted
-                            ? "bg-white text-black border-white"
-                            : "bg-neutral-800 text-neutral-300 border-neutral-700 hover:text-white"
-                        }`}
-                        title={activeMusicTrack.muted ? "Unmute Track" : "Mute Track"}
-                      >
-                        {activeMusicTrack.muted ? <VolumeX className="size-3" /> : <Volume2 className="size-3" />}
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => deleteAudioTrack(activeMusicTrack.id)}
-                        className="rounded p-1 text-danger hover:bg-danger/20 border border-neutral-800 transition-colors"
-                        title="Delete Track"
-                      >
-                        <Trash2 className="size-3" />
-                      </button>
-                    </div>
+                {/* Audition Player & Mute */}
+                <div className="flex items-center justify-between rounded-lg border border-neutral-800 bg-neutral-950 p-2">
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => toggleAudioPreview(activeMusicTrack)}
+                      className="flex items-center gap-1.5 rounded-md bg-white text-black font-semibold px-2.5 py-1 text-[10px] hover:bg-neutral-200 transition-colors shadow-sm"
+                    >
+                      {previewingAudioId === activeMusicTrack.id ? (
+                        <>
+                          <Pause className="size-3 fill-black" />
+                          <span>Pause Preview</span>
+                        </>
+                      ) : (
+                        <>
+                          <Play className="size-3 fill-black" />
+                          <span>Audition Playback</span>
+                        </>
+                      )}
+                    </button>
+                    {previewingAudioId === activeMusicTrack.id && (
+                      <span className="text-[10px] text-neutral-400 animate-pulse">Playing...</span>
+                    )}
                   </div>
 
-                  {/* Decibel Gain Adjustment */}
+                  <div className="flex items-center gap-1">
+                    <button
+                      type="button"
+                      onClick={() => updateAudioTrack(activeMusicTrack.id, { muted: !activeMusicTrack.muted })}
+                      className={`rounded p-1 text-[9px] border transition-colors ${
+                        activeMusicTrack.muted
+                          ? "bg-white text-black border-white"
+                          : "bg-neutral-800 text-neutral-300 border-neutral-700 hover:text-white"
+                      }`}
+                      title={activeMusicTrack.muted ? "Unmute Track" : "Mute Track"}
+                    >
+                      {activeMusicTrack.muted ? <VolumeX className="size-3" /> : <Volume2 className="size-3" />}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => deleteAudioTrack(activeMusicTrack.id)}
+                      className="rounded p-1 text-danger hover:bg-danger/20 border border-neutral-800 transition-colors"
+                      title="Delete Track"
+                    >
+                      <Trash2 className="size-3" />
+                    </button>
+                  </div>
+                </div>
+
+                {/* Timing: Start Offset & Duration */}
+                <div className="space-y-2 pt-1 border-t border-ink-800">
+                  <div className="flex justify-between items-center text-[10px]">
+                    <span className="text-fg-muted">Timeline Start:</span>
+                    <span className="font-mono text-white">{formatDuration(activeMusicTrack.startTimeMs)}</span>
+                  </div>
+                  <input
+                    type="range"
+                    min="0"
+                    max={project?.summary.durationMs || 60000}
+                    step="250"
+                    value={activeMusicTrack.startTimeMs}
+                    onChange={(e) => updateAudioTrack(activeMusicTrack.id, { startTimeMs: parseInt(e.target.value, 10) })}
+                    className="w-full accent-white cursor-pointer h-1.5 bg-ink-800 rounded-lg"
+                  />
+
+                  <div className="flex justify-between items-center text-[10px]">
+                    <span className="text-fg-muted">Track Duration:</span>
+                    <span className="font-mono text-white">{formatDuration(activeMusicTrack.durationMs)}</span>
+                  </div>
+                  <input
+                    type="range"
+                    min="1000"
+                    max={Math.max(activeMusicTrack.durationMs, project?.summary.durationMs || 60000)}
+                    step="500"
+                    value={activeMusicTrack.durationMs}
+                    onChange={(e) => updateAudioTrack(activeMusicTrack.id, { durationMs: parseInt(e.target.value, 10) })}
+                    className="w-full accent-white cursor-pointer h-1.5 bg-ink-800 rounded-lg"
+                  />
+
+                  <button
+                    type="button"
+                    onClick={() =>
+                      updateAudioTrack(activeMusicTrack.id, {
+                        startTimeMs: 0,
+                        durationMs: project?.summary.durationMs || 60000,
+                      })
+                    }
+                    className="w-full rounded border border-neutral-700 bg-neutral-800/80 hover:bg-neutral-700 py-1 text-[10px] font-medium text-neutral-300 hover:text-white transition-colors text-center"
+                    title="Span music across entire video length"
+                  >
+                    Fit Entire Video Duration ({formatDuration(project?.summary.durationMs || 0)})
+                  </button>
+                </div>
+
+                {/* Decibel Gain Adjustment */}
+                <div className="space-y-1 pt-1 border-t border-ink-800">
+                  <div className="flex items-center justify-between text-[11px]">
+                    <span className="text-fg-muted font-medium">Decibel Gain (dB):</span>
+                    <span className="font-mono text-white font-semibold">
+                      {(activeMusicTrack.gainDb ?? 0) > 0 ? "+" : ""}{(activeMusicTrack.gainDb ?? 0).toFixed(1)} dB ({Math.round(dbToVolume(activeMusicTrack.gainDb ?? 0) * 100)}%)
+                    </span>
+                  </div>
+                  <input
+                    type="range"
+                    min="-36"
+                    max="12"
+                    step="0.5"
+                    value={activeMusicTrack.gainDb ?? 0}
+                    onChange={(e) => {
+                      const db = parseFloat(e.target.value);
+                      updateAudioTrack(activeMusicTrack.id, {
+                        gainDb: db,
+                        volume: dbToVolume(db),
+                      });
+                    }}
+                    className="w-full accent-white cursor-pointer h-1.5 bg-ink-800 rounded-lg"
+                  />
+                  <div className="grid grid-cols-5 gap-1 pt-1">
+                    {[-18, -12, -6, 0, 3].map((dbVal) => (
+                      <button
+                        key={dbVal}
+                        type="button"
+                        onClick={() =>
+                          updateAudioTrack(activeMusicTrack.id, {
+                            gainDb: dbVal,
+                            volume: dbToVolume(dbVal),
+                          })
+                        }
+                        className={`rounded py-0.5 text-[9px] font-semibold border transition-colors ${
+                          Math.round(activeMusicTrack.gainDb ?? 0) === dbVal
+                            ? "bg-white text-black border-white font-bold"
+                            : "bg-neutral-800 text-neutral-400 border-neutral-700 hover:text-white"
+                        }`}
+                      >
+                        {dbVal > 0 ? `+${dbVal}` : dbVal} dB
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Fade In & Fade Out Envelopes */}
+                <div className="grid grid-cols-2 gap-2 pt-1 border-t border-ink-800">
                   <div className="space-y-1">
-                    <div className="flex items-center justify-between text-[11px]">
-                      <span className="text-fg-muted font-medium">Decibel Gain (dB):</span>
-                      <span className="font-mono text-white font-semibold">
-                        {(activeMusicTrack.gainDb ?? 0) > 0 ? "+" : ""}{(activeMusicTrack.gainDb ?? 0).toFixed(1)} dB ({Math.round(dbToVolume(activeMusicTrack.gainDb ?? 0) * 100)}%)
+                    <div className="flex justify-between text-[10px] text-fg-muted">
+                      <span>Fade In:</span>
+                      <span className="font-mono text-white">
+                        {(((activeMusicTrack.fadeInMs ?? 0) / 1000)).toFixed(1)}s
                       </span>
                     </div>
                     <input
                       type="range"
-                      min="-36"
-                      max="12"
-                      step="0.5"
-                      value={activeMusicTrack.gainDb ?? 0}
-                      onChange={(e) => {
-                        const db = parseFloat(e.target.value);
-                        updateAudioTrack(activeMusicTrack.id, {
-                          gainDb: db,
-                          volume: dbToVolume(db),
-                        });
-                      }}
+                      min="0"
+                      max="5000"
+                      step="250"
+                      value={activeMusicTrack.fadeInMs ?? 0}
+                      onChange={(e) => updateAudioTrack(activeMusicTrack.id, { fadeInMs: parseInt(e.target.value, 10) })}
                       className="w-full accent-white cursor-pointer h-1.5 bg-ink-800 rounded-lg"
                     />
-                    <div className="grid grid-cols-5 gap-1 pt-1">
-                      {[-18, -12, -6, 0, 3].map((dbVal) => (
-                        <button
-                          key={dbVal}
-                          type="button"
-                          onClick={() =>
-                            updateAudioTrack(activeMusicTrack.id, {
-                              gainDb: dbVal,
-                              volume: dbToVolume(dbVal),
-                            })
-                          }
-                          className={`rounded py-0.5 text-[9px] font-semibold border transition-colors ${
-                            Math.round(activeMusicTrack.gainDb ?? 0) === dbVal
-                              ? "bg-white text-black border-white font-bold"
-                              : "bg-neutral-800 text-neutral-400 border-neutral-700 hover:text-white"
-                          }`}
-                        >
-                          {dbVal > 0 ? `+${dbVal}` : dbVal} dB
-                        </button>
-                      ))}
-                    </div>
                   </div>
-
-                  {/* Fade In & Fade Out Envelopes */}
-                  <div className="grid grid-cols-2 gap-2 pt-1 border-t border-ink-800">
-                    <div className="space-y-1">
-                      <div className="flex justify-between text-[10px] text-fg-muted">
-                        <span>Fade In:</span>
-                        <span className="font-mono text-white">
-                          {(((activeMusicTrack.fadeInMs ?? 0) / 1000)).toFixed(1)}s
-                        </span>
-                      </div>
-                      <input
-                        type="range"
-                        min="0"
-                        max="5000"
-                        step="250"
-                        value={activeMusicTrack.fadeInMs ?? 0}
-                        onChange={(e) => updateAudioTrack(activeMusicTrack.id, { fadeInMs: parseInt(e.target.value, 10) })}
-                        className="w-full accent-white cursor-pointer h-1.5 bg-ink-800 rounded-lg"
-                      />
+                  <div className="space-y-1">
+                    <div className="flex justify-between text-[10px] text-fg-muted">
+                      <span>Fade Out:</span>
+                      <span className="font-mono text-white">
+                        {(((activeMusicTrack.fadeOutMs ?? 0) / 1000)).toFixed(1)}s
+                      </span>
                     </div>
-                    <div className="space-y-1">
-                      <div className="flex justify-between text-[10px] text-fg-muted">
-                        <span>Fade Out:</span>
-                        <span className="font-mono text-white">
-                          {(((activeMusicTrack.fadeOutMs ?? 0) / 1000)).toFixed(1)}s
-                        </span>
-                      </div>
-                      <input
-                        type="range"
-                        min="0"
-                        max="5000"
-                        step="250"
-                        value={activeMusicTrack.fadeOutMs ?? 0}
-                        onChange={(e) => updateAudioTrack(activeMusicTrack.id, { fadeOutMs: parseInt(e.target.value, 10) })}
-                        className="w-full accent-white cursor-pointer h-1.5 bg-ink-800 rounded-lg"
-                      />
-                    </div>
+                    <input
+                      type="range"
+                      min="0"
+                      max="5000"
+                      step="250"
+                      value={activeMusicTrack.fadeOutMs ?? 0}
+                      onChange={(e) => updateAudioTrack(activeMusicTrack.id, { fadeOutMs: parseInt(e.target.value, 10) })}
+                      className="w-full accent-white cursor-pointer h-1.5 bg-ink-800 rounded-lg"
+                    />
                   </div>
-
-                  {/* Apply dB to All Audio Action Button */}
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const curDb = activeMusicTrack.gainDb ?? 0;
-                      applyAudioVolumeToAll(dbToVolume(curDb), curDb, "all");
-                    }}
-                    className="w-full rounded-lg bg-neutral-800 hover:bg-neutral-700 border border-neutral-700 py-1.5 text-center text-[10px] font-semibold text-white transition-colors"
-                  >
-                    Apply {activeMusicTrack.gainDb ?? 0} dB to All Audio
-                  </button>
                 </div>
-              )}
-            </CollapsibleCard>
+
+                {/* Apply dB to All Audio Action Button */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    const curDb = activeMusicTrack.gainDb ?? 0;
+                    applyAudioVolumeToAll(dbToVolume(curDb), curDb, "all");
+                  }}
+                  className="w-full rounded-lg bg-neutral-800 hover:bg-neutral-700 border border-neutral-700 py-1.5 text-center text-[10px] font-semibold text-white transition-colors"
+                >
+                  Apply {activeMusicTrack.gainDb ?? 0} dB to All Audio
+                </button>
+              </CollapsibleCard>
+            )}
 
             {/* 2. Auto AFX Master Generator */}
             <CollapsibleCard

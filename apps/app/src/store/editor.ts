@@ -1282,9 +1282,9 @@ export const useEditor = create<EditorState>((set, get) => ({
 
     // Case 3 / 4: Click outside any zoom block (e.g. at 0:14 halfway through recording)
     // Create a complete, beautifully formed zoom block and keyframe cluster centered on the clicked position!
-    const leadInMs = 350;
-    const holdMs = 2200;
-    const leadOutMs = 350;
+    const leadInMs = 1000;
+    const holdMs = 2400;
+    const leadOutMs = 800;
 
     // Determine non-overlapping startMs with previous block
     const prevBlock = [...state.project.zoomBlocks]
@@ -1430,10 +1430,10 @@ export const useEditor = create<EditorState>((set, get) => ({
     }
 
     const time = state.currentTimeMs;
-    const totalDurationMs = options?.totalDurationMs ?? Math.max(1800, waypoints.length * 400);
+    const totalDurationMs = options?.totalDurationMs ?? Math.max(4500, waypoints.length * 750);
     const peakScale = options?.peakScale ?? 1.85;
-    const leadInMs = options?.leadInMs ?? 400;
-    const leadOutMs = options?.leadOutMs ?? 400;
+    const leadInMs = options?.leadInMs ?? 1000;
+    const leadOutMs = options?.leadOutMs ?? 800;
     const easing = options?.easing ?? "spring";
     const now = Date.now();
 

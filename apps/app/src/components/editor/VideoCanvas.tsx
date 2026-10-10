@@ -615,7 +615,7 @@ export function VideoCanvas({ project, currentTimeMs: propTimeMs }: VideoCanvasP
       maxGlideGapMs: 1000,
     } as const;
     return (tMs: number) => {
-      return calculateCameraAtTime(tMs, zoomBlocks, 1000, 400, smoothedTrajectory, keyframes, opts);
+      return calculateCameraAtTime(tMs, zoomBlocks, 1200, 800, smoothedTrajectory, keyframes, opts);
     };
   }, [
     zoomBlocks,
@@ -1582,7 +1582,7 @@ export function VideoCanvas({ project, currentTimeMs: propTimeMs }: VideoCanvasP
               onPointerDown={(e) => e.stopPropagation()}
               onClick={(e) => {
                 e.stopPropagation();
-                followDrawnLine();
+                followDrawnLine({ totalDurationMs: 4800, peakScale: 1.85 });
               }}
               disabled={traceWaypoints.length === 0}
               className="rounded-full bg-white text-black font-bold px-3 py-1 text-[10px] hover:bg-neutral-200 transition-colors disabled:opacity-40 flex items-center gap-1 shadow-sm cursor-pointer"
@@ -1596,7 +1596,7 @@ export function VideoCanvas({ project, currentTimeMs: propTimeMs }: VideoCanvasP
               onPointerDown={(e) => e.stopPropagation()}
               onClick={(e) => {
                 e.stopPropagation();
-                applyTraceShifting();
+                applyTraceShifting({ totalDurationMs: 4800, peakScale: 1.85 });
               }}
               disabled={traceWaypoints.length === 0}
               className="rounded-full border border-white/50 text-white font-medium px-2.5 py-1 text-[10px] hover:bg-white/10 transition-colors disabled:opacity-40 cursor-pointer"
