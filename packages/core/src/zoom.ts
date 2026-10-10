@@ -18,8 +18,8 @@ export const DEFAULT_ZOOM_OPTIONS: AutoZoomOptions = {
   defaultScale: 1.8,
   minDurationMs: 1800,
   maxDurationMs: 4500,
-  leadInMs: 750,
-  leadOutMs: 450,
+  leadInMs: 1000,
+  leadOutMs: 400,
   clusterWindowMs: 2000,
   clusterDistance: 0.25,
 };
@@ -1090,7 +1090,7 @@ export function plotInteractionsToKeyframesAndZoomBlocks(
     return { keyframes: [], zoomBlocks: [] };
   }
 
-  // Snappy lead-in: camera starts zooming smoothly before user interaction
+  // Smooth slow lead-in: camera starts zooming smoothly before user interaction
   const leadInMs = options.leadInMs ?? 1000;
   const leadOutMs = options.leadOutMs ?? 400;
   const minDuration = options.minBlockDurationMs ?? 700;
@@ -1281,7 +1281,7 @@ export function plotInteractionsToKeyframesAndZoomBlocks(
         scale: clusterScale,
         targetX: initialLandingTarget.x,
         targetY: initialLandingTarget.y,
-        easing: "spring",
+        easing: "cubic",
         ...(firstEvt.type === "typing"
           ? { sound: "typing", soundPreset: "mechanical", soundVolume: 0.55 }
           : firstEvt.type === "highlight"
@@ -1379,10 +1379,10 @@ export function plotInteractionsToKeyframesAndZoomBlocks(
         continue;
       }
 
-      // If there is a noticeable gap (> 450ms) and meaningful distance (> 0.06), hold camera steady on previous
+      // If there is a noticeable gap (> 250ms) and meaningful distance (> 0.04), hold camera steady on previous
       // action before smoothly gliding to the next action
-      if (gap > 450 && targetDist > 0.06) {
-        const panSpan = Math.min(1000, Math.max(650, Math.round(gap * 0.70)));
+      if (gap > 250 && targetDist > 0.04) {
+        const panSpan = Math.min(1200, Math.max(750, Math.round(gap * 0.75)));
         const panStart = trackTime - panSpan;
         if (panStart > lastTrackTime + 80) {
           keyframes.push({
@@ -1650,7 +1650,7 @@ export function zoomBlocksToKeyframes(
   if (active.length === 0 || videoDurationMs <= 0) return [];
 
   const keyframes: import("./project").KeyframeNode[] = [];
-  const defaultLeadIn = options?.leadInMs ?? 750;
+  const defaultLeadIn = options?.leadInMs ?? 1000;
   const defaultLeadOut = options?.leadOutMs ?? 400;
   const maxGlideGapMs = options?.maxGlideGapMs ?? 1000;
 

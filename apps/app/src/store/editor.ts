@@ -579,7 +579,7 @@ export const useEditor = create<EditorState>((set, get) => ({
           const plotted = plotInteractionsToKeyframesAndZoomBlocks(
             parsed.interactions,
             duration,
-            { holdDurationMs: 1400, leadInMs: 450, scale: 1.85 },
+            { holdDurationMs: 1400, leadInMs: 1000, scale: 1.85 },
           );
           parsed.zoomBlocks = plotted.zoomBlocks;
           parsed.keyframes = plotted.keyframes;
@@ -595,7 +595,7 @@ export const useEditor = create<EditorState>((set, get) => ({
           const plotted = plotInteractionsToKeyframesAndZoomBlocks(
             pseudoInteractions,
             duration,
-            { holdDurationMs: 1400, leadInMs: 450, scale: 1.85 },
+            { holdDurationMs: 1400, leadInMs: 1000, scale: 1.85 },
           );
           parsed.zoomBlocks = plotted.zoomBlocks;
           parsed.keyframes = plotted.keyframes;

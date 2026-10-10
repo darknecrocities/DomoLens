@@ -415,7 +415,7 @@ export function ToolsSidebar() {
               }
             >
               <p className="text-[11px] text-fg-muted leading-relaxed">
-                Starts smooth zoom 0.5s before click or typing, auto-tracks the cursor, and shifts back to full-screen frame after 1.2s of inactivity.
+                Starts smooth zoom 1.2s before click or typing, auto-tracks the cursor, and shifts back to full-screen frame after 1.5s of inactivity.
               </p>
 
               <div className="space-y-2 mb-3 bg-ink-950/60 rounded-lg p-2 border border-ink-800">
@@ -803,15 +803,15 @@ export function ToolsSidebar() {
                     <div className="flex items-center justify-between text-[11px] pt-1">
                       <span className="text-fg-muted">Lead-in Shifting Speed:</span>
                       <span className="font-mono text-white font-semibold">
-                        {currentBlock.shiftDurationMs ?? 750}ms
+                        {currentBlock.shiftDurationMs ?? 1200}ms
                       </span>
                     </div>
                     <input
                       type="range"
                       min="300"
-                      max="1500"
+                      max="2000"
                       step="50"
-                      value={currentBlock.shiftDurationMs ?? 750}
+                      value={currentBlock.shiftDurationMs ?? 1200}
                       onChange={(e) => updateZoomBlock(currentBlock.id, { shiftDurationMs: parseInt(e.target.value, 10) })}
                       className="w-full accent-white cursor-pointer h-1.5 bg-ink-800 rounded-lg"
                     />
@@ -1025,15 +1025,15 @@ export function ToolsSidebar() {
                     <div className="flex items-center justify-between text-[11px]">
                       <span className="text-fg-muted">Shifting Speed / Duration:</span>
                       <span className="font-mono text-white font-semibold">
-                        {(selectedBlock.shiftDurationMs ?? 750)}ms ({(((selectedBlock.shiftDurationMs ?? 750) / 1000)).toFixed(2)}s)
+                        {(selectedBlock.shiftDurationMs ?? 1200)}ms ({(((selectedBlock.shiftDurationMs ?? 1200) / 1000)).toFixed(2)}s)
                       </span>
                     </div>
                     <input
                       type="range"
                       min="300"
-                      max="1500"
+                      max="2000"
                       step="50"
-                      value={selectedBlock.shiftDurationMs ?? 750}
+                      value={selectedBlock.shiftDurationMs ?? 1200}
                       onChange={(e) =>
                         updateZoomBlock(selectedBlock.id, {
                           shiftDurationMs: parseInt(e.target.value, 10),
@@ -1055,7 +1055,7 @@ export function ToolsSidebar() {
                             updateZoomBlock(selectedBlock.id, { shiftDurationMs: preset.ms })
                           }
                           className={`rounded py-0.5 text-[9px] font-medium border text-center transition-colors ${
-                            (selectedBlock.shiftDurationMs ?? 750) === preset.ms
+                            (selectedBlock.shiftDurationMs ?? 1200) === preset.ms
                               ? "bg-white text-black border-white font-bold"
                               : "bg-ink-800 text-fg-muted border-ink-700 hover:text-white hover:bg-ink-700"
                           }`}
@@ -3831,7 +3831,7 @@ export function ToolsSidebar() {
             </div>
             <div className="flex justify-between text-[10px] text-neutral-400">
               <span>Scale: <b className="text-white font-mono">{selectedBlock.scale.toFixed(2)}x</b></span>
-              <span>Speed: <b className="text-white font-mono">{selectedBlock.shiftDurationMs ?? 750}ms</b></span>
+              <span>Speed: <b className="text-white font-mono">{selectedBlock.shiftDurationMs ?? 1200}ms</b></span>
             </div>
             <div className="flex gap-1.5 pt-1">
               <button

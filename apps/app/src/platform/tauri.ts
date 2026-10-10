@@ -155,7 +155,14 @@ export function createTauriPlatform(opts: {
       if (blobCache.has(path)) return blobCache.get(path)!;
       try {
         const bytes = await invoke<number[]>("read_media_file", { path });
-        const mime = path.endsWith(".webm") ? "video/webm" : "video/mp4";
+        const ext = path.toLowerCase().split(".").pop() || "";
+        let mime = "video/mp4";
+        if (ext === "webm") mime = "video/webm";
+        else if (ext === "mov") mime = "video/quicktime";
+        else if (ext === "mkv") mime = "video/x-matroska";
+        else if (ext === "avi") mime = "video/x-msvideo";
+        else if (ext === "ogg" || ext === "ogv") mime = "video/ogg";
+
         const blob = new Blob([new Uint8Array(bytes)], { type: mime });
         const url = URL.createObjectURL(blob);
         blobCache.set(path, url);

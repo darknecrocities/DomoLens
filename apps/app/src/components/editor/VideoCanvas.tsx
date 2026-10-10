@@ -955,6 +955,21 @@ export function VideoCanvas({ project, currentTimeMs: propTimeMs }: VideoCanvasP
     }
     const primaryUrl = platform.mediaUrl(rawMedia);
     setResolvedMediaSrc(primaryUrl);
+
+    // On Linux desktop, WebKitGTK / GStreamer can stall on custom asset: protocol range requests.
+    // Preemptively load via in-memory blob URL to guarantee instant, smooth video playback in the studio canvas!
+    if (
+      platform.isLinux &&
+      platform.readMediaBlob &&
+      !rawMedia.startsWith("blob:") &&
+      !rawMedia.startsWith("data:") &&
+      !rawMedia.startsWith("http://") &&
+      !rawMedia.startsWith("https://")
+    ) {
+      void platform.readMediaBlob(rawMedia).then((blobUrl) => {
+        if (blobUrl) setResolvedMediaSrc(blobUrl);
+      });
+    }
   }, [rawMedia, isExplicitSample]);
 
   // Synchronize video voice/audio with clip settings (unmute video so recorded voice actually plays!)
