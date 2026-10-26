@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { ArrowDown, Check, Download, Sparkles } from "lucide-react";
+import { ArrowDown, Check, Copy, Download, ShieldAlert, Sparkles, Terminal, X } from "lucide-react";
 
 const FLIP_WORDS = [
   "NO MANUAL KEYFRAMES.",
@@ -15,6 +15,16 @@ export function HeroSection() {
   const [device, setDevice] = useState<"mac" | "windows" | "linux" | "android">("mac");
   const [scrollY, setScrollY] = useState(0);
   const [flipIndex, setFlipIndex] = useState(0);
+  const [showMacModal, setShowMacModal] = useState(false);
+  const [copiedKey, setCopiedKey] = useState<string | null>(null);
+
+  const handleCopy = (key: string, text: string) => {
+    navigator.clipboard.writeText(text);
+    setCopiedKey(key);
+    setTimeout(() => {
+      setCopiedKey((curr) => (curr === key ? null : curr));
+    }, 2000);
+  };
 
   // 3D Physical Cursor Tilt State
   const cardRef = useRef<HTMLDivElement>(null);
@@ -246,19 +256,36 @@ export function HeroSection() {
             <div className="flex flex-wrap items-center justify-center gap-3">
               <a
                 href={downloadLinks[device]}
+                onClick={() => {
+                  if (device === "mac") {
+                    setShowMacModal(true);
+                  }
+                }}
                 className="inline-flex min-h-[46px] items-center gap-2 rounded-lg bg-white px-7 py-3 font-mono text-xs font-bold uppercase text-black hover:bg-neutral-200 transition-colors shadow-2xl"
               >
                 <Download className="size-4" />
                 <span>{downloadLabels[device]}</span>
               </a>
 
-              <a
-                href="#download"
-                className="inline-flex min-h-[46px] items-center gap-2 rounded-lg border border-neutral-700 bg-black/60 backdrop-blur-md px-6 py-3 font-mono text-xs font-semibold uppercase text-white hover:border-neutral-500 hover:bg-neutral-900 transition-colors shadow-xl"
-              >
-                <span>All Platforms (macOS • Win • Linux • Android)</span>
-                <ArrowDown className="size-4 text-neutral-400" />
-              </a>
+              {device === "mac" ? (
+                <button
+                  type="button"
+                  onClick={() => handleCopy("install", "curl -fsSL https://raw.githubusercontent.com/darknecrocities/DomoLens/main/scripts/install.sh | bash")}
+                  className="inline-flex min-h-[46px] items-center gap-2 rounded-lg border border-neutral-700 bg-black/60 backdrop-blur-md px-6 py-3 font-mono text-xs font-semibold uppercase text-white hover:border-neutral-500 hover:bg-neutral-900 transition-colors shadow-xl"
+                  title="Copy 1-line curl install command (auto-bypasses Gatekeeper)"
+                >
+                  <Terminal className="size-4 text-emerald-400" />
+                  <span>{copiedKey === "install" ? "Command Copied!" : "1-Line Terminal Install"}</span>
+                </button>
+              ) : (
+                <a
+                  href="#download"
+                  className="inline-flex min-h-[46px] items-center gap-2 rounded-lg border border-neutral-700 bg-black/60 backdrop-blur-md px-6 py-3 font-mono text-xs font-semibold uppercase text-white hover:border-neutral-500 hover:bg-neutral-900 transition-colors shadow-xl"
+                >
+                  <span>All Platforms (macOS • Win • Linux • Android)</span>
+                  <ArrowDown className="size-4 text-neutral-400" />
+                </a>
+              )}
             </div>
 
             {/* Quick OS Switcher Pills */}
@@ -282,15 +309,123 @@ export function HeroSection() {
 
             {device === "mac" && (
               <div className="mt-1 text-center">
-                <a
-                  href="#download"
-                  className="inline-flex items-center gap-1.5 font-mono text-[11px] text-neutral-400 hover:text-neutral-200 transition-colors underline decoration-white/20 underline-offset-4"
+                <button
+                  type="button"
+                  onClick={() => setShowMacModal(true)}
+                  className="inline-flex items-center gap-1.5 font-mono text-[11px] text-neutral-400 hover:text-neutral-200 transition-colors underline decoration-white/20 underline-offset-4 cursor-pointer"
                 >
-                  <span>macOS Gatekeeper notice: Unnotarized open source • 1-line install available</span>
-                </a>
+                  <span>macOS Gatekeeper notice: Unnotarized open source • View setup guide</span>
+                </button>
               </div>
             )}
           </div>
+
+          {/* macOS Gatekeeper Modal */}
+          <AnimatePresence>
+            {showMacModal && (
+              <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md">
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.95 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  exit={{ opacity: 0, scale: 0.95 }}
+                  transition={{ duration: 0.2 }}
+                  className="relative w-full max-w-lg rounded-2xl border border-white/[0.12] bg-neutral-950 p-6 text-left shadow-2xl"
+                >
+                  <button
+                    type="button"
+                    onClick={() => setShowMacModal(false)}
+                    className="absolute top-4 right-4 rounded-lg p-1.5 text-neutral-400 hover:bg-white/10 hover:text-white transition-colors"
+                  >
+                    <X className="size-4" />
+                  </button>
+
+                  <div className="flex items-center gap-2.5">
+                    <div className="rounded-xl bg-amber-500/10 p-2.5 text-amber-400 border border-amber-500/20">
+                      <ShieldAlert className="size-5" />
+                    </div>
+                    <div>
+                      <h4 className="font-mono text-sm font-bold uppercase text-white tracking-wide">
+                        macOS Gatekeeper Guide
+                      </h4>
+                      <p className="text-[11px] text-neutral-400">
+                        Universal DMG downloading • Free & open source
+                      </p>
+                    </div>
+                  </div>
+
+                  <p className="mt-4 text-xs text-neutral-300 leading-relaxed">
+                    Because DomoLens is free open source without an Apple Developer subscription ($99/year), macOS may display:
+                  </p>
+                  <div className="mt-2 rounded-lg bg-black/60 border border-white/[0.08] p-3 text-[11px] text-neutral-400 italic">
+                    "“DomoLens” Not Opened. Apple could not verify “DomoLens” is free of malware..."
+                  </div>
+
+                  <div className="mt-4 space-y-3">
+                    <div className="rounded-xl border border-white/[0.08] bg-white/[0.02] p-3">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-xs font-semibold text-neutral-200">
+                          1-Line Terminal Fix (Instant unblock):
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => handleCopy("xattr-modal", "xattr -cr /Applications/DomoLens.app")}
+                          className="inline-flex items-center gap-1 rounded bg-white/[0.08] px-2 py-0.5 font-mono text-[10px] text-neutral-300 hover:bg-white/[0.15] hover:text-white transition-colors"
+                        >
+                          {copiedKey === "xattr-modal" ? <Check className="size-2.5 text-emerald-400" /> : <Copy className="size-2.5" />}
+                          <span>{copiedKey === "xattr-modal" ? "Copied" : "Copy"}</span>
+                        </button>
+                      </div>
+                      <p className="mt-1 text-[11px] text-neutral-400">Drag DomoLens to Applications, then run:</p>
+                      <code className="mt-1.5 block rounded bg-black/80 px-2 py-1.5 font-mono text-[11px] text-neutral-200 border border-white/[0.05]">
+                        xattr -cr /Applications/DomoLens.app
+                      </code>
+                    </div>
+
+                    <div className="rounded-xl border border-white/[0.08] bg-white/[0.02] p-3 text-[11px]">
+                      <span className="text-xs font-semibold text-neutral-200 block mb-1">
+                        macOS Sequoia (15+) / Sonoma Settings Bypass:
+                      </span>
+                      <ol className="list-decimal list-inside space-y-0.5 text-neutral-400">
+                        <li>Click <span className="text-neutral-200 font-medium">Done</span> on the system warning.</li>
+                        <li>Open <span className="text-neutral-200 font-medium">System Settings &gt; Privacy &amp; Security</span>.</li>
+                        <li>Scroll to <span className="text-neutral-200 font-medium">Security</span> and click <span className="text-neutral-200 font-medium">Open Anyway</span>.</li>
+                      </ol>
+                    </div>
+
+                    <div className="rounded-xl border border-white/[0.08] bg-neutral-900/60 p-3">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-xs font-semibold text-neutral-200 flex items-center gap-1.5">
+                          <Terminal className="size-3 text-emerald-400" />
+                          <span>Alternative: Auto-Installer (Bypasses Gatekeeper):</span>
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => handleCopy("install-modal", "curl -fsSL https://raw.githubusercontent.com/darknecrocities/DomoLens/main/scripts/install.sh | bash")}
+                          className="inline-flex items-center gap-1 rounded bg-white/[0.08] px-2 py-0.5 font-mono text-[10px] text-neutral-300 hover:bg-white/[0.15] hover:text-white transition-colors"
+                        >
+                          {copiedKey === "install-modal" ? <Check className="size-2.5 text-emerald-400" /> : <Copy className="size-2.5" />}
+                          <span>{copiedKey === "install-modal" ? "Copied" : "Copy"}</span>
+                        </button>
+                      </div>
+                      <code className="mt-1.5 block rounded bg-black/80 px-2 py-1.5 font-mono text-[11px] text-neutral-300 border border-white/[0.05] overflow-x-auto">
+                        curl -fsSL https://raw.githubusercontent.com/darknecrocities/DomoLens/main/scripts/install.sh | bash
+                      </code>
+                    </div>
+                  </div>
+
+                  <div className="mt-5 flex justify-end">
+                    <button
+                      type="button"
+                      onClick={() => setShowMacModal(false)}
+                      className="rounded-lg bg-white px-4 py-2 font-mono text-xs font-bold text-black uppercase hover:bg-neutral-200 transition-colors"
+                    >
+                      Got it, close
+                    </button>
+                  </div>
+                </motion.div>
+              </div>
+            )}
+          </AnimatePresence>
 
           {/* Scroll Down Prompt Indicator */}
           <div className="mt-8 flex items-center justify-center gap-2 font-mono text-xs text-neutral-400 uppercase tracking-widest drop-shadow">
