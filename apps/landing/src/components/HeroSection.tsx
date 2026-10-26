@@ -279,6 +279,17 @@ export function HeroSection() {
                 </button>
               ))}
             </div>
+
+            {device === "mac" && (
+              <div className="mt-1 text-center">
+                <a
+                  href="#download"
+                  className="inline-flex items-center gap-1.5 font-mono text-[11px] text-neutral-400 hover:text-neutral-200 transition-colors underline decoration-white/20 underline-offset-4"
+                >
+                  <span>macOS Gatekeeper notice: Unnotarized open source • 1-line install available</span>
+                </a>
+              </div>
+            )}
           </div>
 
           {/* Scroll Down Prompt Indicator */}

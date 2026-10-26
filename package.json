@@ -24,6 +24,8 @@
     "package": "npm run tauri -w @domolens/app -- build",
     "package:dmg": "npm run tauri -w @domolens/app -- build --bundles app,dmg",
     "package:win": "npm run tauri -w @domolens/app -- build --bundles msi,nsis",
+    "install:mac": "bash scripts/install.sh",
+    "fix:gatekeeper": "bash scripts/fix-gatekeeper.sh",
     "test": "npm run test --workspaces --if-present",
     "typecheck": "npm run typecheck --workspaces --if-present",
     "check:all": "npm run typecheck && npm run test && npm run engine:test",

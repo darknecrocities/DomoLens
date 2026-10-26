@@ -25,6 +25,55 @@ DomoLens is a modern, local-first screen recording and auto-framing suite. It ca
 
 ---
 
+## Download & Installation
+
+Pre-built desktop bundles for macOS, Windows, and Linux are published on [GitHub Releases](https://github.com/darknecrocities/DomoLens/releases/latest).
+
+### 🍏 macOS Installation
+
+> [!NOTE]
+> **macOS Gatekeeper Alert ("Unverified Developer / Cannot Verify for Malware")**
+> DomoLens is a free, community-driven open-source application. Because we do not pay for Apple's proprietary developer program (\$99/year), macOS Gatekeeper flags browser-downloaded builds with:
+> *"“DomoLens” Not Opened. Apple could not verify “DomoLens” is free of malware..."*
+>
+> You can install or unblock DomoLens easily using any of the methods below.
+
+#### Option 1: Automated 1-Line Terminal Install (Recommended)
+This command downloads the latest release, copies it to `/Applications`, strips the quarantine bit, and launches DomoLens immediately without any Gatekeeper alert:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/darknecrocities/DomoLens/main/scripts/install.sh | bash
+```
+
+#### Option 2: DMG Download + 1-Line Gatekeeper Unblock
+1. Download **[DomoLens-Universal.dmg](https://github.com/darknecrocities/DomoLens/releases/latest/download/DomoLens-Universal.dmg)**.
+2. Open the DMG and drag **DomoLens** into your **Applications** folder.
+3. If macOS blocks execution when opening, open **Terminal** and run:
+   ```bash
+   xattr -cr /Applications/DomoLens.app
+   ```
+   *(Or run our unblock helper script: `curl -fsSL https://raw.githubusercontent.com/darknecrocities/DomoLens/main/scripts/fix-gatekeeper.sh | bash`)*
+
+#### Option 3: macOS Sequoia 15 & Sonoma 14 System Settings Bypass
+1. When the Gatekeeper alert appears, click **Done** (or **Cancel**).
+2. Open **System Settings** → **Privacy & Security**.
+3. Scroll down to the **Security** section.
+4. Look for the message: *"“DomoLens” was blocked to protect your Mac"*.
+5. Click **Open Anyway**, authenticate with Touch ID or your password, and confirm **Open**.
+
+---
+
+### 🪟 Windows Installation
+Download and run the installer executable:
+- **[DomoLens-Windows-Setup.exe](https://github.com/darknecrocities/DomoLens/releases/latest/download/DomoLens-Windows-Setup.exe)** (64-bit Windows 10/11)
+
+### 🐧 Linux Installation
+Download either the standalone AppImage or Debian package:
+- **[DomoLens-Linux.AppImage](https://github.com/darknecrocities/DomoLens/releases/latest/download/DomoLens-Linux.AppImage)** (Run `chmod +x DomoLens-Linux.AppImage && ./DomoLens-Linux.AppImage`)
+- **[DomoLens-Linux.deb](https://github.com/darknecrocities/DomoLens/releases/latest/download/DomoLens-Linux.deb)** (Install with `sudo dpkg -i DomoLens-Linux.deb`)
+
+---
+
 ## Monorepo Architecture
 
 The DomoLens codebase is structured as a monorepo:

@@ -55,10 +55,31 @@ jobs:
           gh release create "$TAG" \
             --draft \
             --title "DomoLens $TAG" \
-            --notes "DomoLens Automated Release $TAG
-          - macOS (.dmg, .app)
-          - Windows (.exe installer)
-          - Linux (.AppImage, .deb)"
+            --notes "## DomoLens $TAG
+
+### 📥 Downloads
+- **macOS (Universal - Apple Silicon & Intel):** \`DomoLens-Universal.dmg\` / \`DomoLens-macOS.dmg\`
+- **Windows (64-bit):** \`DomoLens-Windows-Setup.exe\`
+- **Linux:** \`DomoLens-Linux.AppImage\` / \`DomoLens-Linux.deb\`
+
+---
+
+### 🍏 macOS Installation & Gatekeeper Notice
+DomoLens is a free open-source project. Because builds are not notarized through Apple's paid developer program, macOS Gatekeeper may show a warning:
+*\"Apple could not verify DomoLens is free of malware\"*.
+
+#### Option 1: 1-Line Terminal Install (Recommended - bypasses Gatekeeper automatically)
+\`\`\`bash
+curl -fsSL https://raw.githubusercontent.com/darknecrocities/DomoLens/main/scripts/install.sh | bash
+\`\`\`
+
+#### Option 2: If installing via DMG
+1. Drag **DomoLens** to **Applications**.
+2. Run this command in Terminal to clear the quarantine flag:
+   \`\`\`bash
+   xattr -cr /Applications/DomoLens.app
+   \`\`\`
+3. Or go to **System Settings > Privacy & Security**, scroll down to **Security**, and click **Open Anyway**."
 
   release:
     needs: create-release
@@ -121,7 +142,11 @@ jobs:
               conf.version = '$VER';
               if (!conf.bundle) conf.bundle = {};
               if (!conf.bundle.macOS) conf.bundle.macOS = {};
-              conf.bundle.macOS.signingIdentity = conf.bundle.macOS.signingIdentity || '-';
+              if (process.env.APPLE_CERTIFICATE) {
+                console.log('Apple certificate configured, preserving signing identity for notarization');
+              } else {
+                conf.bundle.macOS.signingIdentity = conf.bundle.macOS.signingIdentity || '-';
+              }
               fs.writeFileSync(tauriPath, JSON.stringify(conf, null, 2) + '\n');
             }
             const cargoPath = 'apps/app/src-tauri/Cargo.toml';
@@ -137,6 +162,12 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          KEYCHAIN_PASSWORD: ${{ secrets.KEYCHAIN_PASSWORD }}
         with:
           projectPath: './apps/app'
           args: ${{ matrix.args }}
