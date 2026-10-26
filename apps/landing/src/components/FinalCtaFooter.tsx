@@ -1,9 +1,18 @@
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Apple, Check, Download, Laptop, QrCode, Smartphone, Terminal, ExternalLink } from "lucide-react";
+import { Apple, Check, Copy, Download, Laptop, QrCode, Smartphone, Terminal, ExternalLink, ShieldAlert } from "lucide-react";
 
 export function FinalCtaFooter() {
   const [activeTab, setActiveTab] = useState<"mac" | "win" | "linux" | "android">("mac");
+  const [copiedKey, setCopiedKey] = useState<string | null>(null);
+
+  const handleCopy = (key: string, text: string) => {
+    navigator.clipboard.writeText(text);
+    setCopiedKey(key);
+    setTimeout(() => {
+      setCopiedKey((curr) => (curr === key ? null : curr));
+    }, 2000);
+  };
 
   return (
     <motion.footer
@@ -129,11 +138,63 @@ export function FinalCtaFooter() {
                     <ExternalLink className="size-3 text-neutral-400" />
                   </motion.a>
                 </div>
-                <div className="mt-4 rounded-xl border border-white/[0.06] bg-black/60 p-3.5 text-xs text-neutral-400">
-                  <p className="font-semibold text-neutral-300">macOS Installation Note:</p>
-                  <p className="mt-1 leading-relaxed">
-                    Open the DMG and drag DomoLens into Applications. If macOS displays an unidentified developer prompt on first launch, right-click (or Control-click) DomoLens in Applications and select <span className="text-neutral-200 font-medium">Open</span>, or run <code className="rounded bg-white/[0.08] px-1.5 py-0.5 text-neutral-200 font-mono text-[11px]">xattr -cr /Applications/DomoLens.app</code> in Terminal.
+
+                {/* 1-Line Terminal Quick Install */}
+                <div className="mt-4 rounded-xl border border-white/[0.08] bg-neutral-950/80 p-3.5">
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2 text-xs font-semibold text-neutral-200">
+                      <Terminal className="size-3.5 text-neutral-400" />
+                      <span>Option 1: One-Line Terminal Install (Bypasses Gatekeeper automatically)</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => handleCopy("install", "curl -fsSL https://raw.githubusercontent.com/darknecrocities/DomoLens/main/scripts/install.sh | bash")}
+                      className="inline-flex items-center gap-1 rounded bg-white/[0.08] px-2 py-1 font-mono text-[11px] text-neutral-300 hover:bg-white/[0.15] hover:text-white transition-colors"
+                      title="Copy install command"
+                    >
+                      {copiedKey === "install" ? <Check className="size-3 text-emerald-400" /> : <Copy className="size-3" />}
+                      <span>{copiedKey === "install" ? "Copied" : "Copy"}</span>
+                    </button>
+                  </div>
+                  <div className="mt-2 rounded-lg bg-black/80 px-3 py-2 font-mono text-[11px] text-neutral-300 overflow-x-auto border border-white/[0.04]">
+                    <code>curl -fsSL https://raw.githubusercontent.com/darknecrocities/DomoLens/main/scripts/install.sh | bash</code>
+                  </div>
+                </div>
+
+                {/* Gatekeeper Alert Guidance */}
+                <div className="mt-3 rounded-xl border border-white/[0.06] bg-black/60 p-3.5 text-xs text-neutral-400">
+                  <div className="flex items-center gap-2">
+                    <ShieldAlert className="size-3.5 text-neutral-300" />
+                    <span className="font-semibold text-neutral-300">Option 2: DMG Install & Gatekeeper Alert ("Cannot Verify for Malware")</span>
+                  </div>
+                  <p className="mt-1.5 leading-relaxed text-[11px]">
+                    DomoLens is free open source. Because builds are not notarized via Apple's paid program, macOS may block launch on first run. To unblock:
                   </p>
+                  <div className="mt-2 flex flex-col gap-2">
+                    <div className="rounded-lg bg-white/[0.03] p-2.5 border border-white/[0.04]">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="font-medium text-neutral-300 text-[11px]">Quick Terminal Command:</span>
+                        <button
+                          type="button"
+                          onClick={() => handleCopy("xattr", "xattr -cr /Applications/DomoLens.app")}
+                          className="inline-flex items-center gap-1 rounded bg-white/[0.08] px-2 py-0.5 font-mono text-[10px] text-neutral-300 hover:bg-white/[0.15] hover:text-white transition-colors"
+                        >
+                          {copiedKey === "xattr" ? <Check className="size-2.5 text-emerald-400" /> : <Copy className="size-2.5" />}
+                          <span>{copiedKey === "xattr" ? "Copied" : "Copy"}</span>
+                        </button>
+                      </div>
+                      <code className="mt-1 block text-neutral-200 font-mono text-[11px]">xattr -cr /Applications/DomoLens.app</code>
+                    </div>
+
+                    <div className="rounded-lg bg-white/[0.03] p-2.5 border border-white/[0.04] text-[11px] leading-relaxed">
+                      <span className="font-medium text-neutral-300">macOS Sequoia (15+) / Sonoma GUI Bypass:</span>
+                      <ol className="mt-1 list-decimal list-inside space-y-0.5 text-neutral-400">
+                        <li>Click <span className="text-neutral-200 font-medium">Done</span> on the Gatekeeper alert modal.</li>
+                        <li>Open <span className="text-neutral-200 font-medium">System Settings &gt; Privacy &amp; Security</span> and scroll to <span className="text-neutral-200 font-medium">Security</span>.</li>
+                        <li>Click <span className="text-neutral-200 font-medium">Open Anyway</span> and confirm with your password or Touch ID.</li>
+                      </ol>
+                    </div>
+                  </div>
                 </div>
               </motion.div>
             )}

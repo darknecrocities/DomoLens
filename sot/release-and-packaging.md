@@ -53,3 +53,22 @@ The compiled bundles are generated in:
 GitHub Actions workflows defined in `.github/workflows/` automate release verification:
 - `ci.yml`: Runs linting, typechecking, Vitest suites, Python pytest suites, and `cargo check` on every pull request and push to `main`.
 - `release.yml`: Triggers on git tags matching `v*`, compiling release bundles for macOS, Windows, and Linux, computing SHA-256 checksums, and attaching binaries directly to the GitHub Release.
+
+## 6. macOS Code Signing, Gatekeeper & Notarization Architecture
+
+### 6.1 Gatekeeper Quarantine Architecture
+When applications are downloaded via web browsers (Safari, Chrome, Firefox), macOS attaches the `com.apple.quarantine` extended attribute to the downloaded `.dmg` and extracted `.app` bundle. On macOS Sequoia (15+) and Sonoma (14+), Gatekeeper blocks execution of unnotarized binaries by default, displaying:
+*"“DomoLens” Not Opened. Apple could not verify “DomoLens” is free of malware..."*
+
+### 6.2 Mitigation Strategy for Open-Source Distribution
+1. **Automated Terminal Installer (`scripts/install.sh`)**:
+   - Downloads releases directly via `curl` (which does not attach `com.apple.quarantine`).
+   - Copies bundle cleanly to `/Applications`.
+   - Strips quarantine flags: `xattr -cr /Applications/DomoLens.app`.
+   - Re-applies local ad-hoc code signature: `codesign --force --deep -s - /Applications/DomoLens.app`.
+2. **Dedicated Gatekeeper Unblocker (`scripts/fix-gatekeeper.sh`)**:
+   - Discovers installed DomoLens instances in `/Applications`, `~/Applications`, or DMG mounts.
+   - Clears quarantine attributes and opens the app with a single terminal command.
+3. **Optional Apple Developer ID Notarization Pipeline**:
+   - The GitHub Actions `release.yml` workflow supports seamless transition to notarized production builds when Apple Developer credentials are provided in GitHub repository secrets (`APPLE_ID`, `APPLE_PASSWORD`, `APPLE_TEAM_ID`, `APPLE_CERTIFICATE`, `APPLE_CERTIFICATE_PASSWORD`).
+   - If secrets are absent, the pipeline automatically falls back to clean ad-hoc signing (`signingIdentity: "-"`).
